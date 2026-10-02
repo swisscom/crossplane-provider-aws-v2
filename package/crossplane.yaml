@@ -1,0 +1,13 @@
+apiVersion: meta.pkg.crossplane.io/v1alpha1
+kind: Provider
+metadata:
+  name: provider-aws-v2
+  annotations:
+    meta.crossplane.io/maintainer: provider-aws-v2 maintainers
+    meta.crossplane.io/source: github.com/teeverr/provider-aws-v2
+    meta.crossplane.io/license: Apache-2.0
+    meta.crossplane.io/description: |
+      Native (AWS SDK Go v2) Crossplane provider for AWS with namespaced managed resources.
+spec:
+  capabilities:
+    - safe-start

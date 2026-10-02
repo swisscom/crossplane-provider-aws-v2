@@ -1,0 +1,38 @@
+# Namespaced ProviderConfig: usable only by MRs in the same namespace.
+# The credentials Secret must be in the same namespace.
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: aws-creds
+type: Opaque
+stringData:
+  credentials: |
+    [default]
+    aws_access_key_id = REPLACE_ME
+    aws_secret_access_key = REPLACE_ME
+---
+apiVersion: aws2.crossplane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: default
+  namespace: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: default
+      name: aws-creds
+      key: credentials
+---
+# ClusterProviderConfig: usable by MRs in any namespace (platform-managed).
+apiVersion: aws2.crossplane.io/v1alpha1
+kind: ClusterProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: IRSA
+  # Optional: assume a role on top of the pod identity.
+  # assumeRole:
+  #   roleARN: arn:aws:iam::123456789012:role/crossplane

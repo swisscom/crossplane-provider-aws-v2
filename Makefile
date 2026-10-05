@@ -117,7 +117,24 @@ dev-clean: $(KIND) $(KUBECTL)
 	@$(INFO) Deleting kind cluster
 	@$(KIND) delete cluster --name=$(PROJECT_NAME)-dev
 
-.PHONY: submodules fallthrough test-integration run dev dev-clean
+# Generate the API types and controllers of AWS services, e.g.
+# make services SERVICES="servicecatalog rds". Each service needs
+# apis/<service>/generator-config.yaml. Run make generate afterwards.
+services:
+	@$(if $(SERVICES),,$(ERR) SERVICES is required, e.g. make services SERVICES=servicecatalog; exit 1)
+	@for s in $(SERVICES); do \
+		$(INFO) Generating $$s; \
+		(cd codegen && $(GO) run ./cmd/generate --service $$s --output ..) || exit 1; \
+	done
+	@$(OK) Generated $(SERVICES)
+
+# Unit tests of the code generator, which is a separate Go module.
+codegen.test:
+	@$(INFO) Testing codegen
+	@cd codegen && $(GO) test ./...
+	@$(OK) Testing codegen
+
+.PHONY: submodules fallthrough test-integration run dev dev-clean services codegen.test
 
 # ====================================================================================
 # Special Targets
@@ -126,6 +143,8 @@ define CROSSPLANE_MAKE_HELP
 Crossplane Targets:
     submodules            Update the submodules, such as the common build scripts.
     run                   Run crossplane locally, out-of-cluster. Useful for development.
+    services              Generate AWS services, e.g. make services SERVICES=servicecatalog.
+    codegen.test          Run the unit tests of the code generator.
 
 endef
 # The reason CROSSPLANE_MAKE_HELP is used instead of CROSSPLANE_HELP is because the crossplane

@@ -26,9 +26,8 @@ import (
 // SetupGated creates all AWS controllers with safe-start support and adds them to
 // the supplied manager.
 func SetupGated(mgr ctrl.Manager, o controller.Options) error {
-	for _, setup := range []func(ctrl.Manager, controller.Options) error{
-		config.Setup,
-	} {
+	setups := append([]func(ctrl.Manager, controller.Options) error{config.Setup}, serviceSetups...)
+	for _, setup := range setups {
 		if err := setup(mgr, o); err != nil {
 			return err
 		}

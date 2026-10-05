@@ -57,7 +57,7 @@ type rewriter struct {
 }
 
 func newRewriter(dstModule string, apiAvailable func(string) bool) *rewriter {
-	return &rewriter{
+	rw := &rewriter{
 		dstModule:    dstModule,
 		apiAvailable: apiAvailable,
 		helperPkgs:   map[string]bool{},
@@ -87,6 +87,13 @@ func newRewriter(dstModule string, apiAvailable func(string) bool) *rewriter {
 			{runtimeV1Prefix + "reference", "MultiResolutionResponse"}:   {runtimeV2Prefix + "reference", "MultiNamespacedResolutionResponse"},
 		},
 	}
+
+	// crossplane-runtime v2 dropped the well-known connection secret keys.
+	for _, k := range []string{"Endpoint", "Port", "User", "Password", "CA", "ClientCert", "ClientKey", "Token", "Kubeconfig"} {
+		n := "ResourceCredentialsSecret" + k + "Key"
+		rw.symbols[symbol{xpv1Path, n}] = symbol{dstModule + "/internal/clients/aws", n}
+	}
+	return rw
 }
 
 // unavailable marks source packages that have no counterpart in the target.
@@ -217,7 +224,9 @@ func (rw *rewriter) rewriteFile(fset *token.FileSet, f *ast.File, ctx fileContex
 		needed[is.path] = is.name
 	}
 	for p, name := range needed {
-		if name == path.Base(p) {
+		// Packages of the target module may be named differently than their
+		// directory, e.g. internal/clients/rds is package dbinstance.
+		if name == path.Base(p) && !strings.HasPrefix(p, rw.dstModule+"/") {
 			name = ""
 		}
 		astutil.AddNamedImport(fset, f, name, p)

@@ -41,27 +41,43 @@ const (
 	errUpdate       = "cannot update {{ $kind }} in AWS"
 	errDescribe     = "failed to describe {{ $kind }}"
 	errDelete       = "failed to delete {{ $kind }}"
+
+	// Used by hand-written code imported from provider-aws.
+	errUnexpectedObject = "managed resource is not an {{ $kind }} resource"
+	errCreateSession    = errCreateConfig
 )
 
 // Hand-written code in this package customizes the controller by appending
 // to these slices in an init() function.
 var (
-	// externalOptions set the hooks of the external client.
-	externalOptions []option
-	// reconcilerOptions are passed to the managed reconciler, e.g.
-	// managed.WithInitializers().
-	reconcilerOptions []managed.ReconcilerOption
+	// configure, if set, returns the hooks of the external client and
+	// options of the managed reconciler, e.g. managed.WithInitializers().
+	// Reconciler options are applied after the defaults and can override
+	// them. It is set by hand-written code in an init function.
+	configure func(ctrl.Manager, controller.Options) ([]option, []managed.ReconcilerOption, error)
+	// wrapExternal, if set, wraps the external client, e.g. to override
+	// one of its methods.
+	wrapExternal func(*external) managed.TypedExternalClient[*svcapitypes.{{ $kind }}]
 )
 
 // Setup adds a controller that reconciles {{ $kind }}.
 func Setup(mgr ctrl.Manager, o controller.Options) error {
 	name := managed.ControllerName(svcapitypes.{{ $kind }}GroupKind)
 
+	var extOpts []option
+	var recOpts []managed.ReconcilerOption
+	if configure != nil {
+		var err error
+		if extOpts, recOpts, err = configure(mgr, o); err != nil {
+			return errors.Wrap(err, "cannot configure controller for kind {{ $kind }}")
+		}
+	}
+
 	opts := []managed.ReconcilerOption{
 		managed.WithTypedExternalConnector[*svcapitypes.{{ $kind }}](&connector{
 			kube:  mgr.GetClient(),
 			usage: cpresource.NewProviderConfigUsageTracker(mgr.GetClient(), &v1alpha1.ProviderConfigUsage{}),
-			opts:  externalOptions,
+			opts:  extOpts,
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
@@ -82,7 +98,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 			return errors.Wrap(err, "cannot register MR state metrics recorder for kind {{ $kind }}")
 		}
 	}
-	opts = append(opts, reconcilerOptions...)
+	opts = append(opts, recOpts...)
 
 	r := managed.NewReconciler(mgr, cpresource.ManagedKind(svcapitypes.{{ $kind }}GroupVersionKind), opts...)
 
@@ -116,6 +132,9 @@ type Client interface {
 {{- if .CRD.Ops.Delete }}
 	{{ .CRD.Ops.Delete.ExportedName }}(context.Context, *svcsdk.{{ .CRD.Ops.Delete.InputRef.Shape.ShapeName }}, ...func(*svcsdk.Options)) (*svcsdk.{{ .CRD.Ops.Delete.OutputRef.Shape.ShapeName }}, error)
 {{- end }}
+{{- range .ClientOps }}
+	{{ .ExportedName }}(context.Context, *svcsdk.{{ .InputRef.Shape.ShapeName }}, ...func(*svcsdk.Options)) (*svcsdk.{{ .OutputRef.Shape.ShapeName }}, error)
+{{- end }}
 }
 
 type connector struct {
@@ -133,7 +152,11 @@ func (c *connector) Connect(ctx context.Context, cr *svcapitypes.{{ $kind }}) (m
 	if err != nil {
 		return nil, errors.Wrap(err, errCreateConfig)
 	}
-	return newExternal(c.kube, svcsdk.NewFromConfig(cfg), c.opts), nil
+	e := newExternal(c.kube, svcsdk.NewFromConfig(cfg), c.opts)
+	if wrapExternal != nil {
+		return wrapExternal(e), nil
+	}
+	return e, nil
 }
 
 func (e *external) Observe(ctx context.Context, cr *svcapitypes.{{ $kind }}) (managed.ExternalObservation, error) {

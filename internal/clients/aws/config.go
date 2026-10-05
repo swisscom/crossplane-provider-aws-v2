@@ -256,3 +256,8 @@ func ParseCredentials(data []byte, profile string) (aws.Credentials, error) {
 }
 
 var _ Tracker = &resource.ProviderConfigUsageTracker{}
+
+// NewUsageTracker returns a Tracker that records ProviderConfig usages.
+func NewUsageTracker(kube client.Client) Tracker {
+	return resource.NewProviderConfigUsageTracker(kube, &v1alpha1.ProviderConfigUsage{})
+}

@@ -61,7 +61,7 @@ func TestRunServiceCatalog(t *testing.T) {
 			"func SetupGated(",
 			"DescribeProvisionedProduct(context.Context, *svcsdk.DescribeProvisionedProductInput, ...func(*svcsdk.Options))",
 			"svcsdk.NewFromConfig(cfg)",
-			"externalOptions []option",
+			"configure func(ctrl.Manager, controller.Options) ([]option, []managed.ReconcilerOption, error)",
 		},
 		"internal/controller/servicecatalog/provisionedproduct/zz_conversions.go": {
 			"func GenerateDescribeProvisionedProductInput(",

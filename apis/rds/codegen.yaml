@@ -1,0 +1,11 @@
+# provider-aws-v2 codegen settings of this service, see codegen/README.md.
+clientOperations:
+  DBInstance:
+  - AddTagsToResource
+  - CreateDBInstanceReadReplica
+  - DescribeDBClusters
+  - ListTagsForResource
+  - RemoveTagsFromResource
+  - RestoreDBInstanceFromDBSnapshot
+  - RestoreDBInstanceFromS3
+  - RestoreDBInstanceToPointInTime

@@ -1,0 +1,8 @@
+# Kinds imported from crossplane-contrib/provider-aws.
+# Managed by codegen/cmd/import; generator-config.yaml ignores all other kinds.
+source: github.com/crossplane-contrib/provider-aws
+apiVersion: v1alpha1
+kinds:
+    - DBInstance
+ignoreFieldPaths:
+    - ModifyAdditionalStorageVolume.SetForDelete

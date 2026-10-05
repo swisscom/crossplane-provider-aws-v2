@@ -25,10 +25,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	ttpl "text/template"
 
+	awssdkmodel "github.com/aws-controllers-k8s/code-generator/pkg/api"
 	ackgenconfig "github.com/aws-controllers-k8s/code-generator/pkg/config"
 	"github.com/aws-controllers-k8s/code-generator/pkg/generate/code"
 	"github.com/aws-controllers-k8s/code-generator/pkg/generate/templateset"
@@ -36,6 +38,7 @@ import (
 	acksdk "github.com/aws-controllers-k8s/code-generator/pkg/sdk"
 	"github.com/iancoleman/strcase"
 	"golang.org/x/tools/imports"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -119,6 +122,30 @@ func Run(ctx context.Context, o Options) error {
 	return WriteRegistries(o.OutputDir)
 }
 
+// ListKinds returns the kinds the generator config of o yields, before
+// any resource is ignored by callers.
+func ListKinds(ctx context.Context, o Options) ([]string, error) {
+	cfg, err := ackgenconfig.New(o.GeneratorConfig, defaultConfig)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load generator config: %w", err)
+	}
+	normalizeOperationTypes(&cfg)
+	m, err := loadModel(ctx, strings.ToLower(o.Service), o, cfg)
+	if err != nil {
+		return nil, err
+	}
+	crds, err := m.GetCRDs()
+	if err != nil {
+		return nil, err
+	}
+	kinds := make([]string, 0, len(crds))
+	for _, c := range crds {
+		kinds = append(kinds, c.Kind)
+	}
+	sort.Strings(kinds)
+	return kinds, nil
+}
+
 func loadModel(ctx context.Context, svc string, o Options, cfg ackgenconfig.Config) (*ackmodel.Model, error) {
 	modelName := o.ModelName
 	if cfg.SDKNames.Model != "" {
@@ -151,6 +178,34 @@ type crdVars struct {
 	templateset.MetaVars
 	ModulePath string
 	CRD        *ackmodel.CRD
+	// ClientOps are additional operations of the Client interface.
+	ClientOps []*awssdkmodel.Operation
+}
+
+// ServiceConfig is the optional apis/<service>/codegen.yaml. It configures
+// provider-aws-v2 specifics that the ACK generator config does not cover.
+type ServiceConfig struct {
+	// ClientOperations are SDK operations added to the Client interface of
+	// a kind's controller, keyed by kind, e.g. for hand-written code.
+	ClientOperations map[string][]string `json:"clientOperations,omitempty"`
+}
+
+// ServiceConfigPath returns the path of the codegen.yaml of a service.
+func ServiceConfigPath(root, svc string) string {
+	return filepath.Join(root, "apis", svc, "codegen.yaml")
+}
+
+// ReadServiceConfig reads the codegen.yaml of a service, if any.
+func ReadServiceConfig(root, svc string) (*ServiceConfig, error) {
+	c := &ServiceConfig{}
+	b, err := os.ReadFile(ServiceConfigPath(root, svc))
+	if os.IsNotExist(err) {
+		return c, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return c, yaml.Unmarshal(b, c)
 }
 
 type setupVars struct {
@@ -171,6 +226,10 @@ func render(m *ackmodel.Model, o Options) (map[string][]byte, error) { //nolint:
 	crds, err := m.GetCRDs()
 	if err != nil {
 		return nil, err
+	}
+	sc, err := ReadServiceConfig(o.OutputDir, strings.ToLower(o.Service))
+	if err != nil {
+		return nil, fmt.Errorf("cannot read %s: %w", ServiceConfigPath(o.OutputDir, o.Service), err)
 	}
 
 	ts := templateset.New([]string{o.TemplateDir}, includeTemplates, nil, funcMap())
@@ -203,6 +262,13 @@ func render(m *ackmodel.Model, o Options) (map[string][]byte, error) { //nolint:
 		}
 		vars := &crdVars{MetaVars: mv, ModulePath: ModulePath, CRD: crd}
 		vars.APIVersion = v
+		for _, name := range sc.ClientOperations[crd.Kind] {
+			op, ok := m.SDKAPI.API.Operations[name]
+			if !ok {
+				return nil, fmt.Errorf("clientOperations of %s: unknown operation %s", crd.Kind, name)
+			}
+			vars.ClientOps = append(vars.ClientOps, op)
+		}
 		files := map[string]string{
 			filepath.Join("apis", svc, v, "zz_"+strcase.ToSnake(crd.Kind)+".go"):               "apis/crd.go.tpl",
 			filepath.Join("internal", "controller", svc, crd.Names.Lower, "zz_controller.go"):  "controller/controller.go.tpl",
@@ -273,7 +339,11 @@ func funcMap() ttpl.FuncMap {
 	}
 }
 
+// unkeyedTime matches the unkeyed metav1.Time literals ACK emits.
+var unkeyedTime = regexp.MustCompile(`metav1\.Time\{([^}:]+)\}`)
+
 func writeGo(path string, src []byte) error {
+	src = unkeyedTime.ReplaceAll(src, []byte("metav1.Time{Time: $1}"))
 	out, err := imports.Process(path, src, nil)
 	if err != nil {
 		// Keep the unformatted source to make template errors debuggable.

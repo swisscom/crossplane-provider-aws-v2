@@ -55,6 +55,11 @@ See [examples/provider/config.yaml](examples/provider/config.yaml).
 
 ## Developing
 
+Design: [`docs/architecture.md`](docs/architecture.md). Conventions and
+workflows (also used by AI coding agents): [`AGENTS.md`](AGENTS.md) and
+[`.agents/skills`](.agents/skills). Known porting pitfalls:
+[`docs/porting-notes.md`](docs/porting-notes.md).
+
 ```shell
 make submodules      # once: fetch the build submodule
 make generate        # regenerate deepcopy, MR methods and CRDs

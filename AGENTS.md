@@ -100,9 +100,13 @@ don't just mention it in the summary.
 
 Rules:
 
-- Edit in `AGENTS.md` and `.agents/skills` only; `CLAUDE.md` and `.claude/skills` are symlinks.
+- Edit in `AGENTS.md` and `.agents/skills` only; `CLAUDE.md` files and `.claude/skills` are symlinks.
 - Before finishing a task, check the table above against your diff.
-- Prefer deleting outdated text over adding caveats. Keep `AGENTS.md` under ~150 lines;
-  move details into a skill or `docs/`.
+- Prefer deleting outdated text over adding caveats.
+- Root `AGENTS.md` holds only what **every** task needs (map, commands,
+  cross-cutting rules). If it grows past ~150 lines, move content down, never
+  drop it: area-specific rules → nested `AGENTS.md` in that directory (e.g.
+  `codegen/AGENTS.md`, plus a `CLAUDE.md` symlink next to it); step-by-step
+  workflows → a skill; background and reference → `docs/`, linked from here.
 - If instructions contradict the code, the code wins: fix the instructions and
   say so in the summary.

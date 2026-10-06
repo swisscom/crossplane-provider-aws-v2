@@ -1,0 +1,73 @@
+# Engine-specific fields: Oracle (character sets, license model, processor
+# features) and, commented out, Oracle EE TDE, SQL Server (time zone, Active
+# Directory) and fields of other setups (Aurora, RDS Custom, io2, Outposts).
+apiVersion: rds.aws2.crossplane.io/v1alpha1
+kind: DBInstance
+metadata:
+  namespace: default
+  name: example-dbinstance-oracle
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-dbinstance-oracle-conn
+  forProvider:
+    region: eu-central-1
+    engine: oracle-se2
+    engineVersion: "19.0.0.0.ru-2024-10.rur-2024-10.r1"
+    licenseModel: license-included
+    dbInstanceClass: db.m5.xlarge
+    # Oracle: the SID, set at creation.
+    dbName: ORCL
+    characterSetName: AL32UTF8
+    ncharCharacterSetName: AL16UTF16
+    # Oracle: CPU cores and threads per core of the instance class.
+    processorFeatures:
+      - name: coreCount
+        value: "2"
+      - name: threadsPerCore
+        value: "1"
+    masterUsername: dbadmin
+    autogeneratePassword: true
+    storageType: gp3
+    allocatedStorage: 200
+    storageEncrypted: true
+    multiAZ: false
+    publiclyAccessible: false
+    port: 1521
+    optionGroupName: default:oracle-se2-19
+    enableCloudwatchLogsExports:
+      - alert
+      - listener
+    backupRetentionPeriod: 7
+    preferredBackupWindow: "01:00-01:30"
+    preferredMaintenanceWindow: "sat:02:00-sat:03:00"
+    applyImmediately: true
+    skipFinalSnapshot: true
+
+    # --- Oracle EE with the TDE option in its option group ---
+    # tdeCredentialARN: arn:aws:rds:eu-central-1:123456789012:tde-credential/REPLACE_ME
+    # tdeCredentialPassword: REPLACE_ME
+
+    # --- SQL Server (engine: sqlserver-se, licenseModel: license-included) ---
+    # timezone: W. Europe Standard Time
+    # Active Directory (AWS Managed Microsoft AD or self-managed):
+    # domain: d-1234567890
+    # domainIAMRoleName: REPLACE_ME-rds-directory-service
+    # domainFqdn: corp.example.com
+    # domainOu: OU=RDS,DC=corp,DC=example,DC=com
+    # domainAuthSecretARN: arn:aws:secretsmanager:eu-central-1:123456789012:secret:REPLACE_ME
+    # domainDNSIPs: ["10.0.0.10", "10.0.1.10"]
+
+    # --- Other setups ---
+    # Aurora: the instance belongs to a DB cluster that manages storage,
+    # credentials, backups and engine version:
+    # dbClusterIdentifier: example-aurora-cluster
+    # promotionTier: 1
+    # RDS Custom (engine custom-oracle-ee, custom-sqlserver-*):
+    # customIAMInstanceProfile: AWSRDSCustomInstanceProfile
+    # Separate log volume, Provisioned IOPS (io1/io2) only:
+    # dedicatedLogVolume: true
+    # Outposts with customer-owned IPs:
+    # enableCustomerOwnedIP: true

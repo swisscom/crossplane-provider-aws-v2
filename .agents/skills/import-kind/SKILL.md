@@ -124,6 +124,11 @@ secret refs and references, to check the schema keeps those fields.
 
 ## 5. Finish
 
+- Add examples under `examples/<svc>/` (namespaced, `metadata.namespace` set)
+  covering as many fields as possible; split into several files when fields
+  are mutually exclusive or engine-specific (see `examples/rds/`). Validate
+  them with `kubectl apply --server-side --dry-run=server --validate=strict`
+  against an envtest apiserver that has `package/crds` installed.
 - Commit the import and the port together (one commit per kind is fine).
 - Add a short entry for anything new you learned to `docs/porting-notes.md`,
   and teach the importer if the fix was mechanical.

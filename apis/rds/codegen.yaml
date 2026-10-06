@@ -1,4 +1,4 @@
-# provider-aws-v2 codegen settings of this service, see codegen/README.md.
+# provider-aws-v2 codegen settings of this service, see docs/architecture.md.
 clientOperations:
   DBInstance:
   - AddTagsToResource

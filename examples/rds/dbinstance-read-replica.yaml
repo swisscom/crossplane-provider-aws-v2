@@ -1,0 +1,49 @@
+# Read replica of examples/rds/dbinstance.yaml.
+#
+# A read replica inherits engine version, credentials and storage settings from
+# its source; only replica-specific settings are given here. The source needs
+# backupRetentionPeriod > 0.
+apiVersion: rds.aws2.crossplane.io/v1alpha1
+kind: DBInstance
+metadata:
+  namespace: default
+  name: example-dbinstance-replica
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-dbinstance-replica-conn
+  forProvider:
+    region: eu-central-1
+    engine: postgres
+    dbInstanceClass: db.m7g.large
+
+    # One of the following identifies the source instance:
+    # 1. a reference to a DBInstance object in this namespace; resolved to its
+    #    external name (AWS identifier),
+    sourceDBInstanceIDRef:
+      name: example-dbinstance
+    # 2. a selector over DBInstance objects in this namespace,
+    # sourceDBInstanceIDSelector:
+    #   matchLabels:
+    #     role: primary
+    # 3. or the AWS identifier directly (an ARN for cross-region replicas).
+    # sourceDBInstanceID: example-dbinstance
+
+    multiAZ: false
+    availabilityZone: eu-central-1b
+    publiclyAccessible: false
+    autoMinorVersionUpgrade: true
+    enablePerformanceInsights: true
+    performanceInsightsRetentionPeriod: 7
+    copyTagsToSnapshot: true
+    tags:
+      - key: team
+        value: platform
+      - key: role
+        value: replica
+
+    applyImmediately: true
+    skipFinalSnapshot: true
+    deletionProtection: false

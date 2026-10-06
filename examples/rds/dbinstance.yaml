@@ -1,0 +1,136 @@
+# Comprehensive PostgreSQL DBInstance (Multi-AZ, gp3, encryption, monitoring,
+# Performance Insights, CloudWatch logs, tags).
+#
+# Replace the REPLACE_ME values (subnet group, security groups, KMS keys,
+# monitoring role) with resources of your account before applying.
+# Related examples: dbinstance-read-replica.yaml, dbinstance-restore.yaml,
+# dbinstance-oracle.yaml (engine-specific fields).
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: example-dbinstance-master
+type: Opaque
+stringData:
+  password: REPLACE_ME-min-8-chars
+---
+apiVersion: rds.aws2.crossplane.io/v1alpha1
+kind: DBInstance
+metadata:
+  namespace: default
+  name: example-dbinstance
+  # The AWS DB instance identifier. Defaults to metadata.name.
+  annotations:
+    crossplane.io/external-name: example-dbinstance
+spec:
+  # Namespaced ProviderConfig in the same namespace (see examples/provider).
+  # Omit to use the ClusterProviderConfig "default".
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  # Full control; e.g. ["Observe"] to only observe an existing instance.
+  managementPolicies: ["*"]
+  # Connection details (username, password, endpoint, port) are written to
+  # this Secret in the namespace of the DBInstance.
+  writeConnectionSecretToRef:
+    name: example-dbinstance-conn
+  forProvider:
+    region: eu-central-1
+
+    # --- Engine ---
+    engine: postgres
+    # Only upgrades are applied; downgrades are ignored.
+    engineVersion: "16.4"
+    # Required for major version upgrades (together with a dbParameterGroupName
+    # of the new family).
+    allowMajorVersionUpgrade: false
+    autoMinorVersionUpgrade: true
+    # open-source-rds-extended-support or open-source-rds-extended-support-disabled.
+    engineLifecycleSupport: open-source-rds-extended-support-disabled
+    dbInstanceClass: db.m7g.large
+    dbName: app
+    port: 5432
+    dbParameterGroupName: default.postgres16
+    optionGroupName: default:postgres-16
+    caCertificateIdentifier: rds-ca-rsa2048-g1
+
+    # --- Credentials ---
+    masterUsername: dbadmin
+    # The password is read from this Secret in the namespace of the DBInstance.
+    # Changing the Secret value changes the password in AWS.
+    masterUserPasswordSecretRef:
+      name: example-dbinstance-master
+      key: password
+    # Generate a password instead if no masterUserPasswordSecretRef is given.
+    # It is published in the connection Secret.
+    autogeneratePassword: false
+    # Alternative: let RDS manage the password in Secrets Manager. Mutually
+    # exclusive with masterUserPasswordSecretRef/autogeneratePassword.
+    # manageMasterUserPassword: true
+    # masterUserSecretKMSKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    enableIAMDatabaseAuthentication: true
+
+    # --- Storage ---
+    storageType: gp3
+    # gp3 below 400 GiB (postgres/mysql/mariadb; 200 GiB for Oracle) has fixed
+    # baseline iops/throughput: leave iops/storageThroughput unset there.
+    allocatedStorage: 400
+    iops: 12000
+    storageThroughput: 500
+    # Storage autoscaling up to this size (GiB).
+    maxAllocatedStorage: 1000
+    storageEncrypted: true
+    kmsKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+
+    # --- Availability and network ---
+    multiAZ: true
+    # Only for single-AZ instances (multiAZ: false):
+    # availabilityZone: eu-central-1a
+    dbSubnetGroupName: REPLACE_ME-db-subnet-group
+    vpcSecurityGroupIDs:
+      - sg-0123456789abcdef0
+    publiclyAccessible: false
+    networkType: IPV4
+
+    # --- Backups and maintenance ---
+    backupRetentionPeriod: 14
+    # UTC, HH:MM (two-digit hours); the windows must not overlap.
+    preferredBackupWindow: "02:00-02:30"
+    preferredMaintenanceWindow: "sun:03:00-sun:04:00"
+    # region or outposts.
+    backupTarget: region
+    copyTagsToSnapshot: true
+
+    # --- Monitoring ---
+    # Enhanced Monitoring every 60 seconds; the role must trust
+    # monitoring.rds.amazonaws.com and have AmazonRDSEnhancedMonitoringRole.
+    monitoringInterval: 60
+    monitoringRoleARN: arn:aws:iam::123456789012:role/REPLACE_ME-rds-monitoring
+    enablePerformanceInsights: true
+    performanceInsightsRetentionPeriod: 7
+    performanceInsightsKMSKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    # standard or advanced (advanced needs performanceInsightsRetentionPeriod >= 465).
+    databaseInsightsMode: standard
+    enableCloudwatchLogsExports:
+      - postgresql
+      - upgrade
+
+    # --- Tags ---
+    tags:
+      - key: team
+        value: platform
+      - key: environment
+        value: dev
+    # Tags on the AWS resource that this DBInstance must not remove (e.g. added
+    # by other tools). A trailing * matches a prefix; aws:* is always ignored.
+    tagsIgnore:
+      - key: c7n:*
+      - key: backup-plan
+
+    # --- Updates and deletion ---
+    # Apply modifications now instead of in the next maintenance window.
+    applyImmediately: true
+    deletionProtection: false
+    skipFinalSnapshot: false
+    finalDBSnapshotIdentifier: example-dbinstance-final
+    deleteAutomatedBackups: true

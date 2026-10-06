@@ -1,0 +1,114 @@
+# DBInstances created from backups: from a snapshot, to a point in time, and
+# from a backup in S3 (MySQL). After the restore, the provider sets the master
+# password from masterUserPasswordSecretRef (or a generated one).
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: example-dbinstance-restored-master
+type: Opaque
+stringData:
+  password: REPLACE_ME-min-8-chars
+---
+apiVersion: rds.aws2.crossplane.io/v1alpha1
+kind: DBInstance
+metadata:
+  namespace: default
+  name: example-dbinstance-from-snapshot
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-dbinstance-from-snapshot-conn
+  forProvider:
+    region: eu-central-1
+    engine: postgres
+    dbInstanceClass: db.m7g.large
+    # The master username is taken from the snapshot.
+    masterUserPasswordSecretRef:
+      name: example-dbinstance-restored-master
+      key: password
+    restoreFrom:
+      source: Snapshot
+      snapshot:
+        snapshotIdentifier: example-dbinstance-final
+    dbSubnetGroupName: REPLACE_ME-db-subnet-group
+    vpcSecurityGroupIDs:
+      - sg-0123456789abcdef0
+    storageType: gp3
+    multiAZ: false
+    publiclyAccessible: false
+    applyImmediately: true
+    skipFinalSnapshot: true
+---
+apiVersion: rds.aws2.crossplane.io/v1alpha1
+kind: DBInstance
+metadata:
+  namespace: default
+  name: example-dbinstance-point-in-time
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-dbinstance-point-in-time-conn
+  forProvider:
+    region: eu-central-1
+    engine: postgres
+    dbInstanceClass: db.m7g.large
+    autogeneratePassword: true
+    restoreFrom:
+      source: PointInTime
+      pointInTime:
+        # The AWS identifier of the source instance (or sourceDbiResourceId /
+        # sourceDBInstanceAutomatedBackupsArn for retained automated backups).
+        sourceDBInstanceIdentifier: example-dbinstance
+        # Either the latest restorable time or an explicit restoreTime (RFC 3339).
+        useLatestRestorableTime: false
+        restoreTime: "2026-10-01T12:00:00Z"
+    dbSubnetGroupName: REPLACE_ME-db-subnet-group
+    vpcSecurityGroupIDs:
+      - sg-0123456789abcdef0
+    multiAZ: false
+    applyImmediately: true
+    skipFinalSnapshot: true
+---
+apiVersion: rds.aws2.crossplane.io/v1alpha1
+kind: DBInstance
+metadata:
+  namespace: default
+  name: example-dbinstance-from-s3
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-dbinstance-from-s3-conn
+  forProvider:
+    region: eu-central-1
+    engine: mysql
+    engineVersion: "8.0.39"
+    dbInstanceClass: db.m7g.large
+    allocatedStorage: 100
+    storageType: gp3
+    masterUsername: dbadmin
+    masterUserPasswordSecretRef:
+      name: example-dbinstance-restored-master
+      key: password
+    restoreFrom:
+      source: S3
+      s3:
+        # Percona XtraBackup files of a MySQL database.
+        bucketName: REPLACE_ME-backup-bucket
+        prefix: mysql/2026-10-01/
+        # Role that RDS assumes to read the bucket.
+        ingestionRoleARN: arn:aws:iam::123456789012:role/REPLACE_ME-rds-s3-import
+        sourceEngine: mysql
+        sourceEngineVersion: "8.0.39"
+    dbSubnetGroupName: REPLACE_ME-db-subnet-group
+    vpcSecurityGroupIDs:
+      - sg-0123456789abcdef0
+    multiAZ: false
+    applyImmediately: true
+    skipFinalSnapshot: true

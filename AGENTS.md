@@ -1,8 +1,7 @@
 # AGENTS.md
 
 Instructions for AI coding agents (and humans) working in this repository.
-Keep this file short and current: update it in the same PR that changes a
-workflow it describes.
+Keep this file short and current — see "Keeping instructions current" below.
 
 ## What this is
 
@@ -83,3 +82,27 @@ Task workflows live in `.agents/skills/` (Agent Skills format):
 
 - `import-kind` — import a kind from provider-aws and port it.
 - `add-service` — generate a new service/kind from scratch.
+
+## Keeping instructions current
+
+These files are part of the code. When your change makes any of them wrong or
+incomplete, update them **in the same change** — don't leave it for later and
+don't just mention it in the summary.
+
+| If you change... | Update |
+|------------------|--------|
+| Layout, commands, Make targets, conventions, generation order | `AGENTS.md` |
+| Importer behavior, flags, output, or the porting workflow | `.agents/skills/import-kind/SKILL.md` |
+| Generator, templates, hooks, `generator-config`/`codegen.yaml` handling | `.agents/skills/add-service/SKILL.md`, `docs/architecture.md` |
+| Design decisions (scoping, secrets, references, API group, dependencies) | `docs/architecture.md` |
+| A new pitfall found while porting, or a pitfall the importer now fixes | `docs/porting-notes.md` |
+| A new workflow that is repeated (≥ 2 times) and has steps | a new skill in `.agents/skills/<name>/SKILL.md`, listed under "Skills" |
+
+Rules:
+
+- Edit in `AGENTS.md` and `.agents/skills` only; `CLAUDE.md` and `.claude/skills` are symlinks.
+- Before finishing a task, check the table above against your diff.
+- Prefer deleting outdated text over adding caveats. Keep `AGENTS.md` under ~150 lines;
+  move details into a skill or `docs/`.
+- If instructions contradict the code, the code wins: fix the instructions and
+  say so in the summary.

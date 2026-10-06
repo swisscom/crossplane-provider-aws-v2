@@ -252,7 +252,7 @@ func (im *importer) addClientOps(ops map[string][]string) error {
 	if err != nil {
 		return err
 	}
-	b = append([]byte("# provider-aws-v2 codegen settings of this service, see codegen/README.md.\n"), b...)
+	b = append([]byte("# provider-aws-v2 codegen settings of this service, see docs/architecture.md.\n"), b...)
 	if err := os.WriteFile(generator.ServiceConfigPath(im.tgt.root, im.o.Service), b, 0o600); err != nil {
 		return err
 	}

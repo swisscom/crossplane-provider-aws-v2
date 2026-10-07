@@ -14,12 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-
 package utils
 
 import (
 	"slices"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/rds"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
@@ -62,6 +62,10 @@ func SetPmvDBInstance(obs *svcsdk.DescribeDBInstancesOutput) { //nolint:gocyclo
 	if pmv.MultiAZ != nil {
 		db.MultiAZ = pmv.MultiAZ
 	}
+	if pmv.MultiTenant != nil {
+		db.MultiTenant = pmv.MultiTenant
+	}
+	db.AdditionalStorageVolumes = applyPendingAdditionalStorageVolumes(db.AdditionalStorageVolumes, pmv.AdditionalStorageVolumes)
 	if pmv.PendingCloudwatchLogsExports != nil {
 		db.EnabledCloudwatchLogsExports = applyPendingCloudwatchLogsExports(db.EnabledCloudwatchLogsExports, pmv.PendingCloudwatchLogsExports)
 	}
@@ -81,6 +85,37 @@ func SetPmvDBInstance(obs *svcsdk.DescribeDBInstancesOutput) { //nolint:gocyclo
 	if pmv.StorageType != nil {
 		db.StorageType = pmv.StorageType
 	}
+}
+
+// applyPendingAdditionalStorageVolumes overlays the pending values of each
+// volume (matched by name) onto the observed volumes.
+func applyPendingAdditionalStorageVolumes(observed []svcsdktypes.AdditionalStorageVolumeOutput, pending []svcsdktypes.AdditionalStorageVolume) []svcsdktypes.AdditionalStorageVolumeOutput {
+	for _, p := range pending {
+		i := slices.IndexFunc(observed, func(o svcsdktypes.AdditionalStorageVolumeOutput) bool {
+			return aws.ToString(o.VolumeName) == aws.ToString(p.VolumeName)
+		})
+		if i < 0 {
+			observed = append(observed, svcsdktypes.AdditionalStorageVolumeOutput{VolumeName: p.VolumeName})
+			i = len(observed) - 1
+		}
+		o := &observed[i]
+		if p.AllocatedStorage != nil {
+			o.AllocatedStorage = p.AllocatedStorage
+		}
+		if p.IOPS != nil {
+			o.IOPS = p.IOPS
+		}
+		if p.MaxAllocatedStorage != nil {
+			o.MaxAllocatedStorage = p.MaxAllocatedStorage
+		}
+		if p.StorageThroughput != nil {
+			o.StorageThroughput = p.StorageThroughput
+		}
+		if p.StorageType != nil {
+			o.StorageType = p.StorageType
+		}
+	}
+	return observed
 }
 
 func applyPendingCloudwatchLogsExports(enabled []string, pending *svcsdktypes.PendingCloudwatchLogsExports) []string {

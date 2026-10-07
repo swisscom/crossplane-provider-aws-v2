@@ -87,6 +87,7 @@ type cache struct {
 	backupWindowChanged           bool
 	backupRetentionPeriodUpToDate bool
 	engineVersionUpToDate         bool
+	masterUserPasswordManaged     bool
 }
 
 func preObserve(_ context.Context, cr *svcapitypes.DBInstance, obj *svcsdk.DescribeDBInstancesInput) error {
@@ -466,6 +467,21 @@ func (s *shared) preUpdate(ctx context.Context, cr *svcapitypes.DBInstance, obj 
 		obj.MasterUserPassword = pointer.ToOrNilIfZeroValue(s.cache.desiredPassword)
 	}
 
+	// ManageMasterUserPassword and MasterUserSecretKmsKeyId are only accepted when
+	// turning Secrets Manager management on or off. Turning it on excludes
+	// MasterUserPassword; turning it off requires one.
+	manage := cr.Spec.ForProvider.ManageMasterUserPassword
+	switch {
+	case manage == nil || *manage == s.cache.masterUserPasswordManaged:
+		obj.ManageMasterUserPassword = nil
+		obj.MasterUserSecretKmsKeyId = nil
+	case *manage:
+		obj.MasterUserPassword = nil
+	default:
+		obj.MasterUserSecretKmsKeyId = nil
+		obj.MasterUserPassword = pointer.ToOrNilIfZeroValue(s.cache.desiredPassword)
+	}
+
 	// VpcSecurityGroupIds cannot be set on an instance that belongs to a DBCluster
 	if cr.Status.AtProvider.DBClusterIdentifier == nil {
 		if cr.Spec.ForProvider.VPCSecurityGroupIDs != nil {
@@ -758,6 +774,8 @@ func (s *shared) isUpToDate(ctx context.Context, cr *svcapitypes.DBInstance, out
 	dbParameterGroupChanged := !isDBParameterGroupNameUpToDate(cr, db)
 	optionGroupChanged := !isOptionGroupUpToDate(cr, db)
 	cloudwatchLogsExportsChanged := !utils.AreSameElements(cr.Spec.ForProvider.EnableCloudwatchLogsExports, db.EnabledCloudwatchLogsExports)
+	additionalStorageVolumesDiff := diffAdditionalStorageVolumes(cr.Spec.ForProvider.AdditionalStorageVolumes, db.AdditionalStorageVolumes)
+	s.cache.masterUserPasswordManaged = db.MasterUserSecret != nil
 
 	diff = cmp.Diff(&svcapitypes.DBInstanceParameters{}, patch, cmpopts.EquateEmpty(),
 		cmpopts.IgnoreTypes(&xpv2.NamespacedReference{}, &xpv2.NamespacedSelector{}, []xpv2.NamespacedReference{}),
@@ -786,6 +804,14 @@ func (s *shared) isUpToDate(ctx context.Context, cr *svcapitypes.DBInstance, out
 		cmpopts.IgnoreFields(svcapitypes.DBInstanceParameters{}, "PreferredMaintenanceWindow"),
 		cmpopts.IgnoreFields(svcapitypes.DBInstanceParameters{}, "PreferredBackupWindow"),
 		cmpopts.IgnoreFields(svcapitypes.DBInstanceParameters{}, "OptionGroupName"),
+		// Compared explicitly below by volume name.
+		cmpopts.IgnoreFields(svcapitypes.DBInstanceParameters{}, "AdditionalStorageVolumes"),
+		// Create-only fields: ModifyDBInstance cannot change them.
+		cmpopts.IgnoreFields(svcapitypes.DBInstanceParameters{}, "BackupTarget", "CustomIAMInstanceProfile",
+			"DBSystemID", "NcharCharacterSetName", "TagSpecifications"),
+		// Not returned by DescribeDBInstances, or not changeable once set.
+		cmpopts.IgnoreFields(svcapitypes.DBInstanceParameters{}, "MasterUserAuthenticationType",
+			"TDECredentialPassword", "MasterUserSecretKMSKeyID"),
 		cmpopts.IgnoreFields(svcapitypes.CustomDBInstanceParameters{}, "ApplyImmediately"),
 		cmpopts.IgnoreFields(svcapitypes.CustomDBInstanceParameters{}, "RestoreFrom"),
 		cmpopts.IgnoreFields(svcapitypes.CustomDBInstanceParameters{}, "VPCSecurityGroupIDs"),
@@ -821,7 +847,7 @@ func (s *shared) isUpToDate(ctx context.Context, cr *svcapitypes.DBInstance, out
 	if diff == "" && !maintenanceWindowChanged && !backupWindowChanged && !backupRetentionPeriodChanged &&
 		!iopsChanged && !storageThroughputChanged && !versionChanged && !vpcSGsChanged && !dbParameterGroupChanged &&
 		!optionGroupChanged && !tagsChanged && !passwordChanged && !autoMinorVersionUpgradeChanged && !multiAZChanged &&
-		!cloudwatchLogsExportsChanged {
+		!cloudwatchLogsExportsChanged && additionalStorageVolumesDiff == "" {
 		return true, diff, nil
 	}
 
@@ -878,6 +904,7 @@ func (s *shared) isUpToDate(ctx context.Context, cr *svcapitypes.DBInstance, out
 	if cloudwatchLogsExportsChanged {
 		diff += "\nenabledCloudwatchLogsExports changed"
 	}
+	diff += additionalStorageVolumesDiff
 
 	log.Println(diff)
 
@@ -999,6 +1026,7 @@ func createPatch(out *svcsdk.DescribeDBInstancesOutput, target *svcapitypes.DBIn
 		return nil, err
 	}
 	currentParams.KMSKeyID = handleKmsKey(target.KMSKeyID, currentParams.KMSKeyID)
+	setObservedForComparison(currentParams, target, &out.DBInstances[0])
 	jsonPatch, err := jsonpatch.CreateJSONPatch(currentParams, target)
 	if err != nil {
 		return nil, err

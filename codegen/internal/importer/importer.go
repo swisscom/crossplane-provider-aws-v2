@@ -84,6 +84,22 @@ func Run(ctx context.Context, o Options) (*Report, error) {
 			m.Kinds = append(m.Kinds, k)
 		}
 	}
+	for _, k := range o.Kinds {
+		// Existing controllers are not overwritten, so they keep the
+		// revision they were ported from.
+		if _, err := os.Stat(filepath.Join(o.OutputDir, "internal", "controller", svc, strings.ToLower(k), "setup.go")); err == nil {
+			continue
+		}
+		rev, err := sourceRevision(o.Source, svc, k)
+		if err != nil {
+			r.Add(topicController, "%s: source revision not recorded: %v", k, err)
+			continue
+		}
+		if m.Revisions == nil {
+			m.Revisions = map[string]Revision{}
+		}
+		m.Revisions[k] = rev
+	}
 	o.GeneratorConfig = filepath.Join(o.OutputDir, "apis", svc, "generator-config.yaml")
 	if err := writeGeneratorConfig(srcCfg, o.GeneratorConfig, all, m); err != nil {
 		return nil, err

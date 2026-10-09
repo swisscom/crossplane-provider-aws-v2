@@ -48,8 +48,8 @@ const (
 	errCreateSession    = errCreateConfig
 )
 
-// Hand-written code in this package customizes the controller by appending
-// to these slices in an init() function.
+// Hand-written code in this package customizes the controller by setting
+// these variables in an init() function, see docs/components/code-generator.md.
 var (
 	// configure, if set, returns the hooks of the external client and
 	// options of the managed reconciler, e.g. managed.WithInitializers().

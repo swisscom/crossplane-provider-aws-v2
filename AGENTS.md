@@ -16,24 +16,28 @@ with `codegen/cmd/import`.
 Status: proof of concept. Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
 `docdb/DBInstance`.
 
+**Before changing a kind, read its `internal/controller/<svc>/<kind>/README.md`**
+(origin, behavior, limitations, history).
+
 ## Layout
 
 | Path | Content |
 |------|---------|
 | `apis/<svc>/generator-config.yaml` | ACK generator config of a service (hand-written) |
 | `apis/<svc>/codegen.yaml` | Extra SDK operations per kind for the generated `Client` interface |
-| `apis/<svc>/import.yaml` | Kinds imported from provider-aws (managed by the importer) |
+| `apis/<svc>/import.yaml` | Kinds imported from provider-aws and their source revisions (managed by the importer) |
 | `apis/<svc>/v1alpha1/zz_*.go` | Generated API types — never edit |
 | `apis/<svc>/v1alpha1/*.go` | Hand-written custom types, extra methods |
 | `internal/controller/<svc>/<kind>/zz_*.go` | Generated controller — never edit |
 | `internal/controller/<svc>/<kind>/setup.go` | Hand-written hooks, wired via `configure`/`wrapExternal` in `init()` |
+| `internal/controller/<svc>/<kind>/README.md` | Kind documentation: origin, behavior, limitations, history |
 | `internal/clients/aws` | ProviderConfig → `aws.Config`, usage tracker, error helpers, connection secret keys |
 | `internal/clients/<svc>`, `internal/utils/*` | Hand-written helpers (mostly imported) |
 | `codegen/` | Separate Go module: generator (`cmd/generate`), importer (`cmd/import`), templates |
 | `package/crds` | Generated CRDs |
 | `build/` | Crossplane build submodule (`make submodules`) — don't edit |
-
-Design and reasoning: `docs/architecture.md`. Known pitfalls: `docs/porting-notes.md`.
+| `docs/` | `architecture.md` (overview, start here), `components/` (one page per component), `adr/` (decisions), `development.md` (workflow, definition of done), `porting-notes.md` |
+| `CHANGELOG.md` | User-visible changes (Keep a Changelog, "Unreleased") |
 
 ## Commands
 
@@ -70,6 +74,9 @@ compiles after `make generate`.
 - Errors: wrap with `crossplane-runtime/v2/pkg/errors`; AWS errors with
   `awsclient.Wrap`.
 - Files start with the Apache 2.0 license header (see `codegen/templates/boilerplate.go.tpl`).
+- Commit subjects are scoped: `docdb/dbcluster: …`, `codegen: …`, `importer: …`,
+  `docs: …`; sign off with `git commit -s`.
+- Definition of done: `docs/development.md#definition-of-done`.
 
 ## Don'ts
 
@@ -94,10 +101,13 @@ don't just mention it in the summary.
 
 | If you change... | Update |
 |------------------|--------|
-| Layout, commands, Make targets, conventions, generation order | `AGENTS.md` |
-| Importer behavior, flags, output, or the porting workflow | `.agents/skills/import-kind/SKILL.md` |
-| Generator, templates, hooks, `generator-config`/`codegen.yaml` handling | `.agents/skills/add-service/SKILL.md`, `docs/architecture.md` |
-| Design decisions (scoping, secrets, references, API group, dependencies) | `docs/architecture.md` |
+| Layout, commands, Make targets, conventions, generation order | `AGENTS.md`, `docs/development.md` |
+| Behavior of a kind | its `README.md` (behavior, limitations, history row), `CHANGELOG.md` |
+| User-visible API (fields, defaults, examples) | `CHANGELOG.md`, `examples/` |
+| Importer behavior, flags, output, or the porting workflow | `.agents/skills/import-kind/SKILL.md`, `docs/components/importer.md` |
+| Generator, templates, hooks, `generator-config`/`codegen.yaml` handling | `.agents/skills/add-service/SKILL.md`, `docs/components/code-generator.md` |
+| Use of another component (runtime, auth, controller-gen, angryjet, build, tests) | its page in `docs/components/` |
+| A design decision (scoping, secrets, references, API group, dependencies, generation strategy) | a new ADR in `docs/adr/`, linked from its index |
 | A new pitfall found while porting, or a pitfall the importer now fixes | `docs/porting-notes.md` |
 | A new workflow that is repeated (≥ 2 times) and has steps | a new skill in `.agents/skills/<name>/SKILL.md`, listed under "Skills" |
 
@@ -106,6 +116,8 @@ Rules:
 - Edit in `AGENTS.md` and `.agents/skills` only; `CLAUDE.md` files and `.claude/skills` are symlinks.
 - Before finishing a task, check the table above against your diff.
 - Prefer deleting outdated text over adding caveats.
+- `docs/` is written for people first (what and why before how, diagrams,
+  links); `AGENTS.md` and the skills stay short and link into `docs/`.
 - Root `AGENTS.md` holds only what **every** task needs (map, commands,
   cross-cutting rules). If it grows past ~150 lines, move content down, never
   drop it: area-specific rules → nested `AGENTS.md` in that directory (e.g.

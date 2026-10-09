@@ -32,12 +32,11 @@ cluster/                      # image build and local integration test
 hack/                         # boilerplate header
 build/                        # crossplane/build submodule (make machinery)
 codegen/                      # code generator (own go.mod), see below
+docs/                         # architecture, components, ADRs, development guide
 ```
 
-Planned:
-- `importer/` (own `go.mod`): tool to port resources from
-  [crossplane-contrib/provider-aws](https://github.com/crossplane-contrib/provider-aws).
-- `test/e2e/`: [uptest](https://github.com/crossplane/uptest) tests against real AWS.
+Planned: `test/e2e/` with [uptest](https://github.com/crossplane/uptest)
+tests against real AWS.
 
 ## Authentication
 
@@ -55,10 +54,12 @@ See [examples/provider/config.yaml](examples/provider/config.yaml).
 
 ## Developing
 
-Design: [`docs/architecture.md`](docs/architecture.md). Conventions and
-workflows (also used by AI coding agents): [`AGENTS.md`](AGENTS.md) and
-[`.agents/skills`](.agents/skills). Known porting pitfalls:
-[`docs/porting-notes.md`](docs/porting-notes.md).
+Start with [`docs/architecture.md`](docs/architecture.md) (overview,
+components, decisions) and [`docs/development.md`](docs/development.md)
+(workflow, conventions, definition of done). Each kind documents itself in
+`internal/controller/<service>/<kind>/README.md`; changes are listed in
+[`CHANGELOG.md`](CHANGELOG.md). Step-by-step workflows, also used by AI
+coding agents: [`AGENTS.md`](AGENTS.md) and [`.agents/skills`](.agents/skills).
 
 ```shell
 make submodules      # once: fetch the build submodule
@@ -102,13 +103,11 @@ Generated per service:
 | `internal/controller/<svc>/zz_setup.go` | service `SetupGated` |
 | `apis/zz_services.go`, `internal/controller/zz_services.go` | registry of all services |
 
-Generated controllers only map fields. Resource-specific behavior lives in
-hand-written files next to `zz_controller.go`, which append to
-`externalOptions` (hooks: `preObserve`, `postObserve`, `lateInitialize`,
-`isUpToDate`, `preCreate`, `postCreate`, `preUpdate`, `postUpdate`,
-`preDelete`, `postDelete`) and `reconcilerOptions` (e.g. initializers) in
-`init()`. By default every observed resource is up to date and its status is
-not set to Available: these hooks are required for a working controller.
+Generated controllers map fields and detect drift of all updatable fields.
+Resource-specific behavior (conditions, passwords, special comparisons) lives
+in hand-written `setup.go` next to `zz_controller.go`, which sets hooks via
+`configure`/`wrapExternal` in `init()`. See
+[docs/components/code-generator.md](docs/components/code-generator.md).
 
 To remove a service, delete its `apis/<svc>` and `internal/controller/<svc>`
 directories and CRDs, then run

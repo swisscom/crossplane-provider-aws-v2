@@ -7,6 +7,8 @@ description: Generate a new AWS service or kind from scratch (without provider-a
 
 For kinds that exist in crossplane-contrib/provider-aws and have meaningful
 hand-written logic, prefer the `import-kind` skill.
+Background: `docs/components/code-generator.md` (templates, hooks, drift
+detection) and `docs/components/ack-code-generator.md` (`generator-config.yaml`).
 
 ## 1. Write the generator config
 
@@ -75,7 +77,14 @@ go build ./... && go vet ./... && go test ./...
 make codegen.test   # if you touched codegen/
 ```
 
-Add an example manifest under `examples/` (namespaced, with `metadata.namespace`).
+## 5. Finish
+
+- Add an example manifest under `examples/<svc>/` (namespaced, with
+  `metadata.namespace`).
+- Write `internal/controller/<svc>/<kind>/README.md` following
+  `docs/development.md#kind-readme` (origin: "generated from scratch").
+- Add the kind under "Added" in `CHANGELOG.md`.
+- Check the definition of done in `docs/development.md`.
 
 ## Removing a service
 

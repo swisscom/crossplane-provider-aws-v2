@@ -418,6 +418,18 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBCluster) (manag
 	} else {
 		cr.Status.AtProvider.ReplicationSourceIdentifier = nil
 	}
+	if resp.DBCluster.ServerlessV2ScalingConfiguration != nil {
+		f33 := &svcapitypes.ServerlessV2ScalingConfiguration{}
+		if resp.DBCluster.ServerlessV2ScalingConfiguration.MaxCapacity != nil {
+			f33.MaxCapacity = resp.DBCluster.ServerlessV2ScalingConfiguration.MaxCapacity
+		}
+		if resp.DBCluster.ServerlessV2ScalingConfiguration.MinCapacity != nil {
+			f33.MinCapacity = resp.DBCluster.ServerlessV2ScalingConfiguration.MinCapacity
+		}
+		cr.Spec.ForProvider.ServerlessV2ScalingConfiguration = f33
+	} else {
+		cr.Spec.ForProvider.ServerlessV2ScalingConfiguration = nil
+	}
 	if resp.DBCluster.Status != nil {
 		cr.Status.AtProvider.Status = resp.DBCluster.Status
 	} else {
@@ -434,18 +446,18 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBCluster) (manag
 		cr.Spec.ForProvider.StorageType = nil
 	}
 	if resp.DBCluster.VpcSecurityGroups != nil {
-		f36 := []*svcapitypes.VPCSecurityGroupMembership{}
-		for _, f36iter := range resp.DBCluster.VpcSecurityGroups {
-			f36elem := &svcapitypes.VPCSecurityGroupMembership{}
-			if f36iter.Status != nil {
-				f36elem.Status = f36iter.Status
+		f37 := []*svcapitypes.VPCSecurityGroupMembership{}
+		for _, f37iter := range resp.DBCluster.VpcSecurityGroups {
+			f37elem := &svcapitypes.VPCSecurityGroupMembership{}
+			if f37iter.Status != nil {
+				f37elem.Status = f37iter.Status
 			}
-			if f36iter.VpcSecurityGroupId != nil {
-				f36elem.VPCSecurityGroupID = f36iter.VpcSecurityGroupId
+			if f37iter.VpcSecurityGroupId != nil {
+				f37elem.VPCSecurityGroupID = f37iter.VpcSecurityGroupId
 			}
-			f36 = append(f36, f36elem)
+			f37 = append(f37, f37elem)
 		}
-		cr.Status.AtProvider.VPCSecurityGroups = f36
+		cr.Status.AtProvider.VPCSecurityGroups = f37
 	} else {
 		cr.Status.AtProvider.VPCSecurityGroups = nil
 	}

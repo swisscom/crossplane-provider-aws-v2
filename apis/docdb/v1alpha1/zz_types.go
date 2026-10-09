@@ -213,6 +213,8 @@ type DBCluster_SDK struct {
 	ReaderEndpoint *string `json:"readerEndpoint,omitempty"`
 
 	ReplicationSourceIdentifier *string `json:"replicationSourceIdentifier,omitempty"`
+	// Retrieves the scaling configuration for an Amazon DocumentDB Serverless cluster.
+	ServerlessV2ScalingConfiguration *ServerlessV2ScalingConfigurationInfo `json:"serverlessV2ScalingConfiguration,omitempty"`
 
 	Status *string `json:"status,omitempty"`
 
@@ -530,6 +532,27 @@ type PendingModifiedValues struct {
 // +kubebuilder:skipversion
 type ResourcePendingMaintenanceActions struct {
 	ResourceIdentifier *string `json:"resourceIdentifier,omitempty"`
+}
+
+// +kubebuilder:skipversion
+type ServerlessV2FeaturesSupport struct {
+	MaxCapacity *float64 `json:"maxCapacity,omitempty"`
+
+	MinCapacity *float64 `json:"minCapacity,omitempty"`
+}
+
+// +kubebuilder:skipversion
+type ServerlessV2ScalingConfiguration struct {
+	MaxCapacity *float64 `json:"maxCapacity,omitempty"`
+
+	MinCapacity *float64 `json:"minCapacity,omitempty"`
+}
+
+// +kubebuilder:skipversion
+type ServerlessV2ScalingConfigurationInfo struct {
+	MaxCapacity *float64 `json:"maxCapacity,omitempty"`
+
+	MinCapacity *float64 `json:"minCapacity,omitempty"`
 }
 
 // +kubebuilder:skipversion

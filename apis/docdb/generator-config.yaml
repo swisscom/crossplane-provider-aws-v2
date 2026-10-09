@@ -39,10 +39,6 @@ ignore:
         - ModifyDBClusterOutput.MasterUserPassword
         - CreateDBClusterOutput.MasterUserPassword
         - DeleteDBClusterOutput.MasterUserPassword
-        # ignoreFieldPaths of import.yaml
-        - CreateDBClusterInput.ServerlessV2ScalingConfiguration
-        - ModifyDBClusterInput.ServerlessV2ScalingConfiguration
-        - DBCluster.ServerlessV2ScalingConfiguration
     resource_names:
         - DBClusterSnapshot
         - GlobalCluster

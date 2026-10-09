@@ -41,23 +41,22 @@ Read the report. The repo builds at this point; the `*_importtodo.go` files
 are excluded by the `importtodo` build tag.
 
 The AWS API model is the one of the current aws-sdk-go-v2 service module, so
-it may have fields that provider-aws never had. If one breaks generation —
-typically controller-gen's `found float, the usage of which is highly
-discouraged` for `float64` fields — list it under `ignoreFieldPaths` in
-`apis/<svc>/import.yaml` and run the importer again (see "start over" below).
-Ignore the input members and the output shape member, e.g.:
+it may have fields that provider-aws never had. They come for free, but the
+hand-written `isUpToDate`/`lateInitialize` of the source don't know them:
+add them there if they are updatable (e.g. docdb
+`ServerlessV2ScalingConfiguration`). `float64` fields are fine (CRDs are
+generated with `crd:allowDangerousTypes=true`). If a field breaks
+generation, list it under `ignoreFieldPaths` in `apis/<svc>/import.yaml` and
+run the importer again (see "start over" below); ignore the input members
+and the output shape member, e.g.:
 
 ```yaml
 ignoreFieldPaths:
-    - CreateDBClusterInput.ServerlessV2ScalingConfiguration
-    - ModifyDBClusterInput.ServerlessV2ScalingConfiguration
-    - DBCluster.ServerlessV2ScalingConfiguration
+    - ModifyAdditionalStorageVolume.SetForDelete
 ```
 
-Floats only in shapes that are not part of a CRD (`+kubebuilder:skipversion`
-types) don't matter. Don't enable `crd:allowDangerousTypes`. Input members
-that SDK v2 keeps unexported (e.g. `DestinationRegion`) are ignored by the
-generator automatically.
+Input members that SDK v2 keeps unexported (e.g. `DestinationRegion`) are
+ignored by the generator automatically.
 
 If the run fails or the output looks wrong, fix the importer
 (`codegen/internal/importer`) rather than patching its output by hand — the

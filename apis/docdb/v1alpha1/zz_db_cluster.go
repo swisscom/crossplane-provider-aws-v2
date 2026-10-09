@@ -190,6 +190,8 @@ type DBClusterParameters struct {
 	//
 	// Constraints: Minimum 30-minute window.
 	PreferredMaintenanceWindow *string `json:"preferredMaintenanceWindow,omitempty"`
+	// Contains the scaling configuration of an Amazon DocumentDB Serverless cluster.
+	ServerlessV2ScalingConfiguration *ServerlessV2ScalingConfiguration `json:"serverlessV2ScalingConfiguration,omitempty"`
 	// SourceRegion is the source region where the resource exists. This is not
 	// sent over the wire and is only used for presigning. This value should always
 	// have the same region as the source ARN.

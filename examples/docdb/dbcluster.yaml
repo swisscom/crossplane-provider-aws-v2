@@ -64,6 +64,11 @@ spec:
     tags:
       - key: environment
         value: example
+    # DocumentDB Serverless (instances use dbInstanceClass: db.serverless);
+    # capacities in DCUs, half steps allowed:
+    # serverlessV2ScalingConfiguration:
+    #   minCapacity: 0.5
+    #   maxCapacity: 8
     # Secondary cluster of a global cluster:
     # globalClusterIdentifier: REPLACE_ME-global-cluster
     # Encrypted cross-region copy (from the source region):

@@ -130,6 +130,12 @@ func lateInitialize(cr *svcapitypes.DBClusterParameters, resp *svcsdk.DescribeDB
 	cr.PreferredMaintenanceWindow = pointer.LateInitialize(cr.PreferredMaintenanceWindow, cluster.PreferredMaintenanceWindow)
 	cr.StorageEncrypted = pointer.LateInitialize(cr.StorageEncrypted, cluster.StorageEncrypted)
 
+	if cr.ServerlessV2ScalingConfiguration == nil && cluster.ServerlessV2ScalingConfiguration != nil {
+		cr.ServerlessV2ScalingConfiguration = &svcapitypes.ServerlessV2ScalingConfiguration{
+			MaxCapacity: cluster.ServerlessV2ScalingConfiguration.MaxCapacity,
+			MinCapacity: cluster.ServerlessV2ScalingConfiguration.MinCapacity,
+		}
+	}
 	if cr.EnableCloudwatchLogsExports == nil && cluster.EnabledCloudwatchLogsExports != nil {
 		cr.EnableCloudwatchLogsExports = aws.StringSlice(cluster.EnabledCloudwatchLogsExports)
 	}
@@ -163,12 +169,35 @@ func (e *hooks) isUpToDate(ctx context.Context, cr *svcapitypes.DBCluster, resp 
 		!isEngineVersionUpToDate(cr, resp),
 		pointer.Int64Value(cr.Spec.ForProvider.Port) != int64(pointer.Int32Value(cluster.Port)),
 		pointer.StringValue(cr.Spec.ForProvider.PreferredBackupWindow) != pointer.StringValue(cluster.PreferredBackupWindow),
-		pointer.StringValue(cr.Spec.ForProvider.PreferredMaintenanceWindow) != pointer.StringValue(cluster.PreferredMaintenanceWindow):
+		pointer.StringValue(cr.Spec.ForProvider.PreferredMaintenanceWindow) != pointer.StringValue(cluster.PreferredMaintenanceWindow),
+		!isServerlessV2ScalingConfigurationUpToDate(cr.Spec.ForProvider.ServerlessV2ScalingConfiguration, cluster.ServerlessV2ScalingConfiguration):
 		return false, "", nil
 	}
 
 	areTagsUpToDate, err := svcutils.AreTagsUpToDate(ctx, e.client, cr.Spec.ForProvider.Tags, cluster.DBClusterArn)
 	return areTagsUpToDate, "", err
+}
+
+// isServerlessV2ScalingConfigurationUpToDate compares only the capacities set
+// in spec; nil means AWS decides.
+func isServerlessV2ScalingConfigurationUpToDate(spec *svcapitypes.ServerlessV2ScalingConfiguration, current *svcsdktypes.ServerlessV2ScalingConfigurationInfo) bool {
+	if spec == nil {
+		return true
+	}
+	if current == nil {
+		current = &svcsdktypes.ServerlessV2ScalingConfigurationInfo{}
+	}
+	if spec.MaxCapacity != nil && aws.ToFloat64(spec.MaxCapacity) != aws.ToFloat64(current.MaxCapacity) {
+		return false
+	}
+	return spec.MinCapacity == nil || aws.ToFloat64(spec.MinCapacity) == aws.ToFloat64(current.MinCapacity)
+}
+
+func sdkServerlessV2ScalingConfiguration(c *svcapitypes.ServerlessV2ScalingConfiguration) *svcsdktypes.ServerlessV2ScalingConfiguration {
+	if c == nil {
+		return nil
+	}
+	return &svcsdktypes.ServerlessV2ScalingConfiguration{MaxCapacity: c.MaxCapacity, MinCapacity: c.MinCapacity}
 }
 
 func (e *hooks) postUpdate(ctx context.Context, cr *svcapitypes.DBCluster, resp *svcsdk.ModifyDBClusterOutput, upd managed.ExternalUpdate, err error) (managed.ExternalUpdate, error) {
@@ -215,15 +244,16 @@ func (e *hooks) postUpdate(ctx context.Context, cr *svcapitypes.DBCluster, resp 
 func generateRestoreDBClusterFromSnapshotInput(cr *svcapitypes.DBCluster) *svcsdk.RestoreDBClusterFromSnapshotInput {
 	p := cr.Spec.ForProvider
 	res := &svcsdk.RestoreDBClusterFromSnapshotInput{
-		AvailabilityZones:           aws.ToStringSlice(p.AvailabilityZones),
-		DBSubnetGroupName:           p.DBSubnetGroupName,
-		DeletionProtection:          p.DeletionProtection,
-		EnableCloudwatchLogsExports: aws.ToStringSlice(p.EnableCloudwatchLogsExports),
-		Engine:                      p.Engine,
-		EngineVersion:               p.EngineVersion,
-		KmsKeyId:                    p.KMSKeyID,
-		Port:                        pointer.Int32(p.Port),
-		Tags:                        sdkTags(p.Tags),
+		AvailabilityZones:                aws.ToStringSlice(p.AvailabilityZones),
+		DBSubnetGroupName:                p.DBSubnetGroupName,
+		DeletionProtection:               p.DeletionProtection,
+		EnableCloudwatchLogsExports:      aws.ToStringSlice(p.EnableCloudwatchLogsExports),
+		Engine:                           p.Engine,
+		EngineVersion:                    p.EngineVersion,
+		KmsKeyId:                         p.KMSKeyID,
+		Port:                             pointer.Int32(p.Port),
+		ServerlessV2ScalingConfiguration: sdkServerlessV2ScalingConfiguration(p.ServerlessV2ScalingConfiguration),
+		Tags:                             sdkTags(p.Tags),
 	}
 	if p.RestoreFrom != nil && p.RestoreFrom.Snapshot != nil {
 		res.SnapshotIdentifier = aws.String(p.RestoreFrom.Snapshot.SnapshotIdentifier)
@@ -234,13 +264,14 @@ func generateRestoreDBClusterFromSnapshotInput(cr *svcapitypes.DBCluster) *svcsd
 func generateRestoreDBClusterToPointInTimeInput(cr *svcapitypes.DBCluster) *svcsdk.RestoreDBClusterToPointInTimeInput {
 	p := cr.Spec.ForProvider
 	res := &svcsdk.RestoreDBClusterToPointInTimeInput{
-		DBSubnetGroupName:           p.DBSubnetGroupName,
-		DeletionProtection:          p.DeletionProtection,
-		EnableCloudwatchLogsExports: aws.ToStringSlice(p.EnableCloudwatchLogsExports),
-		KmsKeyId:                    p.KMSKeyID,
-		Port:                        pointer.Int32(p.Port),
-		VpcSecurityGroupIds:         aws.ToStringSlice(p.VPCSecurityGroupIDs),
-		Tags:                        sdkTags(p.Tags),
+		DBSubnetGroupName:                p.DBSubnetGroupName,
+		DeletionProtection:               p.DeletionProtection,
+		EnableCloudwatchLogsExports:      aws.ToStringSlice(p.EnableCloudwatchLogsExports),
+		KmsKeyId:                         p.KMSKeyID,
+		Port:                             pointer.Int32(p.Port),
+		VpcSecurityGroupIds:              aws.ToStringSlice(p.VPCSecurityGroupIDs),
+		ServerlessV2ScalingConfiguration: sdkServerlessV2ScalingConfiguration(p.ServerlessV2ScalingConfiguration),
+		Tags:                             sdkTags(p.Tags),
 	}
 	if p.RestoreFrom != nil && p.RestoreFrom.PointInTime != nil {
 		pit := p.RestoreFrom.PointInTime

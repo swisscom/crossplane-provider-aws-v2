@@ -252,6 +252,18 @@ func GenerateDBCluster(resp *svcsdk.DescribeDBClustersOutput) *svcapitypes.DBClu
 		} else {
 			cr.Status.AtProvider.ReplicationSourceIdentifier = nil
 		}
+		if elem.ServerlessV2ScalingConfiguration != nil {
+			f33 := &svcapitypes.ServerlessV2ScalingConfiguration{}
+			if elem.ServerlessV2ScalingConfiguration.MaxCapacity != nil {
+				f33.MaxCapacity = elem.ServerlessV2ScalingConfiguration.MaxCapacity
+			}
+			if elem.ServerlessV2ScalingConfiguration.MinCapacity != nil {
+				f33.MinCapacity = elem.ServerlessV2ScalingConfiguration.MinCapacity
+			}
+			cr.Spec.ForProvider.ServerlessV2ScalingConfiguration = f33
+		} else {
+			cr.Spec.ForProvider.ServerlessV2ScalingConfiguration = nil
+		}
 		if elem.Status != nil {
 			cr.Status.AtProvider.Status = elem.Status
 		} else {
@@ -268,18 +280,18 @@ func GenerateDBCluster(resp *svcsdk.DescribeDBClustersOutput) *svcapitypes.DBClu
 			cr.Spec.ForProvider.StorageType = nil
 		}
 		if elem.VpcSecurityGroups != nil {
-			f36 := []*svcapitypes.VPCSecurityGroupMembership{}
-			for _, f36iter := range elem.VpcSecurityGroups {
-				f36elem := &svcapitypes.VPCSecurityGroupMembership{}
-				if f36iter.Status != nil {
-					f36elem.Status = f36iter.Status
+			f37 := []*svcapitypes.VPCSecurityGroupMembership{}
+			for _, f37iter := range elem.VpcSecurityGroups {
+				f37elem := &svcapitypes.VPCSecurityGroupMembership{}
+				if f37iter.Status != nil {
+					f37elem.Status = f37iter.Status
 				}
-				if f36iter.VpcSecurityGroupId != nil {
-					f36elem.VPCSecurityGroupID = f36iter.VpcSecurityGroupId
+				if f37iter.VpcSecurityGroupId != nil {
+					f37elem.VPCSecurityGroupID = f37iter.VpcSecurityGroupId
 				}
-				f36 = append(f36, f36elem)
+				f37 = append(f37, f37elem)
 			}
-			cr.Status.AtProvider.VPCSecurityGroups = f36
+			cr.Status.AtProvider.VPCSecurityGroups = f37
 		} else {
 			cr.Status.AtProvider.VPCSecurityGroups = nil
 		}
@@ -364,6 +376,16 @@ func GenerateCreateDBClusterInput(cr *svcapitypes.DBCluster) (*svcsdk.CreateDBCl
 	if cr.Spec.ForProvider.PreferredMaintenanceWindow != nil {
 		res.PreferredMaintenanceWindow = cr.Spec.ForProvider.PreferredMaintenanceWindow
 	}
+	if cr.Spec.ForProvider.ServerlessV2ScalingConfiguration != nil {
+		f19 := &svcsdktypes.ServerlessV2ScalingConfiguration{}
+		if cr.Spec.ForProvider.ServerlessV2ScalingConfiguration.MaxCapacity != nil {
+			f19.MaxCapacity = cr.Spec.ForProvider.ServerlessV2ScalingConfiguration.MaxCapacity
+		}
+		if cr.Spec.ForProvider.ServerlessV2ScalingConfiguration.MinCapacity != nil {
+			f19.MinCapacity = cr.Spec.ForProvider.ServerlessV2ScalingConfiguration.MinCapacity
+		}
+		res.ServerlessV2ScalingConfiguration = f19
+	}
 	if cr.Spec.ForProvider.SourceRegion != nil {
 		res.SourceRegion = cr.Spec.ForProvider.SourceRegion
 	}
@@ -374,18 +396,18 @@ func GenerateCreateDBClusterInput(cr *svcapitypes.DBCluster) (*svcsdk.CreateDBCl
 		res.StorageType = cr.Spec.ForProvider.StorageType
 	}
 	if cr.Spec.ForProvider.Tags != nil {
-		f22 := []svcsdktypes.Tag{}
-		for _, f22iter := range cr.Spec.ForProvider.Tags {
-			f22elem := &svcsdktypes.Tag{}
-			if f22iter.Key != nil {
-				f22elem.Key = f22iter.Key
+		f23 := []svcsdktypes.Tag{}
+		for _, f23iter := range cr.Spec.ForProvider.Tags {
+			f23elem := &svcsdktypes.Tag{}
+			if f23iter.Key != nil {
+				f23elem.Key = f23iter.Key
 			}
-			if f22iter.Value != nil {
-				f22elem.Value = f22iter.Value
+			if f23iter.Value != nil {
+				f23elem.Value = f23iter.Value
 			}
-			f22 = append(f22, *f22elem)
+			f23 = append(f23, *f23elem)
 		}
-		res.Tags = f22
+		res.Tags = f23
 	}
 	if cr.Spec.ForProvider.VPCSecurityGroupIDs != nil {
 		res.VpcSecurityGroupIds = aws.ToStringSlice(cr.Spec.ForProvider.VPCSecurityGroupIDs)
@@ -443,6 +465,16 @@ func GenerateModifyDBClusterInput(cr *svcapitypes.DBCluster) (*svcsdk.ModifyDBCl
 	}
 	if cr.Spec.ForProvider.PreferredMaintenanceWindow != nil {
 		res.PreferredMaintenanceWindow = cr.Spec.ForProvider.PreferredMaintenanceWindow
+	}
+	if cr.Spec.ForProvider.ServerlessV2ScalingConfiguration != nil {
+		f16 := &svcsdktypes.ServerlessV2ScalingConfiguration{}
+		if cr.Spec.ForProvider.ServerlessV2ScalingConfiguration.MaxCapacity != nil {
+			f16.MaxCapacity = cr.Spec.ForProvider.ServerlessV2ScalingConfiguration.MaxCapacity
+		}
+		if cr.Spec.ForProvider.ServerlessV2ScalingConfiguration.MinCapacity != nil {
+			f16.MinCapacity = cr.Spec.ForProvider.ServerlessV2ScalingConfiguration.MinCapacity
+		}
+		res.ServerlessV2ScalingConfiguration = f16
 	}
 	if cr.Spec.ForProvider.StorageType != nil {
 		res.StorageType = cr.Spec.ForProvider.StorageType

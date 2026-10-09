@@ -5,7 +5,3 @@ apiVersion: v1alpha1
 kinds:
     - DBCluster
     - DBInstance
-ignoreFieldPaths:
-    - CreateDBClusterInput.ServerlessV2ScalingConfiguration
-    - ModifyDBClusterInput.ServerlessV2ScalingConfiguration
-    - DBCluster.ServerlessV2ScalingConfiguration

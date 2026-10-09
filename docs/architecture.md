@@ -34,6 +34,11 @@ AWS API model (aws-sdk-go-v2)          provider-aws (optional)
                  reference resolvers, CRDs)
 ```
 
+CRDs are generated with `crd:allowDangerousTypes=true`: the AWS API uses
+`double` for some fields (e.g. serverless capacity units), and ignoring them
+or mapping them to strings would make them unusable or awkward. Upjet-based
+AWS providers do the same.
+
 ### Code generator (`codegen/`)
 
 A separate Go module, so its dependencies (ACK code-generator, aws-sdk-go v1
@@ -85,7 +90,7 @@ Ports one or more kinds of a provider-aws service:
    rewritten; references to kinds that are not imported are dropped (with
    their fields). `ignoreFieldPaths` of `import.yaml` are added to the
    generator config, for fields the AWS API added since provider-aws was
-   generated and that break generation (e.g. `float64`).
+   generated and that break generation.
 3. Controller `setup.go` and the transitive closure of helper packages are
    copied and rewritten: imports, runtime v1 → v2 symbols, SDK v1 → v2 symbols,
    `Setup` → `configure`, custom connectors to `awsclient.GetConfig` +

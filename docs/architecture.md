@@ -64,9 +64,22 @@ operations used), a connector and an `external` client with hooks:
 | Hook | Default |
 |------|---------|
 | `preObserve`, `postObserve`, `filterList` | no-op |
-| `isUpToDate` | always up to date |
+| `isUpToDate` | `isUpToDateUpdatable` (see below), or always up to date if the kind has no update or read operation |
 | `lateInitialize` | no-op |
 | `preCreate`/`postCreate`, `preUpdate`/`postUpdate`, `preDelete`/`postDelete` | no-op |
+
+`zz_conversions.go` has `DiffUpdatableParameters(desired, observed)`: it
+returns the JSON names of the spec fields that the update operation sends,
+that the read operation returns (so `Generate<Kind>` sets them), and whose
+desired value is not a subset of the observed one
+(`internal/utils/compare.IsSubset`: unset fields are unmanaged, slices are
+order-insensitive, structs compare only the set fields). The field list is
+computed in `codegen/internal/generator/compare.go`; fields with
+`compare.is_ignored` or listed in `resources.<Kind>.compare.ignore` of
+`generator-config.yaml` are left out. Fields that are named or shaped
+differently in the read output (e.g. `vpcSecurityGroupIDs` vs.
+`VpcSecurityGroups`), create-only fields and tags are not covered: a
+hand-written `isUpToDate` builds on `DiffUpdatableParameters` and adds them.
 
 Hand-written code sets two package variables in `init()`:
 

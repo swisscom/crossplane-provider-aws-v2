@@ -341,6 +341,8 @@ func funcMap() ttpl.FuncMap {
 		"GoCodeSetDeleteInput": func(r *ackmodel.CRD, src, dst string, indent int) (string, error) {
 			return code.SetSDK(r.Config(), r, ackmodel.OpTypeDelete, src, dst, indent)
 		},
+		"HasUpdatableFields": HasUpdatableFields,
+		"UpdatableFields":    UpdatableFields,
 		// IAM is a global service; its resources have no region field.
 		"IsGlobalService": func(group string) bool {
 			return strings.HasPrefix(group, "iam.")

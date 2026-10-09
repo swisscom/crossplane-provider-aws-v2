@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
+	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
 )
 
 // GenerateDescribeDBClustersInput returns input for read
@@ -484,6 +485,46 @@ func GenerateModifyDBClusterInput(cr *svcapitypes.DBCluster) (*svcsdk.ModifyDBCl
 	}
 
 	return res, nil
+}
+
+// DiffUpdatableParameters returns the JSON names of the spec fields that
+// ModifyDBCluster can change and whose desired value differs from the
+// observed one (see compare.IsSubset). Fields that are not set in desired
+// are not compared. Fields whose name or shape differs between the update
+// input and the read output are not included; compare them by hand.
+func DiffUpdatableParameters(desired, observed *svcapitypes.DBClusterParameters) []string {
+	var diff []string
+	if !compare.IsSubset(desired.BackupRetentionPeriod, observed.BackupRetentionPeriod) {
+		diff = append(diff, "backupRetentionPeriod")
+	}
+	if !compare.IsSubset(desired.CopyTagsToSnapshot, observed.CopyTagsToSnapshot) {
+		diff = append(diff, "copyTagsToSnapshot")
+	}
+	if !compare.IsSubset(desired.DeletionProtection, observed.DeletionProtection) {
+		diff = append(diff, "deletionProtection")
+	}
+	if !compare.IsSubset(desired.EngineVersion, observed.EngineVersion) {
+		diff = append(diff, "engineVersion")
+	}
+	if !compare.IsSubset(desired.NetworkType, observed.NetworkType) {
+		diff = append(diff, "networkType")
+	}
+	if !compare.IsSubset(desired.Port, observed.Port) {
+		diff = append(diff, "port")
+	}
+	if !compare.IsSubset(desired.PreferredBackupWindow, observed.PreferredBackupWindow) {
+		diff = append(diff, "preferredBackupWindow")
+	}
+	if !compare.IsSubset(desired.PreferredMaintenanceWindow, observed.PreferredMaintenanceWindow) {
+		diff = append(diff, "preferredMaintenanceWindow")
+	}
+	if !compare.IsSubset(desired.ServerlessV2ScalingConfiguration, observed.ServerlessV2ScalingConfiguration) {
+		diff = append(diff, "serverlessV2ScalingConfiguration")
+	}
+	if !compare.IsSubset(desired.StorageType, observed.StorageType) {
+		diff = append(diff, "storageType")
+	}
+	return diff
 }
 
 // GenerateDeleteDBClusterInput returns a deletion input.

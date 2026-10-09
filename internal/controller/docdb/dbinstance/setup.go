@@ -32,6 +32,7 @@ import (
 	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
 	awsclient "github.com/teeverr/provider-aws-v2/internal/clients/aws"
 	svcutils "github.com/teeverr/provider-aws-v2/internal/controller/docdb/utils"
+	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
 	pointer "github.com/teeverr/provider-aws-v2/internal/utils/pointer"
 )
 
@@ -116,17 +117,29 @@ func getConnectionDetails(cr *svcapitypes.DBInstance) managed.ConnectionDetails 
 
 func (e *hooks) isUpToDate(ctx context.Context, cr *svcapitypes.DBInstance, resp *svcsdk.DescribeDBInstancesOutput) (bool, string, error) {
 	instance := resp.DBInstances[0]
+	p := &cr.Spec.ForProvider
 
-	switch {
-	case pointer.StringValue(cr.Spec.ForProvider.CACertificateIdentifier) != pointer.StringValue(instance.CACertificateIdentifier),
-		pointer.StringValue(cr.Spec.ForProvider.DBInstanceClass) != pointer.StringValue(instance.DBInstanceClass),
-		pointer.StringValue(cr.Spec.ForProvider.PreferredMaintenanceWindow) != pointer.StringValue(instance.PreferredMaintenanceWindow),
-		pointer.Int64Value(cr.Spec.ForProvider.PromotionTier) != int64(pointer.Int32Value(instance.PromotionTier)):
-		return false, "", nil
+	diff := compare.Without(DiffUpdatableParameters(p, &GenerateDBInstance(resp).Spec.ForProvider),
+		// Not supported by the DocumentDB ModifyDBInstance API, see preUpdate.
+		"autoMinorVersionUpgrade",
+		// AWS returns the key ARN, compared below.
+		"performanceInsightsKMSKeyID",
+	)
+	if p.EnablePerformanceInsights != nil && *p.EnablePerformanceInsights != pointer.BoolValue(instance.PerformanceInsightsEnabled) {
+		diff = append(diff, "enablePerformanceInsights")
+	}
+	if p.PerformanceInsightsKMSKeyID != nil && !compare.KMSKeyIDEqual(*p.PerformanceInsightsKMSKeyID, pointer.StringValue(instance.PerformanceInsightsKMSKeyId)) {
+		diff = append(diff, "performanceInsightsKMSKeyID")
+	}
+	if len(diff) > 0 {
+		return false, compare.Message(diff), nil
 	}
 
-	areTagsUpToDate, err := svcutils.AreTagsUpToDate(ctx, e.client, cr.Spec.ForProvider.Tags, instance.DBInstanceArn)
-	return areTagsUpToDate, "", err
+	areTagsUpToDate, err := svcutils.AreTagsUpToDate(ctx, e.client, p.Tags, instance.DBInstanceArn)
+	if err != nil || !areTagsUpToDate {
+		return false, compare.Message([]string{"tags"}), err
+	}
+	return true, "", nil
 }
 
 func lateInitialize(cr *svcapitypes.DBInstanceParameters, resp *svcsdk.DescribeDBInstancesOutput) error {

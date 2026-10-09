@@ -58,6 +58,8 @@ compiles after `make generate`.
   Don't hand-write `ResolveReferences` unless the marker can't express it.
 - Customize controllers only through the hooks in `zz_controller.go`
   (`configure`, `wrapExternal`, `pre*/post*`, `isUpToDate`, `lateInitialize`).
+  `isUpToDate` defaults to the generated `DiffUpdatableParameters`
+  (`internal/utils/compare`); hand-written ones should build on it.
   If a hook is missing, change the template in `codegen/templates`, regenerate,
   don't edit `zz_` files.
 - Need another SDK operation in the controller? Add it to

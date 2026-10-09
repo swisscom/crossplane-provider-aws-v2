@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/docdb"
 	docdbtypes "github.com/aws/aws-sdk-go-v2/service/docdb/types"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
@@ -40,6 +41,7 @@ import (
 	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
 	awsclient "github.com/teeverr/provider-aws-v2/internal/clients/aws"
 	fake "github.com/teeverr/provider-aws-v2/internal/clients/docdb/fake"
+	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
 	pointer "github.com/teeverr/provider-aws-v2/internal/utils/pointer"
 )
 
@@ -400,6 +402,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", 0),
+					Diff:                    "spec.forProvider fields differ from the observed state: backupRetentionPeriod",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -619,6 +622,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", 0),
+					Diff:                    "spec.forProvider fields differ from the observed state: dbClusterParameterGroupName",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -784,6 +788,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", 0),
+					Diff:                    "spec.forProvider fields differ from the observed state: deletionProtection",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -959,6 +964,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", 0),
+					Diff:                    "spec.forProvider fields differ from the observed state: enableCloudwatchLogsExports",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -1018,6 +1024,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", 0),
+					Diff:                    "spec.forProvider fields differ from the observed state: enableCloudwatchLogsExports",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -1276,6 +1283,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", 0),
+					Diff:                    "spec.forProvider fields differ from the observed state: engineVersion",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -1383,6 +1391,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", testOtherPort),
+					Diff:                    "spec.forProvider fields differ from the observed state: port",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -1546,6 +1555,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", 0),
+					Diff:                    "spec.forProvider fields differ from the observed state: preferredBackupWindow",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -1709,6 +1719,7 @@ func TestObserve(t *testing.T) {
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
 					ConnectionDetails:       generateConnectionDetails("", "", "", "", 0),
+					Diff:                    "spec.forProvider fields differ from the observed state: preferredMaintenanceWindow",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
@@ -2198,31 +2209,6 @@ func TestCreate(t *testing.T) {
 							},
 						}, nil
 					},
-					MockCreateDBCluster: func(c context.Context, cdpgi *docdb.CreateDBClusterInput, o ...func(*docdb.Options)) (*docdb.CreateDBClusterOutput, error) {
-						return &docdb.CreateDBClusterOutput{
-							DBCluster: &docdbtypes.DBCluster{
-								AvailabilityZones: []string{
-									testAvailabilityZone,
-									testOtherAvailabilityZone,
-								},
-								BackupRetentionPeriod:      pointer.ToIntAsInt32(testBackupRetentionPeriod),
-								DBClusterParameterGroup:    &testDBClusterParameterGroupName,
-								DBClusterIdentifier:        pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-								DBClusterArn:               pointer.ToOrNilIfZeroValue(testDBClusterArn),
-								DeletionProtection:         pointer.ToOrNilIfZeroValue(true),
-								Endpoint:                   pointer.ToOrNilIfZeroValue(testEndpoint),
-								Engine:                     &testEngine,
-								EngineVersion:              &testEngineVersion,
-								KmsKeyId:                   &testKMSKeyID,
-								MasterUsername:             &testMasterUserName,
-								ReaderEndpoint:             pointer.ToOrNilIfZeroValue(testReaderEndpoint),
-								Port:                       pointer.ToIntAsInt32(testPort),
-								PreferredBackupWindow:      &testPreferredBackupWindow,
-								PreferredMaintenanceWindow: &testPreferredMaintenanceWindow,
-								StorageEncrypted:           pointer.ToOrNilIfZeroValue(true),
-							},
-						}, nil
-					},
 				},
 				cr: instance(
 					withDBClusterIdentifier(testDBClusterIdentifier),
@@ -2308,7 +2294,7 @@ func TestCreate(t *testing.T) {
 				result: managed.ExternalCreation{
 					ConnectionDetails: generateConnectionDetails(
 						testMasterUserName,
-						testMasterUserPassword,
+						"", // set by ModifyDBCluster after the restore
 						testReaderEndpoint,
 						testEndpoint,
 						testPort,
@@ -2324,8 +2310,9 @@ func TestCreate(t *testing.T) {
 									testAvailabilityZone,
 									testOtherAvailabilityZone,
 								),
-								DBSubnetGroupName:  pointer.ToOrNilIfZeroValue(testDBSubnetGroupName),
-								DeletionProtection: pointer.ToOrNilIfZeroValue(true),
+								DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
+								DBSubnetGroupName:           pointer.ToOrNilIfZeroValue(testDBSubnetGroupName),
+								DeletionProtection:          pointer.ToOrNilIfZeroValue(true),
 								EnableCloudwatchLogsExports: toStringArray(
 									testCloudWatchLog,
 									testOtherCloudWatchLog,
@@ -2343,44 +2330,6 @@ func TestCreate(t *testing.T) {
 									{Key: pointer.ToOrNilIfZeroValue(testOtherTagKey), Value: pointer.ToOrNilIfZeroValue(testOtherTagValue)},
 								},
 								SnapshotIdentifier: ptr.To("abcd"),
-							},
-						},
-					},
-					CreateDBCluster: []*fake.CallCreateDBCluster{
-						{
-							Ctx: context.Background(),
-							I: &docdb.CreateDBClusterInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-								AvailabilityZones: toStringArray(
-									testAvailabilityZone,
-									testOtherAvailabilityZone,
-								),
-								BackupRetentionPeriod:       pointer.ToIntAsInt32(testBackupRetentionPeriod),
-								DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
-								DBSubnetGroupName:           pointer.ToOrNilIfZeroValue(testDBSubnetGroupName),
-								DeletionProtection:          pointer.ToOrNilIfZeroValue(true),
-								EnableCloudwatchLogsExports: toStringArray(
-									testCloudWatchLog,
-									testOtherCloudWatchLog,
-								),
-								Engine:                     pointer.ToOrNilIfZeroValue(testEngine),
-								EngineVersion:              pointer.ToOrNilIfZeroValue(testEngineVersion),
-								KmsKeyId:                   pointer.ToOrNilIfZeroValue(testKMSKeyID),
-								MasterUsername:             pointer.ToOrNilIfZeroValue(testMasterUserName),
-								MasterUserPassword:         pointer.ToOrNilIfZeroValue(testMasterUserPassword),
-								Port:                       pointer.ToIntAsInt32(testPort),
-								PreSignedUrl:               pointer.ToOrNilIfZeroValue(testPresignedURL),
-								PreferredBackupWindow:      pointer.ToOrNilIfZeroValue(testPreferredBackupWindow),
-								PreferredMaintenanceWindow: pointer.ToOrNilIfZeroValue(testPreferredMaintenanceWindow),
-								StorageEncrypted:           pointer.ToOrNilIfZeroValue(true),
-								VpcSecurityGroupIds: toStringArray(
-									testVpcSecurityGroup,
-									testOtherVpcSecurityGroup,
-								),
-								Tags: []docdbtypes.Tag{
-									{Key: pointer.ToOrNilIfZeroValue(testTagKey), Value: pointer.ToOrNilIfZeroValue(testTagValue)},
-									{Key: pointer.ToOrNilIfZeroValue(testOtherTagKey), Value: pointer.ToOrNilIfZeroValue(testOtherTagValue)},
-								},
 							},
 						},
 					},
@@ -2424,31 +2373,6 @@ func TestCreate(t *testing.T) {
 							},
 						}, nil
 					},
-					MockCreateDBCluster: func(c context.Context, cdpgi *docdb.CreateDBClusterInput, o ...func(*docdb.Options)) (*docdb.CreateDBClusterOutput, error) {
-						return &docdb.CreateDBClusterOutput{
-							DBCluster: &docdbtypes.DBCluster{
-								AvailabilityZones: []string{
-									testAvailabilityZone,
-									testOtherAvailabilityZone,
-								},
-								BackupRetentionPeriod:      pointer.ToIntAsInt32(testBackupRetentionPeriod),
-								DBClusterParameterGroup:    &testDBClusterParameterGroupName,
-								DBClusterIdentifier:        pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-								DBClusterArn:               pointer.ToOrNilIfZeroValue(testDBClusterArn),
-								DeletionProtection:         pointer.ToOrNilIfZeroValue(true),
-								Endpoint:                   pointer.ToOrNilIfZeroValue(testEndpoint),
-								Engine:                     &testEngine,
-								EngineVersion:              &testEngineVersion,
-								KmsKeyId:                   &testKMSKeyID,
-								MasterUsername:             &testMasterUserName,
-								ReaderEndpoint:             pointer.ToOrNilIfZeroValue(testReaderEndpoint),
-								Port:                       pointer.ToIntAsInt32(testPort),
-								PreferredBackupWindow:      &testPreferredBackupWindow,
-								PreferredMaintenanceWindow: &testPreferredMaintenanceWindow,
-								StorageEncrypted:           pointer.ToOrNilIfZeroValue(true),
-							},
-						}, nil
-					},
 				},
 				cr: instance(
 					withDBClusterIdentifier(testDBClusterIdentifier),
@@ -2540,7 +2464,7 @@ func TestCreate(t *testing.T) {
 				result: managed.ExternalCreation{
 					ConnectionDetails: generateConnectionDetails(
 						testMasterUserName,
-						testMasterUserPassword,
+						"", // set by ModifyDBCluster after the restore
 						testReaderEndpoint,
 						testEndpoint,
 						testPort,
@@ -2572,44 +2496,6 @@ func TestCreate(t *testing.T) {
 								UseLatestRestorableTime:   ptr.To(true),
 								SourceDBClusterIdentifier: ptr.To("abcd"),
 								RestoreType:               ptr.To("full-copy"),
-							},
-						},
-					},
-					CreateDBCluster: []*fake.CallCreateDBCluster{
-						{
-							Ctx: context.Background(),
-							I: &docdb.CreateDBClusterInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-								AvailabilityZones: toStringArray(
-									testAvailabilityZone,
-									testOtherAvailabilityZone,
-								),
-								BackupRetentionPeriod:       pointer.ToIntAsInt32(testBackupRetentionPeriod),
-								DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
-								DBSubnetGroupName:           pointer.ToOrNilIfZeroValue(testDBSubnetGroupName),
-								DeletionProtection:          pointer.ToOrNilIfZeroValue(true),
-								EnableCloudwatchLogsExports: toStringArray(
-									testCloudWatchLog,
-									testOtherCloudWatchLog,
-								),
-								Engine:                     pointer.ToOrNilIfZeroValue(testEngine),
-								EngineVersion:              pointer.ToOrNilIfZeroValue(testEngineVersion),
-								KmsKeyId:                   pointer.ToOrNilIfZeroValue(testKMSKeyID),
-								MasterUsername:             pointer.ToOrNilIfZeroValue(testMasterUserName),
-								MasterUserPassword:         pointer.ToOrNilIfZeroValue(testMasterUserPassword),
-								Port:                       pointer.ToIntAsInt32(testPort),
-								PreSignedUrl:               pointer.ToOrNilIfZeroValue(testPresignedURL),
-								PreferredBackupWindow:      pointer.ToOrNilIfZeroValue(testPreferredBackupWindow),
-								PreferredMaintenanceWindow: pointer.ToOrNilIfZeroValue(testPreferredMaintenanceWindow),
-								StorageEncrypted:           pointer.ToOrNilIfZeroValue(true),
-								VpcSecurityGroupIds: toStringArray(
-									testVpcSecurityGroup,
-									testOtherVpcSecurityGroup,
-								),
-								Tags: []docdbtypes.Tag{
-									{Key: pointer.ToOrNilIfZeroValue(testTagKey), Value: pointer.ToOrNilIfZeroValue(testTagValue)},
-									{Key: pointer.ToOrNilIfZeroValue(testOtherTagKey), Value: pointer.ToOrNilIfZeroValue(testOtherTagValue)},
-								},
 							},
 						},
 					},
@@ -2691,7 +2577,7 @@ func TestCreate(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			opts := []option{setupExternal}
-			e := newExternal(tc.args.kube, tc.args.docdb, opts)
+			e := wrapExternal(newExternal(tc.args.kube, tc.args.docdb, opts))
 			o, err := e.Create(context.Background(), tc.args.cr)
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
@@ -3500,40 +3386,79 @@ func TestGetPasswordFromRefUsesNamespaceOfDBCluster(t *testing.T) {
 	}
 }
 
-func TestIsServerlessV2ScalingConfigurationUpToDate(t *testing.T) {
+func TestDiffParameters(t *testing.T) {
+	observed := docdbtypes.DBCluster{
+		BackupRetentionPeriod:            ptr.To[int32](7),
+		CopyTagsToSnapshot:               ptr.To(false),
+		DBClusterParameterGroup:          ptr.To("default.docdb5.0"),
+		DeletionProtection:               ptr.To(true),
+		EnabledCloudwatchLogsExports:     []string{"audit", "profiler"},
+		EngineVersion:                    ptr.To("5.0.0"),
+		NetworkType:                      ptr.To("IPV4"),
+		Port:                             ptr.To[int32](27017),
+		PreferredBackupWindow:            ptr.To("01:00-01:30"),
+		PreferredMaintenanceWindow:       ptr.To("sat:02:00-sat:03:00"),
+		ServerlessV2ScalingConfiguration: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](8), MinCapacity: ptr.To(0.5)},
+		StorageType:                      ptr.To("standard"),
+		VpcSecurityGroups: []docdbtypes.VpcSecurityGroupMembership{
+			{VpcSecurityGroupId: ptr.To("sg-1")}, {VpcSecurityGroupId: ptr.To("sg-2")},
+		},
+	}
+	upToDate := svcapitypes.DBClusterParameters{
+		BackupRetentionPeriod:            ptr.To[int64](7),
+		CopyTagsToSnapshot:               ptr.To(false),
+		DBClusterParameterGroupName:      ptr.To("default.docdb5.0"),
+		DeletionProtection:               ptr.To(true),
+		EnableCloudwatchLogsExports:      []*string{ptr.To("profiler"), ptr.To("audit")},
+		EngineVersion:                    ptr.To("5.0.0"),
+		ManageMasterUserPassword:         ptr.To(false),
+		NetworkType:                      ptr.To("IPV4"),
+		Port:                             ptr.To[int64](27017),
+		PreferredBackupWindow:            ptr.To("01:00-01:30"),
+		PreferredMaintenanceWindow:       ptr.To("sat:02:00-sat:03:00"),
+		ServerlessV2ScalingConfiguration: &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](8)},
+		StorageType:                      ptr.To("standard"),
+		VPCSecurityGroupIDs:              []*string{ptr.To("sg-2"), ptr.To("sg-1")},
+	}
 	cases := map[string]struct {
-		spec    *svcapitypes.ServerlessV2ScalingConfiguration
-		current *docdbtypes.ServerlessV2ScalingConfigurationInfo
-		want    bool
+		modify func(p *svcapitypes.DBClusterParameters)
+		want   []string
 	}{
-		"NotSet": {
-			current: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4)},
-			want:    true,
-		},
-		"Same": {
-			spec:    &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
-			current: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
-			want:    true,
-		},
-		"OnlyMaxSet": {
-			spec:    &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4)},
-			current: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
-			want:    true,
-		},
-		"MinChanged": {
-			spec:    &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](1.5)},
-			current: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
-			want:    false,
-		},
-		"NotServerless": {
-			spec: &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4)},
-			want: false,
+		"UpToDate":        {modify: func(*svcapitypes.DBClusterParameters) {}},
+		"NothingSet":      {modify: func(p *svcapitypes.DBClusterParameters) { *p = svcapitypes.DBClusterParameters{} }},
+		"OlderEngine":     {modify: func(p *svcapitypes.DBClusterParameters) { p.EngineVersion = ptr.To("4.0.0") }},
+		"NewerEngine":     {modify: func(p *svcapitypes.DBClusterParameters) { p.EngineVersion = ptr.To("6.0.0") }, want: []string{"engineVersion"}},
+		"BackupRetention": {modify: func(p *svcapitypes.DBClusterParameters) { p.BackupRetentionPeriod = ptr.To[int64](1) }, want: []string{"backupRetentionPeriod"}},
+		"CopyTags":        {modify: func(p *svcapitypes.DBClusterParameters) { p.CopyTagsToSnapshot = ptr.To(true) }, want: []string{"copyTagsToSnapshot"}},
+		"DeletionProt":    {modify: func(p *svcapitypes.DBClusterParameters) { p.DeletionProtection = ptr.To(false) }, want: []string{"deletionProtection"}},
+		"NetworkType":     {modify: func(p *svcapitypes.DBClusterParameters) { p.NetworkType = ptr.To("DUAL") }, want: []string{"networkType"}},
+		"Port":            {modify: func(p *svcapitypes.DBClusterParameters) { p.Port = ptr.To[int64](27018) }, want: []string{"port"}},
+		"BackupWindow":    {modify: func(p *svcapitypes.DBClusterParameters) { p.PreferredBackupWindow = ptr.To("02:00-02:30") }, want: []string{"preferredBackupWindow"}},
+		"MaintenanceWin":  {modify: func(p *svcapitypes.DBClusterParameters) { p.PreferredMaintenanceWindow = ptr.To("sun:02:00-sun:03:00") }, want: []string{"preferredMaintenanceWindow"}},
+		"Serverless": {modify: func(p *svcapitypes.DBClusterParameters) {
+			p.ServerlessV2ScalingConfiguration.MinCapacity = ptr.To[float64](1)
+		}, want: []string{"serverlessV2ScalingConfiguration"}},
+		"StorageType":      {modify: func(p *svcapitypes.DBClusterParameters) { p.StorageType = ptr.To("iopt1") }, want: []string{"storageType"}},
+		"ParameterGroup":   {modify: func(p *svcapitypes.DBClusterParameters) { p.DBClusterParameterGroupName = ptr.To("custom") }, want: []string{"dbClusterParameterGroupName"}},
+		"CloudwatchLogs":   {modify: func(p *svcapitypes.DBClusterParameters) { p.EnableCloudwatchLogsExports = []*string{ptr.To("audit")} }, want: []string{"enableCloudwatchLogsExports"}},
+		"NoCloudwatchLogs": {modify: func(p *svcapitypes.DBClusterParameters) { p.EnableCloudwatchLogsExports = []*string{} }, want: []string{"enableCloudwatchLogsExports"}},
+		"SecurityGroups":   {modify: func(p *svcapitypes.DBClusterParameters) { p.VPCSecurityGroupIDs = []*string{ptr.To("sg-3")} }, want: []string{"vpcSecurityGroupIDs"}},
+		"ManagedPassword":  {modify: func(p *svcapitypes.DBClusterParameters) { p.ManageMasterUserPassword = ptr.To(true) }, want: []string{"manageMasterUserPassword"}},
+		"Several": {
+			modify: func(p *svcapitypes.DBClusterParameters) {
+				p.Port = ptr.To[int64](1)
+				p.StorageType = ptr.To("iopt1")
+			},
+			want: []string{"port", "storageType"},
 		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if got := isServerlessV2ScalingConfigurationUpToDate(tc.spec, tc.current); got != tc.want {
-				t.Errorf("isServerlessV2ScalingConfigurationUpToDate(...): want %v, got %v", tc.want, got)
+			p := upToDate.DeepCopy()
+			tc.modify(p)
+			got := diffParameters(p, &docdb.DescribeDBClustersOutput{DBClusters: []docdbtypes.DBCluster{observed}})
+			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("diffParameters(...): -want, +got:\n%s", diff)
 			}
 		})
 	}
@@ -3550,5 +3475,131 @@ func TestLateInitializeServerlessV2ScalingConfiguration(t *testing.T) {
 	want := &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)}
 	if diff := cmp.Diff(want, p.ServerlessV2ScalingConfiguration); diff != "" {
 		t.Errorf("lateInitialize(...): -want, +got:\n%s", diff)
+	}
+}
+
+// passwordKube returns the master password secret with desired and the
+// connection secret with published as password.
+func passwordKube(desired, published string) *test.MockClient {
+	return &test.MockClient{
+		MockGet: func(_ context.Context, key client.ObjectKey, obj client.Object) error {
+			s := obj.(*v1.Secret)
+			if key.Name == testMasterPasswordSecretName {
+				s.Data = map[string][]byte{testMasterPasswordSecretKey: []byte(desired)}
+			} else {
+				s.Data = map[string][]byte{awsclient.ResourceCredentialsSecretPasswordKey: []byte(published)}
+			}
+			return nil
+		},
+	}
+}
+
+func passwordCluster(m ...docDBModifier) *svcapitypes.DBCluster {
+	cr := instance(append([]docDBModifier{
+		withExternalName(testDBClusterIdentifier),
+		withMasterPasswordSecretRef(testMasterPasswordSecretNamespace, testMasterPasswordSecretName, testMasterPasswordSecretKey),
+	}, m...)...)
+	cr.Spec.WriteConnectionSecretToReference = &xpv2.LocalSecretReference{Name: "conn"}
+	return cr
+}
+
+// The reconciler publishes the connection details of Observe before it calls
+// Update. A changed password must not be published by Observe, or preUpdate
+// would not send it to AWS.
+func TestPasswordChange(t *testing.T) {
+	ctx := context.Background()
+	cr := passwordCluster()
+	describe := &docdb.DescribeDBClustersOutput{DBClusters: []docdbtypes.DBCluster{{DBClusterArn: ptr.To(testDBClusterArn)}}}
+	client := &fake.MockDocDBClient{
+		MockDescribeDBClusters: func(context.Context, *docdb.DescribeDBClustersInput, ...func(*docdb.Options)) (*docdb.DescribeDBClustersOutput, error) {
+			return describe, nil
+		},
+	}
+	h := &hooks{kube: passwordKube("new", "old"), client: client}
+
+	upToDate, diff, err := h.isUpToDate(ctx, cr, describe)
+	if err != nil || upToDate {
+		t.Fatalf("isUpToDate(...) = %v, %v; want false, nil", upToDate, err)
+	}
+	if want := compare.Message([]string{"masterUserPasswordSecretRef"}); diff != want {
+		t.Errorf("isUpToDate(...) diff = %q, want %q", diff, want)
+	}
+
+	obs, err := h.postObserve(ctx, cr, describe, managed.ExternalObservation{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := obs.ConnectionDetails[awsclient.ResourceCredentialsSecretPasswordKey]; ok {
+		t.Errorf("postObserve(...) published the changed password")
+	}
+
+	in := &docdb.ModifyDBClusterInput{}
+	if err := h.preUpdate(ctx, cr, in); err != nil {
+		t.Fatal(err)
+	}
+	if got := aws.ToString(in.MasterUserPassword); got != "new" {
+		t.Errorf("preUpdate(...) MasterUserPassword = %q, want %q", got, "new")
+	}
+
+	upd, err := h.postUpdate(ctx, cr, &docdb.ModifyDBClusterOutput{DBCluster: &docdbtypes.DBCluster{DBClusterArn: ptr.To(testDBClusterArn)}}, managed.ExternalUpdate{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := managed.ConnectionDetails{awsclient.ResourceCredentialsSecretPasswordKey: []byte("new")}
+	if diff := cmp.Diff(want, upd.ConnectionDetails); diff != "" {
+		t.Errorf("postUpdate(...) connection details: -want, +got:\n%s", diff)
+	}
+
+	// Once published, the password is up to date and published by Observe.
+	h.kube = passwordKube("new", "new")
+	if upToDate, _, err := h.isUpToDate(ctx, cr, describe); err != nil || !upToDate {
+		t.Errorf("isUpToDate(...) after update = %v, %v; want true, nil", upToDate, err)
+	}
+	obs, _ = h.postObserve(ctx, cr, describe, managed.ExternalObservation{}, nil)
+	if got := string(obs.ConnectionDetails[awsclient.ResourceCredentialsSecretPasswordKey]); got != "new" {
+		t.Errorf("postObserve(...) password = %q, want %q", got, "new")
+	}
+}
+
+func TestPreUpdateManageMasterUserPassword(t *testing.T) {
+	managedSecret := &svcapitypes.ClusterMasterUserSecret{SecretARN: ptr.To("arn")}
+	cases := map[string]struct {
+		manage   *bool
+		observed *svcapitypes.ClusterMasterUserSecret
+		want     *docdb.ModifyDBClusterInput
+	}{
+		"NotSet": {
+			want: &docdb.ModifyDBClusterInput{},
+		},
+		"AlreadyManaged": {
+			manage:   ptr.To(true),
+			observed: managedSecret,
+			want:     &docdb.ModifyDBClusterInput{},
+		},
+		"SwitchOn": {
+			manage: ptr.To(true),
+			want:   &docdb.ModifyDBClusterInput{ManageMasterUserPassword: ptr.To(true), MasterUserSecretKmsKeyId: ptr.To("key")},
+		},
+		"SwitchOff": {
+			manage:   ptr.To(false),
+			observed: managedSecret,
+			want:     &docdb.ModifyDBClusterInput{ManageMasterUserPassword: ptr.To(false), MasterUserPassword: ptr.To("pw")},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			cr := passwordCluster()
+			cr.Spec.ForProvider.ManageMasterUserPassword = tc.manage
+			cr.Status.AtProvider.MasterUserSecret = tc.observed
+			in := &docdb.ModifyDBClusterInput{ManageMasterUserPassword: tc.manage, MasterUserSecretKmsKeyId: ptr.To("key")}
+			h := &hooks{kube: passwordKube("pw", "pw")}
+			if err := h.preUpdate(context.Background(), cr, in); err != nil {
+				t.Fatal(err)
+			}
+			tc.want.DBClusterIdentifier = ptr.To(testDBClusterIdentifier)
+			if diff := cmp.Diff(tc.want, in, ignoreUnexported, cmpopts.IgnoreFields(docdb.ModifyDBClusterInput{}, "CloudwatchLogsExportConfiguration")); diff != "" {
+				t.Errorf("preUpdate(...): -want, +got:\n%s", diff)
+			}
+		})
 	}
 }

@@ -36,8 +36,9 @@ The importer generates from the current SDK v2 model, not from the model
 provider-aws was generated with. New fields come for free, unless they break
 generation:
 
-- New fields are not in the hand-written `isUpToDate`/`lateInitialize` of
-  the source; add the updatable ones there.
+- New fields are not in the hand-written `lateInitialize` of the source.
+  `isUpToDate` hooks of provider-aws compare a hand-picked subset of fields;
+  base them on the generated `DiffUpdatableParameters` instead.
 - `float64` fields are allowed (`crd:allowDangerousTypes=true` in
   `apis/generate.go`); Kubernetes discourages floats because of rounding in
   other languages, the AWS API uses them anyway (e.g. capacity units).
@@ -50,6 +51,13 @@ generation:
   field that no longer exists panics at runtime. Grep for removed field names
   after dropping references.
 - **Hand-built `external{...}`**: every hook field must be set; nil hooks panic.
+- **Restore in `preCreate`**: provider-aws restored snapshots in `preCreate`
+  and then still ran the create operation. Override `Create` via
+  `wrapExternal` instead.
+- **Connection details publish order**: the reconciler publishes Observe's
+  connection details before Update. A `postObserve` that publishes the
+  desired password makes "password changed" checks against the connection
+  secret always false; publish it in `postUpdate`.
 - **Cache/secret location**: code that used the provider namespace
   (`GetProviderNamespace`) compiles but is wrong for namespaced MRs.
 - **nil vs. empty slices**: `aws.StringSlice(nil)` returns an empty, non-nil
@@ -98,3 +106,10 @@ writes them in a second step for this reason.
   hand. The fake client records calls (`Called`) like the source.
 - Importer learned: keep constants used by the controllers (they were
   dropped), keep const groups, ignore unexported SDK v2 input members.
+- `isUpToDate` rewritten on `DiffUpdatableParameters`: all updatable fields
+  are compared. DBInstance ignores `autoMinorVersionUpgrade` (DocumentDB's
+  ModifyDBInstance rejects it, `preUpdate` drops it).
+- Restore (`restoreFrom`) overrides `Create` and no longer calls
+  CreateDBCluster after RestoreDBCluster*; the password is set by the next
+  ModifyDBCluster. Password changes are still detected against the connection
+  secret, so they need `writeConnectionSecretToRef`.

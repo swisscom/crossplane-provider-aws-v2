@@ -33,6 +33,7 @@ import (
 	svcapitypes "{{ .ModulePath }}/apis/{{ .ServicePackageName }}/{{ .APIVersion }}"
 	"{{ .ModulePath }}/apis/v1alpha1"
 	awsclient "{{ .ModulePath }}/internal/clients/aws"
+	"{{ .ModulePath }}/internal/utils/compare"
 )
 
 const (
@@ -274,7 +275,11 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		preObserve:     nopPreObserve,
 		postObserve:    nopPostObserve,
 		lateInitialize: nopLateInitialize,
+{{- if HasUpdatableFields .CRD }}
+		isUpToDate:     isUpToDateUpdatable,
+{{- else }}
 		isUpToDate:     alwaysUpToDate,
+{{- end }}
 {{- if $readMany }}
 		filterList: nopFilterList,
 {{- end }}
@@ -344,9 +349,19 @@ func nopLateInitialize(*svcapitypes.{{ $kind }}Parameters, *svcsdk.{{ $readOp.Ou
 	return nil
 }
 
+{{- if HasUpdatableFields .CRD }}
+// isUpToDateUpdatable compares the spec fields that the update operation can
+// change with the observed state. Hand-written isUpToDate hooks can build on
+// DiffUpdatableParameters.
+func isUpToDateUpdatable(_ context.Context, cr *svcapitypes.{{ $kind }}, resp *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }}) (bool, string, error) {
+	diff := DiffUpdatableParameters(&cr.Spec.ForProvider, &Generate{{ $kind }}(resp).Spec.ForProvider)
+	return len(diff) == 0, compare.Message(diff), nil
+}
+{{- else }}
 func alwaysUpToDate(context.Context, *svcapitypes.{{ $kind }}, *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }}) (bool, string, error) {
 	return true, "", nil
 }
+{{- end }}
 {{ if $readMany }}
 func nopFilterList(_ *svcapitypes.{{ $kind }}, list *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }}) *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }} {
 	return list

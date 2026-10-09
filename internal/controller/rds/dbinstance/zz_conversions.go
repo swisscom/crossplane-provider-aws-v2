@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1"
+	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
 )
 
 // GenerateDescribeDBInstancesInput returns input for read
@@ -1497,6 +1498,106 @@ func GenerateModifyDBInstanceInput(cr *svcapitypes.DBInstance) (*svcsdk.ModifyDB
 	}
 
 	return res, nil
+}
+
+// DiffUpdatableParameters returns the JSON names of the spec fields that
+// ModifyDBInstance can change and whose desired value differs from the
+// observed one (see compare.IsSubset). Fields that are not set in desired
+// are not compared. Fields whose name or shape differs between the update
+// input and the read output are not included; compare them by hand.
+func DiffUpdatableParameters(desired, observed *svcapitypes.DBInstanceParameters) []string {
+	var diff []string
+	if !compare.IsSubset(desired.AdditionalStorageVolumes, observed.AdditionalStorageVolumes) {
+		diff = append(diff, "additionalStorageVolumes")
+	}
+	if !compare.IsSubset(desired.AllocatedStorage, observed.AllocatedStorage) {
+		diff = append(diff, "allocatedStorage")
+	}
+	if !compare.IsSubset(desired.AutoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade) {
+		diff = append(diff, "autoMinorVersionUpgrade")
+	}
+	if !compare.IsSubset(desired.BackupRetentionPeriod, observed.BackupRetentionPeriod) {
+		diff = append(diff, "backupRetentionPeriod")
+	}
+	if !compare.IsSubset(desired.CACertificateIdentifier, observed.CACertificateIdentifier) {
+		diff = append(diff, "caCertificateIdentifier")
+	}
+	if !compare.IsSubset(desired.CopyTagsToSnapshot, observed.CopyTagsToSnapshot) {
+		diff = append(diff, "copyTagsToSnapshot")
+	}
+	if !compare.IsSubset(desired.DBInstanceClass, observed.DBInstanceClass) {
+		diff = append(diff, "dbInstanceClass")
+	}
+	if !compare.IsSubset(desired.DatabaseInsightsMode, observed.DatabaseInsightsMode) {
+		diff = append(diff, "databaseInsightsMode")
+	}
+	if !compare.IsSubset(desired.DedicatedLogVolume, observed.DedicatedLogVolume) {
+		diff = append(diff, "dedicatedLogVolume")
+	}
+	if !compare.IsSubset(desired.DeletionProtection, observed.DeletionProtection) {
+		diff = append(diff, "deletionProtection")
+	}
+	if !compare.IsSubset(desired.Engine, observed.Engine) {
+		diff = append(diff, "engine")
+	}
+	if !compare.IsSubset(desired.EngineLifecycleSupport, observed.EngineLifecycleSupport) {
+		diff = append(diff, "engineLifecycleSupport")
+	}
+	if !compare.IsSubset(desired.IOPS, observed.IOPS) {
+		diff = append(diff, "iops")
+	}
+	if !compare.IsSubset(desired.LicenseModel, observed.LicenseModel) {
+		diff = append(diff, "licenseModel")
+	}
+	if !compare.IsSubset(desired.MaxAllocatedStorage, observed.MaxAllocatedStorage) {
+		diff = append(diff, "maxAllocatedStorage")
+	}
+	if !compare.IsSubset(desired.MonitoringInterval, observed.MonitoringInterval) {
+		diff = append(diff, "monitoringInterval")
+	}
+	if !compare.IsSubset(desired.MonitoringRoleARN, observed.MonitoringRoleARN) {
+		diff = append(diff, "monitoringRoleARN")
+	}
+	if !compare.IsSubset(desired.MultiAZ, observed.MultiAZ) {
+		diff = append(diff, "multiAZ")
+	}
+	if !compare.IsSubset(desired.MultiTenant, observed.MultiTenant) {
+		diff = append(diff, "multiTenant")
+	}
+	if !compare.IsSubset(desired.NetworkType, observed.NetworkType) {
+		diff = append(diff, "networkType")
+	}
+	if !compare.IsSubset(desired.PerformanceInsightsKMSKeyID, observed.PerformanceInsightsKMSKeyID) {
+		diff = append(diff, "performanceInsightsKMSKeyID")
+	}
+	if !compare.IsSubset(desired.PerformanceInsightsRetentionPeriod, observed.PerformanceInsightsRetentionPeriod) {
+		diff = append(diff, "performanceInsightsRetentionPeriod")
+	}
+	if !compare.IsSubset(desired.PreferredBackupWindow, observed.PreferredBackupWindow) {
+		diff = append(diff, "preferredBackupWindow")
+	}
+	if !compare.IsSubset(desired.PreferredMaintenanceWindow, observed.PreferredMaintenanceWindow) {
+		diff = append(diff, "preferredMaintenanceWindow")
+	}
+	if !compare.IsSubset(desired.ProcessorFeatures, observed.ProcessorFeatures) {
+		diff = append(diff, "processorFeatures")
+	}
+	if !compare.IsSubset(desired.PromotionTier, observed.PromotionTier) {
+		diff = append(diff, "promotionTier")
+	}
+	if !compare.IsSubset(desired.PubliclyAccessible, observed.PubliclyAccessible) {
+		diff = append(diff, "publiclyAccessible")
+	}
+	if !compare.IsSubset(desired.StorageThroughput, observed.StorageThroughput) {
+		diff = append(diff, "storageThroughput")
+	}
+	if !compare.IsSubset(desired.StorageType, observed.StorageType) {
+		diff = append(diff, "storageType")
+	}
+	if !compare.IsSubset(desired.TDECredentialARN, observed.TDECredentialARN) {
+		diff = append(diff, "tdeCredentialARN")
+	}
+	return diff
 }
 
 // GenerateDeleteDBInstanceInput returns a deletion input.

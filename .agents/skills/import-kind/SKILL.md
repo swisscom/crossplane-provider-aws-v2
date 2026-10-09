@@ -42,9 +42,12 @@ are excluded by the `importtodo` build tag.
 
 The AWS API model is the one of the current aws-sdk-go-v2 service module, so
 it may have fields that provider-aws never had. They come for free, but the
-hand-written `isUpToDate`/`lateInitialize` of the source don't know them:
-add them there if they are updatable (e.g. docdb
-`ServerlessV2ScalingConfiguration`). `float64` fields are fine (CRDs are
+hand-written `lateInitialize` of the source doesn't know them. The source's
+`isUpToDate` usually compares a hand-picked subset of fields: rewrite it on
+top of the generated `DiffUpdatableParameters` (all updatable fields) and
+only add what it can't compare — renamed/reshaped fields, passwords, tags
+(see docdb `DBCluster`/`DBInstance`). Remove fields the update operation
+rejects with `compare.Without`. `float64` fields are fine (CRDs are
 generated with `crd:allowDangerousTypes=true`). If a field breaks
 generation, list it under `ignoreFieldPaths` in `apis/<svc>/import.yaml` and
 run the importer again (see "start over" below); ignore the input members
@@ -117,6 +120,12 @@ Semantic fixes (think, don't just make it compile):
   and `svcsdk.NewFromConfig(cfg)`; create the usage tracker once in `configure`.
 - **Hooks**: when building `external{...}` by hand, set every hook field
   (nil hooks panic) — compare with `newExternal` in `zz_controller.go`.
+- **Alternative create operations** (restore from snapshot): override
+  `Create` with `wrapExternal` instead of calling them in `preCreate`, or the
+  generated create runs afterwards.
+- **Passwords in connection details**: the reconciler publishes Observe's
+  connection details before it calls Update. Don't publish a changed
+  password in `postObserve`; publish it in `postUpdate`.
 - Reconciler options from the old Setup (poll interval, logger, recorder,
   management policies, connection publishers) are provided by the generated
   Setup — don't re-add them.

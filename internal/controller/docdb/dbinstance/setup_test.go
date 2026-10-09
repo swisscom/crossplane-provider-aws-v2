@@ -38,6 +38,7 @@ import (
 	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
 	awsclient "github.com/teeverr/provider-aws-v2/internal/clients/aws"
 	fake "github.com/teeverr/provider-aws-v2/internal/clients/docdb/fake"
+	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
 	pointer "github.com/teeverr/provider-aws-v2/internal/utils/pointer"
 )
 
@@ -412,6 +413,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: caCertificateIdentifier",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -468,6 +470,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: dbInstanceClass",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -526,6 +529,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: preferredMaintenanceWindow",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -580,6 +584,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: promotionTier",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -637,6 +642,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: tags",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -932,6 +938,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: caCertificateIdentifier",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -986,6 +993,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: dbInstanceClass",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1042,6 +1050,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: preferredMaintenanceWindow",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1096,6 +1105,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: promotionTier",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1153,6 +1163,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: tags",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1450,6 +1461,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: caCertificateIdentifier",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1504,6 +1516,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: dbInstanceClass",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1560,6 +1573,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: preferredMaintenanceWindow",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1614,6 +1628,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: promotionTier",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1671,6 +1686,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: tags",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -1968,6 +1984,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: caCertificateIdentifier",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -2022,6 +2039,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: dbInstanceClass",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -2077,6 +2095,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: preferredMaintenanceWindow",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -2131,6 +2150,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: promotionTier",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -2188,6 +2208,7 @@ func TestObserve(t *testing.T) {
 					ResourceExists:    true,
 					ResourceUpToDate:  false,
 					ConnectionDetails: generateConnectionDetails(testAddress, testPort),
+					Diff:              "spec.forProvider fields differ from the observed state: tags",
 				},
 				docdb: fake.MockDocDBClientCall{
 					DescribeDBInstances: []*fake.CallDescribeDBInstances{
@@ -3126,4 +3147,59 @@ var ignoreUnexported = cmp.FilterPath(func(p cmp.Path) bool {
 func describeInput(cr *svcapitypes.DBInstance) *docdb.DescribeDBInstancesInput {
 	in, _ := GenerateDescribeDBInstancesInput(cr)
 	return in
+}
+
+func TestIsUpToDate(t *testing.T) {
+	observed := docdbtypes.DBInstance{
+		DBInstanceArn:               ptr.To("arn"),
+		DBInstanceClass:             ptr.To("db.r5.large"),
+		AutoMinorVersionUpgrade:     ptr.To(true),
+		PerformanceInsightsEnabled:  ptr.To(true),
+		PerformanceInsightsKMSKeyId: ptr.To("arn:aws:kms:eu-central-1:123456789012:key/key-id"),
+		PromotionTier:               ptr.To[int32](1),
+	}
+	cases := map[string]struct {
+		p    svcapitypes.DBInstanceParameters
+		want string
+	}{
+		"Unmanaged": {},
+		"Equal": {
+			p: svcapitypes.DBInstanceParameters{
+				DBInstanceClass:             ptr.To("db.r5.large"),
+				PromotionTier:               ptr.To[int64](1),
+				EnablePerformanceInsights:   ptr.To(true),
+				PerformanceInsightsKMSKeyID: ptr.To("key-id"),
+			},
+		},
+		"AutoMinorVersionUpgradeIgnored": {
+			p: svcapitypes.DBInstanceParameters{AutoMinorVersionUpgrade: ptr.To(false)},
+		},
+		"Differ": {
+			p: svcapitypes.DBInstanceParameters{
+				DBInstanceClass:             ptr.To("db.r5.xlarge"),
+				PromotionTier:               ptr.To[int64](2),
+				EnablePerformanceInsights:   ptr.To(false),
+				PerformanceInsightsKMSKeyID: ptr.To("other-key"),
+			},
+			want: compare.Message([]string{"dbInstanceClass", "promotionTier", "enablePerformanceInsights", "performanceInsightsKMSKeyID"}),
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			cr := instance()
+			cr.Spec.ForProvider = tc.p
+			h := &hooks{client: &fake.MockDocDBClient{
+				MockListTagsForResource: func(context.Context, *docdb.ListTagsForResourceInput, ...func(*docdb.Options)) (*docdb.ListTagsForResourceOutput, error) {
+					return &docdb.ListTagsForResourceOutput{}, nil
+				},
+			}}
+			upToDate, diff, err := h.isUpToDate(context.Background(), cr, &docdb.DescribeDBInstancesOutput{DBInstances: []docdbtypes.DBInstance{observed}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if upToDate != (tc.want == "") || diff != tc.want {
+				t.Errorf("isUpToDate(...) = %v, %q; want %v, %q", upToDate, diff, tc.want == "", tc.want)
+			}
+		})
+	}
 }

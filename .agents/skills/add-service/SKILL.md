@@ -40,8 +40,14 @@ Generated: `apis/<svc>/v1alpha1/zz_*.go`, `internal/controller/<svc>/<kind>/zz_*
 
 ## 3. Customize (only if needed)
 
-The generated controller has no `isUpToDate` logic (always up to date) and no
-late initialization. Add behavior in a hand-written
+The generated `isUpToDate` compares the spec fields that the update
+operation sends and the read operation returns (`DiffUpdatableParameters`
+in `zz_conversions.go`). Exclude a field with `compare.is_ignored` or
+`resources.<Kind>.compare.ignore` in `generator-config.yaml`. Fields that
+are named or shaped differently in the read output, and tags, need a
+hand-written `isUpToDate` that starts from `DiffUpdatableParameters`
+(see `internal/controller/docdb/dbcluster/setup.go`). There is no late
+initialization. Add behavior in a hand-written
 `internal/controller/<svc>/<kind>/setup.go`:
 
 ```go

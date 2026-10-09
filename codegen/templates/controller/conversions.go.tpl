@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "{{ .ModulePath }}/apis/{{ .ServicePackageName }}/{{ .APIVersion }}"
+	"{{ .ModulePath }}/internal/utils/compare"
 )
 
 {{ if .CRD.Ops.ReadOne }}
@@ -42,6 +43,22 @@ func Generate{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}(cr *svcapitypes.{{ .
 	res := &svcsdk.{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}{}
 {{ GoCodeSetUpdateInput .CRD "cr" "res" 1 }}
 	return res, nil
+}
+{{ end }}
+{{- if HasUpdatableFields .CRD }}
+// DiffUpdatableParameters returns the JSON names of the spec fields that
+// {{ .CRD.Ops.Update.ExportedName }} can change and whose desired value differs from the
+// observed one (see compare.IsSubset). Fields that are not set in desired
+// are not compared. Fields whose name or shape differs between the update
+// input and the read output are not included; compare them by hand.
+func DiffUpdatableParameters(desired, observed *svcapitypes.{{ .CRD.Names.Camel }}Parameters) []string {
+	var diff []string
+{{- range $f := UpdatableFields .CRD }}
+	if !compare.IsSubset(desired.{{ $f.GoName }}, observed.{{ $f.GoName }}) {
+		diff = append(diff, "{{ $f.JSONName }}")
+	}
+{{- end }}
+	return diff
 }
 {{ end }}
 {{- if .CRD.Ops.Delete }}

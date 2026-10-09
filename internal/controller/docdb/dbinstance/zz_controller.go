@@ -40,6 +40,7 @@ import (
 	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
 	"github.com/teeverr/provider-aws-v2/apis/v1alpha1"
 	awsclient "github.com/teeverr/provider-aws-v2/internal/clients/aws"
+	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
 )
 
 const (
@@ -549,7 +550,7 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		preObserve:     nopPreObserve,
 		postObserve:    nopPostObserve,
 		lateInitialize: nopLateInitialize,
-		isUpToDate:     alwaysUpToDate,
+		isUpToDate:     isUpToDateUpdatable,
 		filterList:     nopFilterList,
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
@@ -592,8 +593,12 @@ func nopLateInitialize(*svcapitypes.DBInstanceParameters, *svcsdk.DescribeDBInst
 	return nil
 }
 
-func alwaysUpToDate(context.Context, *svcapitypes.DBInstance, *svcsdk.DescribeDBInstancesOutput) (bool, string, error) {
-	return true, "", nil
+// isUpToDateUpdatable compares the spec fields that the update operation can
+// change with the observed state. Hand-written isUpToDate hooks can build on
+// DiffUpdatableParameters.
+func isUpToDateUpdatable(_ context.Context, cr *svcapitypes.DBInstance, resp *svcsdk.DescribeDBInstancesOutput) (bool, string, error) {
+	diff := DiffUpdatableParameters(&cr.Spec.ForProvider, &GenerateDBInstance(resp).Spec.ForProvider)
+	return len(diff) == 0, compare.Message(diff), nil
 }
 
 func nopFilterList(_ *svcapitypes.DBInstance, list *svcsdk.DescribeDBInstancesOutput) *svcsdk.DescribeDBInstancesOutput {

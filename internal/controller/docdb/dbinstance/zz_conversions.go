@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
+	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
 )
 
 // GenerateDescribeDBInstancesInput returns input for read
@@ -444,6 +445,37 @@ func GenerateModifyDBInstanceInput(cr *svcapitypes.DBInstance) (*svcsdk.ModifyDB
 	}
 
 	return res, nil
+}
+
+// DiffUpdatableParameters returns the JSON names of the spec fields that
+// ModifyDBInstance can change and whose desired value differs from the
+// observed one (see compare.IsSubset). Fields that are not set in desired
+// are not compared. Fields whose name or shape differs between the update
+// input and the read output are not included; compare them by hand.
+func DiffUpdatableParameters(desired, observed *svcapitypes.DBInstanceParameters) []string {
+	var diff []string
+	if !compare.IsSubset(desired.AutoMinorVersionUpgrade, observed.AutoMinorVersionUpgrade) {
+		diff = append(diff, "autoMinorVersionUpgrade")
+	}
+	if !compare.IsSubset(desired.CACertificateIdentifier, observed.CACertificateIdentifier) {
+		diff = append(diff, "caCertificateIdentifier")
+	}
+	if !compare.IsSubset(desired.CopyTagsToSnapshot, observed.CopyTagsToSnapshot) {
+		diff = append(diff, "copyTagsToSnapshot")
+	}
+	if !compare.IsSubset(desired.DBInstanceClass, observed.DBInstanceClass) {
+		diff = append(diff, "dbInstanceClass")
+	}
+	if !compare.IsSubset(desired.PerformanceInsightsKMSKeyID, observed.PerformanceInsightsKMSKeyID) {
+		diff = append(diff, "performanceInsightsKMSKeyID")
+	}
+	if !compare.IsSubset(desired.PreferredMaintenanceWindow, observed.PreferredMaintenanceWindow) {
+		diff = append(diff, "preferredMaintenanceWindow")
+	}
+	if !compare.IsSubset(desired.PromotionTier, observed.PromotionTier) {
+		diff = append(diff, "promotionTier")
+	}
+	return diff
 }
 
 // GenerateDeleteDBInstanceInput returns a deletion input.

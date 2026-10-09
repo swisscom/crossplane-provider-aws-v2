@@ -5,3 +5,10 @@ apiVersion: v1alpha1
 kinds:
     - DBCluster
     - DBInstance
+revisions:
+    DBCluster:
+        repository: ssh://git@github.com/swisscom/provider-aws.git
+        commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
+    DBInstance:
+        repository: ssh://git@github.com/swisscom/provider-aws.git
+        commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980

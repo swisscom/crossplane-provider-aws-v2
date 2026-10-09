@@ -19,8 +19,10 @@ package importer
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -36,6 +38,19 @@ type Manifest struct {
 	// generator config, e.g. for fields the AWS API added since the source
 	// was generated.
 	IgnoreFieldPaths []string `yaml:"ignoreFieldPaths,omitempty"`
+	// Revisions records, per kind, the source revision its controller was
+	// ported from.
+	Revisions map[string]Revision `yaml:"revisions,omitempty"`
+}
+
+// A Revision identifies the state of the source checkout a kind was
+// imported from.
+type Revision struct {
+	// Repository is the URL of the origin remote, e.g. a fork.
+	Repository string `yaml:"repository,omitempty"`
+	Commit     string `yaml:"commit"`
+	// Dirty is set if the source files of the kind had uncommitted changes.
+	Dirty bool `yaml:"dirty,omitempty"`
 }
 
 func manifestPath(root, svc string) string {
@@ -142,4 +157,28 @@ func mapPath(m *yaml.Node, keys ...string) *yaml.Node {
 		m = next
 	}
 	return m
+}
+
+// sourceRevision returns the git revision of the source checkout for kind.
+// Dirty considers the files the importer reads for the kind.
+func sourceRevision(src, svc, kind string) (Revision, error) {
+	git := func(args ...string) (string, error) {
+		cmd := exec.Command("git", append([]string{"-C", src}, args...)...) //nolint:gosec // args built from flags
+		out, err := cmd.Output()
+		return strings.TrimSpace(string(out)), err
+	}
+	commit, err := git("rev-parse", "HEAD")
+	if err != nil {
+		return Revision{}, fmt.Errorf("cannot read the git revision of %s: %w", src, err)
+	}
+	repo, _ := git("remote", "get-url", "origin")
+	status, err := git("status", "--porcelain", "--",
+		filepath.Join("apis", svc),
+		filepath.Join("pkg", "controller", svc, strings.ToLower(kind)),
+		filepath.Join("pkg", "clients", svc),
+		filepath.Join("pkg", "utils"))
+	if err != nil {
+		return Revision{}, fmt.Errorf("cannot read the git status of %s: %w", src, err)
+	}
+	return Revision{Repository: repo, Commit: commit, Dirty: status != ""}, nil
 }

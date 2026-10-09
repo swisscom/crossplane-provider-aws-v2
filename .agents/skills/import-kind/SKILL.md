@@ -6,7 +6,8 @@ description: Import a managed resource kind (e.g. rds/DBInstance) from crossplan
 # Import a kind from provider-aws
 
 The importer does the mechanical part; you port what it could not. Reference
-port: commit `75acc8b` (rds/DBInstance). Pitfalls: `docs/porting-notes.md`.
+port: docdb `DBCluster`/`DBInstance` (commits `2362ae0`, `1a8d835`).
+Pitfalls: `docs/porting-notes.md`. Background: `docs/components/importer.md`.
 
 ## 1. Prerequisites
 
@@ -26,8 +27,10 @@ go run ./cmd/import --source ../../provider-aws --service <svc> --kinds <Kind>[,
 `<svc>` is the aws-sdk-go-v2 service package name (e.g. `rds`, `ec2`). The
 importer:
 
-1. Writes `apis/<svc>/import.yaml` and a filtered `generator-config.yaml`,
-   runs the generator.
+1. Writes `apis/<svc>/import.yaml` (kinds, and the source `revisions`:
+   repository, commit, `dirty` if the kind's source files had uncommitted
+   changes) and a filtered `generator-config.yaml`, runs the generator.
+   Prefer importing from a clean checkout.
 2. Copies custom types (xpv1 → namespaced xpv2 types) and the declarations
    the source controllers use (e.g. state constants), rewrites reference
    markers, drops refs to kinds that are not imported.
@@ -160,7 +163,14 @@ secret refs and references, to check the schema keeps those fields.
   are mutually exclusive or engine-specific (see `examples/rds/`). Validate
   them with `kubectl apply --server-side --dry-run=server --validate=strict`
   against an envtest apiserver that has `package/crds` installed.
-- Commit the import and the port together (one commit per kind is fine).
+- Write `internal/controller/<svc>/<kind>/README.md` following the template
+  in `docs/development.md#kind-readme`: origin (revision from
+  `import.yaml`), behavior and hooks, differences from provider-aws, fields
+  AWS can't change after creation, known limitations, history row.
+- Add the kind under "Added" in `CHANGELOG.md`.
+- Commit the import and the port together (one commit per kind is fine),
+  subject `<svc>/<kind>: import and port from provider-aws`; then add the
+  commit to the README history in a follow-up or amend.
 - Add a short entry for anything new you learned to `docs/porting-notes.md`,
   and teach the importer if the fix was mechanical.
 - Update the "Imported so far" line in `AGENTS.md`.

@@ -3499,3 +3499,56 @@ func TestGetPasswordFromRefUsesNamespaceOfDBCluster(t *testing.T) {
 		t.Errorf("secret keys: -want, +got:\n%s", diff)
 	}
 }
+
+func TestIsServerlessV2ScalingConfigurationUpToDate(t *testing.T) {
+	cases := map[string]struct {
+		spec    *svcapitypes.ServerlessV2ScalingConfiguration
+		current *docdbtypes.ServerlessV2ScalingConfigurationInfo
+		want    bool
+	}{
+		"NotSet": {
+			current: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4)},
+			want:    true,
+		},
+		"Same": {
+			spec:    &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
+			current: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
+			want:    true,
+		},
+		"OnlyMaxSet": {
+			spec:    &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4)},
+			current: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
+			want:    true,
+		},
+		"MinChanged": {
+			spec:    &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](1.5)},
+			current: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
+			want:    false,
+		},
+		"NotServerless": {
+			spec: &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4)},
+			want: false,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := isServerlessV2ScalingConfigurationUpToDate(tc.spec, tc.current); got != tc.want {
+				t.Errorf("isServerlessV2ScalingConfigurationUpToDate(...): want %v, got %v", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestLateInitializeServerlessV2ScalingConfiguration(t *testing.T) {
+	p := &svcapitypes.DBClusterParameters{}
+	out := &docdb.DescribeDBClustersOutput{DBClusters: []docdbtypes.DBCluster{{
+		ServerlessV2ScalingConfiguration: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
+	}}}
+	if err := lateInitialize(p, out); err != nil {
+		t.Fatal(err)
+	}
+	want := &svcapitypes.ServerlessV2ScalingConfiguration{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)}
+	if diff := cmp.Diff(want, p.ServerlessV2ScalingConfiguration); diff != "" {
+		t.Errorf("lateInitialize(...): -want, +got:\n%s", diff)
+	}
+}

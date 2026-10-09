@@ -36,9 +36,11 @@ The importer generates from the current SDK v2 model, not from the model
 provider-aws was generated with. New fields come for free, unless they break
 generation:
 
-- `float64` fields in CRD types fail `controller-gen` ("found float"). Add
-  the input and output members to `ignoreFieldPaths` in `import.yaml` (see
-  the `import-kind` skill); don't enable `allowDangerousTypes`.
+- New fields are not in the hand-written `isUpToDate`/`lateInitialize` of
+  the source; add the updatable ones there.
+- `float64` fields are allowed (`crd:allowDangerousTypes=true` in
+  `apis/generate.go`); Kubernetes discourages floats because of rounding in
+  other languages, the AWS API uses them anyway (e.g. capacity units).
 - Input members that SDK v2 keeps unexported (`DestinationRegion`) are
   ignored by the generator automatically.
 
@@ -87,7 +89,7 @@ writes them in a second step for this reason.
 ### docdb/DBCluster, docdb/DBInstance
 
 - `ServerlessV2ScalingConfiguration` (new in the SDK v2 model, `float64`
-  capacities) ignored via `import.yaml`.
+  capacities) added to `isUpToDate`, `lateInitialize` and the restore inputs.
 - References of DBCluster to DBSubnetGroup, DBClusterParameterGroup, kms/Key
   and ec2/SecurityGroup dropped (kinds not imported); the plain fields stay.
   DBInstance → DBCluster reference kept (hand-written resolver ported).

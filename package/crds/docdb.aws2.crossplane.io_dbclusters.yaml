@@ -395,6 +395,15 @@ spec:
                     required:
                     - source
                     type: object
+                  serverlessV2ScalingConfiguration:
+                    description: Contains the scaling configuration of an Amazon DocumentDB
+                      Serverless cluster.
+                    properties:
+                      maxCapacity:
+                        type: number
+                      minCapacity:
+                        type: number
+                    type: object
                   skipFinalSnapshot:
                     description: |-
                       Determines whether a final cluster snapshot is created before the cluster

@@ -53,7 +53,8 @@ generation:
 - **Hand-built `external{...}`**: every hook field must be set; nil hooks panic.
 - **Restore in `preCreate`**: provider-aws restored snapshots in `preCreate`
   and then still ran the create operation. Override `Create` via
-  `wrapExternal` instead.
+  `wrapExternal` instead (done for docdb/DBCluster; rds/DBInstance still
+  has the old pattern).
 - **Connection details publish order**: the reconciler publishes Observe's
   connection details before Update. A `postObserve` that publishes the
   desired password makes "password changed" checks against the connection
@@ -86,30 +87,6 @@ writes them in a second step for this reason.
 
 ## Per kind
 
-### rds/DBInstance (commit `75acc8b`)
-
-- ~16 controller and ~40 helper declarations quarantined; all ported.
-- `SourceDBClusterIDRef`/`Selector` dropped (DBCluster not imported);
-  `SourceDBClusterID` (plain string) kept.
-- Password/restore cache secret moved to the MR namespace.
-- Only instance parts of `pending_modified_values` ported (cluster parts come with DBCluster).
-
-### docdb/DBCluster, docdb/DBInstance
-
-- `ServerlessV2ScalingConfiguration` (new in the SDK v2 model, `float64`
-  capacities) added to `isUpToDate`, `lateInitialize` and the restore inputs.
-- References of DBCluster to DBSubnetGroup, DBClusterParameterGroup, kms/Key
-  and ec2/SecurityGroup dropped (kinds not imported); the plain fields stay.
-  DBInstance → DBCluster reference kept (hand-written resolver ported).
-- Master password and connection secret are read in the MR namespace.
-- Tag helpers take a `TagClient`; tag operations added to `codegen.yaml` by
-  hand. The fake client records calls (`Called`) like the source.
-- Importer learned: keep constants used by the controllers (they were
-  dropped), keep const groups, ignore unexported SDK v2 input members.
-- `isUpToDate` rewritten on `DiffUpdatableParameters`: all updatable fields
-  are compared. DBInstance ignores `autoMinorVersionUpgrade` (DocumentDB's
-  ModifyDBInstance rejects it, `preUpdate` drops it).
-- Restore (`restoreFrom`) overrides `Create` and no longer calls
-  CreateDBCluster after RestoreDBCluster*; the password is set by the next
-  ModifyDBCluster. Password changes are still detected against the connection
-  secret, so they need `writeConnectionSecretToRef`.
+What was ported, dropped or changed for each kind is in its README
+(`internal/controller/<svc>/<kind>/README.md`, "Differences from
+provider-aws").

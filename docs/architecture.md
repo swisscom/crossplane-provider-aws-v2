@@ -46,6 +46,10 @@ model loader) don't leak into the provider.
   `apis/<svc>/codegen.yaml` (extra SDK operations per kind).
 - AWS API models are downloaded per service and cached
   (`~/Library/Caches/provider-aws-v2-codegen` on macOS).
+- Members of operation inputs that the aws-sdk-go-v2 service module keeps
+  unexported (e.g. `DestinationRegion` of the presigned-URL customization of
+  rds and docdb) are added to `ignore.field_paths` automatically: generated
+  conversions could not set them.
 
 ### Generated controller
 
@@ -76,8 +80,12 @@ Ports one or more kinds of a provider-aws service:
 
 1. Generator config + `import.yaml`; runs the generator.
 2. Custom types closure → `apis/<svc>/v1alpha1`, with xpv1 → namespaced xpv2
-   types. Reference markers are rewritten; references to kinds that are not
-   imported are dropped (with their fields).
+   types, plus declarations the source controllers of the kinds use (e.g.
+   state constants; const groups stay grouped). Reference markers are
+   rewritten; references to kinds that are not imported are dropped (with
+   their fields). `ignoreFieldPaths` of `import.yaml` are added to the
+   generator config, for fields the AWS API added since provider-aws was
+   generated and that break generation (e.g. `float64`).
 3. Controller `setup.go` and the transitive closure of helper packages are
    copied and rewritten: imports, runtime v1 → v2 symbols, SDK v1 → v2 symbols,
    `Setup` → `configure`, custom connectors to `awsclient.GetConfig` +

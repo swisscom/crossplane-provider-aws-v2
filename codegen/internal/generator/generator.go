@@ -58,9 +58,12 @@ type Options struct {
 	// its tag holds the API model.
 	ServiceSDKVersion string
 	// ModelName is the API model file name, e.g. service-catalog.
-	ModelName   string
-	CacheDir    string
-	TemplateDir string
+	ModelName string
+	// ServiceSDKDir is the directory of the aws-sdk-go-v2 service module.
+	// If set, input members the SDK does not export are ignored.
+	ServiceSDKDir string
+	CacheDir      string
+	TemplateDir   string
 }
 
 // defaultConfig makes ACK's code emitters read and write
@@ -102,6 +105,9 @@ func Run(ctx context.Context, o Options) error {
 		return fmt.Errorf("cannot load generator config: %w", err)
 	}
 	normalizeOperationTypes(&cfg)
+	if err := ignoreUnexportedInputs(&cfg, o.ServiceSDKDir); err != nil {
+		return err
+	}
 
 	m, err := loadModel(ctx, svc, o, cfg)
 	if err != nil {
@@ -130,6 +136,9 @@ func ListKinds(ctx context.Context, o Options) ([]string, error) {
 		return nil, fmt.Errorf("cannot load generator config: %w", err)
 	}
 	normalizeOperationTypes(&cfg)
+	if err := ignoreUnexportedInputs(&cfg, o.ServiceSDKDir); err != nil {
+		return nil, err
+	}
 	m, err := loadModel(ctx, strings.ToLower(o.Service), o, cfg)
 	if err != nil {
 		return nil, err

@@ -20,11 +20,17 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+
+	ackgenconfig "github.com/aws-controllers-k8s/code-generator/pkg/config"
 )
 
 // ResolveServiceModule makes sure the provider's go.mod requires the
@@ -60,6 +66,7 @@ func ResolveServiceModule(o *Options) error {
 		return ResolveServiceModule(o)
 	}
 	o.ServiceSDKVersion = m.Version
+	o.ServiceSDKDir = m.Dir
 	o.ModelName, err = modelName(m.Dir)
 	return err
 }
@@ -95,4 +102,63 @@ func modelName(moduleDir string) (string, error) {
 		return "", fmt.Errorf("no ServiceID in %s/api_client.go", moduleDir)
 	}
 	return strings.ReplaceAll(strings.ToLower(string(m[1])), " ", "-"), nil
+}
+
+// unexportedInputFields returns the members of operation inputs that the
+// SDK keeps unexported (e.g. DestinationRegion of the presigned URL
+// customization of rds and docdb) as ACK field paths, e.g.
+// CreateDBClusterInput.DestinationRegion. Generated code cannot set them.
+func unexportedInputFields(moduleDir string) ([]string, error) {
+	files, err := filepath.Glob(filepath.Join(moduleDir, "api_op_*.go"))
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	fset := token.NewFileSet()
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range f.Decls {
+			gd, ok := d.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
+				continue
+			}
+			for _, sp := range gd.Specs {
+				ts := sp.(*ast.TypeSpec) //nolint:forcetypeassert // type declarations hold type specs
+				st, ok := ts.Type.(*ast.StructType)
+				if !ok || !strings.HasSuffix(ts.Name.Name, "Input") {
+					continue
+				}
+				for _, fld := range st.Fields.List {
+					for _, n := range fld.Names {
+						if !n.IsExported() {
+							paths = append(paths, ts.Name.Name+"."+strings.ToUpper(n.Name[:1])+n.Name[1:])
+						}
+					}
+				}
+			}
+		}
+	}
+	return paths, nil
+}
+
+func ignoreUnexportedInputs(cfg *ackgenconfig.Config, moduleDir string) error {
+	if moduleDir == "" {
+		return nil
+	}
+	paths, err := unexportedInputFields(moduleDir)
+	if err != nil {
+		return fmt.Errorf("cannot read inputs of %s: %w", moduleDir, err)
+	}
+	for _, p := range paths {
+		if !slices.Contains(cfg.Ignore.FieldPaths, p) {
+			cfg.Ignore.FieldPaths = append(cfg.Ignore.FieldPaths, p)
+		}
+	}
+	return nil
 }

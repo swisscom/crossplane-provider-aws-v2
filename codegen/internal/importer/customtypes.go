@@ -28,6 +28,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -52,6 +53,9 @@ type decl struct {
 	deps []string
 	// imports are the import paths the declaration uses.
 	imports []string
+	// group is the grouped const or var declaration that node was split
+	// from, if any.
+	group *ast.GenDecl
 }
 
 type srcFile struct {
@@ -100,12 +104,13 @@ func parseAPIPackage(dir, importPath string) (*apiPackage, error) {
 		}
 		sf := &srcFile{name: n, ast: f, imports: fileImports(f)}
 		p.files = append(p.files, sf)
-		for i, d := range splitDecls(f.Decls) {
+		groups := map[ast.Decl]*ast.GenDecl{}
+		for i, d := range splitDecls(f.Decls, groups) {
 			k := declKey(d)
 			if k == "" || k == "_" {
 				k = fmt.Sprintf("%s#%d", n, i)
 			}
-			dd := &decl{key: k, node: d, file: sf}
+			dd := &decl{key: k, node: d, file: sf, group: groups[d]}
 			p.decls[k] = dd
 			p.order = append(p.order, dd)
 		}
@@ -140,7 +145,8 @@ func fileImports(f *ast.File) map[string]string {
 
 // splitDecls splits grouped type, var and const declarations so that each
 // spec can be kept or dropped on its own. Imports are dropped.
-func splitDecls(ds []ast.Decl) []ast.Decl {
+// Split const and var declarations are mapped to their group in groups.
+func splitDecls(ds []ast.Decl, groups map[ast.Decl]*ast.GenDecl) []ast.Decl {
 	var out []ast.Decl
 	for _, d := range ds {
 		g, ok := d.(*ast.GenDecl)
@@ -162,6 +168,7 @@ func splitDecls(ds []ast.Decl) []ast.Decl {
 			}
 			if vs, ok := s.(*ast.ValueSpec); ok {
 				ng.Doc, vs.Doc = vs.Doc, nil
+				groups[ng] = g
 			}
 			out = append(out, ng)
 		}
@@ -320,6 +327,9 @@ type customTypes struct {
 	tgt      *target
 	rw       *rewriter
 	report   *Report
+	// ctrlUses are names of the source API package that the source
+	// controllers of the kinds use, e.g. state constants.
+	ctrlUses map[string]bool
 
 	keep map[string]bool
 	// dropFields are Ref and Selector fields of dropped references.
@@ -381,6 +391,16 @@ func (c *customTypes) run() error {
 				c.closure(d.key, available, false)
 				changed = true
 			}
+		}
+	}
+	// Declarations the controllers use, e.g. constants.
+	for _, n := range sortedKeys(c.ctrlUses) {
+		d, ok := c.src.decls[n]
+		if !ok || c.keep[n] || available(n) || isCustomTypeOfOtherKind(n, isKind) {
+			continue
+		}
+		if c.resolvable(d, available, map[string]bool{}) {
+			c.closure(n, available, false)
 		}
 	}
 	for k, d := range c.resolvers {
@@ -758,7 +778,7 @@ func targetGeneratedNames(dir string) (map[string]bool, error) {
 	return names, nil
 }
 
-// writeTypes emits kept types into custom_types.go, replacing still empty
+// writeTypes emits kept types and constants into custom_types.go, replacing still empty
 // generated stubs. Other kept declarations are emitted by writeOther, after
 // deepcopy and managed resource methods were generated.
 func (c *customTypes) writeTypes(dir string) error {
@@ -781,7 +801,7 @@ func (c *customTypes) writeTypes(dir string) error {
 			c.report.Add(topicTypes, "`%s` already exists in %s; not overwritten", d.key, ctPath)
 			continue
 		}
-		if g, ok := d.node.(*ast.GenDecl); ok && g.Tok == token.TYPE && !isInterface(g) {
+		if g, ok := d.node.(*ast.GenDecl); ok && (g.Tok == token.CONST || g.Tok == token.TYPE && !isInterface(g)) {
 			types = append(types, d)
 			continue
 		}
@@ -937,13 +957,13 @@ func (c *customTypes) renderDecls(sf *srcFile, ds []*decl) ([]byte, map[string]s
 		return false
 	}
 	var keepRanges [][2]token.Pos
-	for _, d := range ds {
-		f.Decls = append(f.Decls, d.node)
-		start := d.node.Pos()
-		if doc := docOf(d.node); doc != nil {
+	for _, n := range regroup(ds) {
+		f.Decls = append(f.Decls, n)
+		start := n.Pos()
+		if doc := docOf(n); doc != nil {
 			start = doc.Pos()
 		}
-		keepRanges = append(keepRanges, [2]token.Pos{start, d.node.End() + 1})
+		keepRanges = append(keepRanges, [2]token.Pos{start, n.End() + 1})
 	}
 	for _, cg := range sf.ast.Comments {
 		if len(cg.List) > 0 && inRange(cg.Pos(), keepRanges) && !inRange(cg.Pos(), sf.removed) {
@@ -978,6 +998,33 @@ func (c *customTypes) renderDecls(sf *srcFile, ds []*decl) ([]byte, map[string]s
 	return out, imports, nil
 }
 
+// regroup joins consecutive split const and var declarations of the same
+// source group again, e.g. a const block of states.
+func regroup(ds []*decl) []ast.Decl {
+	var out []ast.Decl
+	var last *ast.GenDecl
+	var lastGroup *ast.GenDecl
+	for _, d := range ds {
+		if d.group == nil {
+			out = append(out, d.node)
+			last, lastGroup = nil, nil
+			continue
+		}
+		g := d.node.(*ast.GenDecl) //nolint:forcetypeassert // only split GenDecls have a group
+		vs := g.Specs[0].(*ast.ValueSpec) //nolint:forcetypeassert // groups are recorded for value specs
+		if vs.Doc == nil {
+			vs.Doc = g.Doc
+		}
+		if lastGroup != d.group {
+			last = &ast.GenDecl{Doc: d.group.Doc, TokPos: d.group.TokPos, Tok: d.group.Tok, Lparen: d.group.Lparen, Rparen: d.group.Rparen}
+			lastGroup = d.group
+			out = append(out, last)
+		}
+		last.Specs = append(last.Specs, vs)
+	}
+	return out
+}
+
 func docOf(d ast.Decl) *ast.CommentGroup {
 	switch d := d.(type) {
 	case *ast.FuncDecl:
@@ -1003,3 +1050,40 @@ func snake(s string) string {
 }
 
 var printerConfig = printer.Config{Mode: printer.UseSpaces | printer.TabIndent, Tabwidth: 8}
+
+// apiUses returns the names that the Go files in dirs select from the
+// package with import path pkg, e.g. Foo of v1alpha1.Foo.
+func apiUses(dirs []string, pkg string) (map[string]bool, error) {
+	uses := map[string]bool{}
+	fset := token.NewFileSet()
+	for _, dir := range dirs {
+		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
+		if err != nil {
+			return nil, err
+		}
+		for _, file := range files {
+			f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+			if err != nil {
+				return nil, err
+			}
+			var local []string
+			for n, p := range fileImports(f) {
+				if p == pkg {
+					local = append(local, n)
+				}
+			}
+			if len(local) == 0 {
+				continue
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				if se, ok := n.(*ast.SelectorExpr); ok {
+					if id, ok := se.X.(*ast.Ident); ok && slices.Contains(local, id.Name) {
+						uses[se.Sel.Name] = true
+					}
+				}
+				return true
+			})
+		}
+	}
+	return uses, nil
+}

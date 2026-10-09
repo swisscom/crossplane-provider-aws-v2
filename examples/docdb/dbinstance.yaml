@@ -1,0 +1,35 @@
+# Instance of examples/docdb/dbcluster.yaml. The cluster is referenced in the
+# same namespace; set dbClusterIdentifier instead to use an existing cluster.
+apiVersion: docdb.aws2.crossplane.io/v1alpha1
+kind: DBInstance
+metadata:
+  namespace: default
+  name: example-docdb-instance
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-docdb-instance-conn
+  forProvider:
+    region: eu-central-1
+    engine: docdb
+    dbInstanceClass: db.r6g.large
+    dbClusterIdentifierRef:
+      name: example-docdb-cluster
+    # dbClusterIdentifierSelector:
+    #   matchLabels:
+    #     example: docdb
+    # dbClusterIdentifier: REPLACE_ME-existing-cluster
+    availabilityZone: eu-central-1a
+    caCertificateIdentifier: rds-ca-rsa2048-g1
+    promotionTier: 1
+    autoMinorVersionUpgrade: true
+    preferredMaintenanceWindow: "sun:02:00-sun:03:00"
+    enablePerformanceInsights: true
+    performanceInsightsKMSKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    copyTagsToSnapshot: true
+    applyImmediately: true
+    tags:
+      - key: environment
+        value: example

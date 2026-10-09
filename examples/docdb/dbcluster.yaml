@@ -1,0 +1,71 @@
+# DocumentDB cluster with a master password from a Secret in the same
+# namespace. Add instances with examples/docdb/dbinstance.yaml.
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: example-docdb-master-password
+type: Opaque
+stringData:
+  password: REPLACE_ME-change-me-1234
+---
+apiVersion: docdb.aws2.crossplane.io/v1alpha1
+kind: DBCluster
+metadata:
+  namespace: default
+  name: example-docdb-cluster
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-docdb-cluster-conn
+  forProvider:
+    region: eu-central-1
+    engine: docdb
+    engineVersion: "5.0.0"
+    allowMajorVersionUpgrade: false
+    masterUsername: docdbadmin
+    # Read from the Secret above, in the namespace of the DBCluster. With
+    # autogeneratePassword: true and an empty or missing secret, the
+    # provider generates a password and writes it to this secret.
+    masterUserPasswordSecretRef:
+      name: example-docdb-master-password
+      key: password
+    autogeneratePassword: false
+    # Alternatively let AWS manage the password in Secrets Manager (don't set
+    # masterUserPasswordSecretRef then):
+    # manageMasterUserPassword: true
+    # masterUserSecretKMSKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    availabilityZones:
+      - eu-central-1a
+      - eu-central-1b
+      - eu-central-1c
+    dbSubnetGroupName: REPLACE_ME-docdb-subnet-group
+    vpcSecurityGroupIDs:
+      - sg-0123456789abcdef0
+    dbClusterParameterGroupName: default.docdb5.0
+    port: 27017
+    networkType: IPV4
+    storageType: standard
+    storageEncrypted: true
+    kmsKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    backupRetentionPeriod: 7
+    preferredBackupWindow: "01:00-01:30"
+    preferredMaintenanceWindow: "sat:02:00-sat:03:00"
+    enableCloudwatchLogsExports:
+      - audit
+      - profiler
+    copyTagsToSnapshot: true
+    deletionProtection: false
+    applyImmediately: true
+    skipFinalSnapshot: false
+    finalDBSnapshotIdentifier: example-docdb-cluster-final
+    tags:
+      - key: environment
+        value: example
+    # Secondary cluster of a global cluster:
+    # globalClusterIdentifier: REPLACE_ME-global-cluster
+    # Encrypted cross-region copy (from the source region):
+    # sourceRegion: eu-west-1
+    # preSignedURL: REPLACE_ME

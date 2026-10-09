@@ -16,7 +16,12 @@ package name). It is an ACK generator config; see the
 and `apis/rds/generator-config.yaml` as an example. Typically:
 
 - `ignore.resource_names`: every resource of the service you don't want.
-- `ignore.field_paths`: fields that break generation or must not be exposed.
+- `ignore.field_paths`: fields that break generation or must not be exposed,
+  e.g. `float64` fields (controller-gen: "found float, the usage of which is
+  highly discouraged"): ignore the input members, e.g.
+  `CreateDBClusterInput.ServerlessV2ScalingConfiguration`, and the output
+  shape member, e.g. `DBCluster.ServerlessV2ScalingConfiguration`. Members
+  the SDK v2 keeps unexported are ignored automatically.
 - `resources.<Kind>`: renames, `is_read_only`, custom field config.
 
 Look at the AWS API model of the service to choose Create/Read/Update/Delete

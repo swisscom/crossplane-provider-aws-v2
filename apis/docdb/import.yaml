@@ -1,0 +1,11 @@
+# Kinds imported from crossplane-contrib/provider-aws.
+# Managed by codegen/cmd/import; generator-config.yaml ignores all other kinds.
+source: github.com/crossplane-contrib/provider-aws
+apiVersion: v1alpha1
+kinds:
+    - DBCluster
+    - DBInstance
+ignoreFieldPaths:
+    - CreateDBClusterInput.ServerlessV2ScalingConfiguration
+    - ModifyDBClusterInput.ServerlessV2ScalingConfiguration
+    - DBCluster.ServerlessV2ScalingConfiguration

@@ -1,0 +1,12 @@
+# provider-aws-v2 codegen settings of this service, see docs/architecture.md.
+clientOperations:
+  DBCluster:
+  - AddTagsToResource
+  - ListTagsForResource
+  - RemoveTagsFromResource
+  - RestoreDBClusterFromSnapshot
+  - RestoreDBClusterToPointInTime
+  DBInstance:
+  - AddTagsToResource
+  - ListTagsForResource
+  - RemoveTagsFromResource

@@ -30,6 +30,18 @@ something new; if the fix is mechanical, teach the importer too.
 - Typed external clients: `managed.TypedExternalConnector[*Kind]`,
   `managed.WithTypedExternalConnector[*Kind](...)` (type parameter may need to be explicit).
 
+## AWS API changes since provider-aws
+
+The importer generates from the current SDK v2 model, not from the model
+provider-aws was generated with. New fields come for free, unless they break
+generation:
+
+- `float64` fields in CRD types fail `controller-gen` ("found float"). Add
+  the input and output members to `ignoreFieldPaths` in `import.yaml` (see
+  the `import-kind` skill); don't enable `allowDangerousTypes`.
+- Input members that SDK v2 keeps unexported (`DestinationRegion`) are
+  ignored by the generator automatically.
+
 ## Things the compiler does not catch
 
 - **Removed fields in strings**: `cmpopts.IgnoreFields(T{}, "FooRef")` with a
@@ -38,6 +50,10 @@ something new; if the fix is mechanical, teach the importer too.
 - **Hand-built `external{...}`**: every hook field must be set; nil hooks panic.
 - **Cache/secret location**: code that used the provider namespace
   (`GetProviderNamespace`) compiles but is wrong for namespaced MRs.
+- **nil vs. empty slices**: `aws.StringSlice(nil)` returns an empty, non-nil
+  slice. Late-initializing `x = aws.StringSlice(out.X)` turns a nil spec field
+  into `[]` — guard with `out.X != nil`. Likewise a test helper
+  `f(values ...string) []string { return values }` returns nil for `f()`.
 
 ## Tests
 
@@ -67,3 +83,16 @@ writes them in a second step for this reason.
   `SourceDBClusterID` (plain string) kept.
 - Password/restore cache secret moved to the MR namespace.
 - Only instance parts of `pending_modified_values` ported (cluster parts come with DBCluster).
+
+### docdb/DBCluster, docdb/DBInstance
+
+- `ServerlessV2ScalingConfiguration` (new in the SDK v2 model, `float64`
+  capacities) ignored via `import.yaml`.
+- References of DBCluster to DBSubnetGroup, DBClusterParameterGroup, kms/Key
+  and ec2/SecurityGroup dropped (kinds not imported); the plain fields stay.
+  DBInstance → DBCluster reference kept (hand-written resolver ported).
+- Master password and connection secret are read in the MR namespace.
+- Tag helpers take a `TagClient`; tag operations added to `codegen.yaml` by
+  hand. The fake client records calls (`Called`) like the source.
+- Importer learned: keep constants used by the controllers (they were
+  dropped), keep const groups, ignore unexported SDK v2 input members.

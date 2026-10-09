@@ -22,10 +22,12 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/teeverr/provider-aws-v2/internal/controller/docdb"
 	"github.com/teeverr/provider-aws-v2/internal/controller/rds"
 )
 
 // serviceSetups are the SetupGated functions of all services.
 var serviceSetups = []func(ctrl.Manager, controller.Options) error{
+	docdb.SetupGated,
 	rds.SetupGated,
 }

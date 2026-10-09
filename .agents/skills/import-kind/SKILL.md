@@ -28,7 +28,8 @@ importer:
 
 1. Writes `apis/<svc>/import.yaml` and a filtered `generator-config.yaml`,
    runs the generator.
-2. Copies custom types (xpv1 → namespaced xpv2 types), rewrites reference
+2. Copies custom types (xpv1 → namespaced xpv2 types) and the declarations
+   the source controllers use (e.g. state constants), rewrites reference
    markers, drops refs to kinds that are not imported.
 3. Copies controller `setup.go` (Setup → `configure` hook) and the closure of
    helper packages, rewrites imports/symbols to runtime v2 and SDK v2.
@@ -38,6 +39,25 @@ importer:
 
 Read the report. The repo builds at this point; the `*_importtodo.go` files
 are excluded by the `importtodo` build tag.
+
+The AWS API model is the one of the current aws-sdk-go-v2 service module, so
+it may have fields that provider-aws never had. If one breaks generation —
+typically controller-gen's `found float, the usage of which is highly
+discouraged` for `float64` fields — list it under `ignoreFieldPaths` in
+`apis/<svc>/import.yaml` and run the importer again (see "start over" below).
+Ignore the input members and the output shape member, e.g.:
+
+```yaml
+ignoreFieldPaths:
+    - CreateDBClusterInput.ServerlessV2ScalingConfiguration
+    - ModifyDBClusterInput.ServerlessV2ScalingConfiguration
+    - DBCluster.ServerlessV2ScalingConfiguration
+```
+
+Floats only in shapes that are not part of a CRD (`+kubebuilder:skipversion`
+types) don't matter. Don't enable `crd:allowDangerousTypes`. Input members
+that SDK v2 keeps unexported (e.g. `DestinationRegion`) are ignored by the
+generator automatically.
 
 If the run fails or the output looks wrong, fix the importer
 (`codegen/internal/importer`) rather than patching its output by hand — the
@@ -76,7 +96,10 @@ Mechanical fixes (follow the compiler, `go build ./... ` / `go vet ./...`):
   `&out.Items[0]` where the code needs a pointer.
 - SDK v1 `Set*` setters → struct literals.
 - `<svc>iface.<Svc>API` → the generated `Client` interface, or a small local
-  interface with just the needed methods (e.g. `TagClient`).
+  interface with just the needed methods (e.g. `TagClient`). Operations the
+  importer could not see (code quarantined for `<svc>iface`, e.g. tag
+  helpers) must be added to `apis/<svc>/codegen.yaml` by hand, then
+  `make services SERVICES=<svc>`.
 - `request.Option` → `func(*svcsdk.Options)`; `Mock*WithContext` → `Mock*`.
 - Enums are typed strings in SDK v2 (`types.Foo("x")`, compare with `""`).
 - `awserr` codes → `errors.As` with smithy/typed errors.

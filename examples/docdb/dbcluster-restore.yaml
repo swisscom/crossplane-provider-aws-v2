@@ -1,0 +1,72 @@
+# DocumentDB clusters restored from a cluster snapshot and to a point in time
+# of another cluster. Fields that the backup defines (e.g. masterUsername) are
+# taken from it.
+apiVersion: docdb.aws2.crossplane.io/v1alpha1
+kind: DBCluster
+metadata:
+  namespace: default
+  name: example-docdb-cluster-from-snapshot
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-docdb-cluster-from-snapshot-conn
+  forProvider:
+    region: eu-central-1
+    engine: docdb
+    engineVersion: "5.0.0"
+    restoreFrom:
+      source: Snapshot
+      snapshot:
+        snapshotIdentifier: REPLACE_ME-cluster-snapshot
+    availabilityZones:
+      - eu-central-1a
+      - eu-central-1b
+    dbSubnetGroupName: REPLACE_ME-docdb-subnet-group
+    vpcSecurityGroupIDs:
+      - sg-0123456789abcdef0
+    port: 27017
+    kmsKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    enableCloudwatchLogsExports:
+      - audit
+    deletionProtection: false
+    skipFinalSnapshot: true
+    tags:
+      - key: restored-from
+        value: snapshot
+---
+apiVersion: docdb.aws2.crossplane.io/v1alpha1
+kind: DBCluster
+metadata:
+  namespace: default
+  name: example-docdb-cluster-point-in-time
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  writeConnectionSecretToRef:
+    name: example-docdb-cluster-point-in-time-conn
+  forProvider:
+    region: eu-central-1
+    engine: docdb
+    restoreFrom:
+      source: PointInTime
+      pointInTime:
+        sourceDBClusterIdentifier: example-docdb-cluster
+        # Either the latest restorable time or a fixed restoreTime.
+        useLatestRestorableTime: true
+        # restoreTime: "2026-10-01T12:00:00Z"
+        restoreType: full-copy
+    dbSubnetGroupName: REPLACE_ME-docdb-subnet-group
+    vpcSecurityGroupIDs:
+      - sg-0123456789abcdef0
+    port: 27017
+    kmsKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    enableCloudwatchLogsExports:
+      - audit
+    deletionProtection: false
+    skipFinalSnapshot: true
+    tags:
+      - key: restored-from
+        value: point-in-time

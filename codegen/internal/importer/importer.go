@@ -106,7 +106,15 @@ func Run(ctx context.Context, o Options) (*Report, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse source API package: %w", err)
 	}
-	ct := &customTypes{src: src, svcVer: svcVer, kinds: o.Kinds, srcKinds: all, tgt: tgt, rw: rw, report: r}
+	var ctrlDirs []string
+	for _, k := range o.Kinds {
+		ctrlDirs = append(ctrlDirs, filepath.Join(o.Source, "pkg", "controller", svc, strings.ToLower(k)))
+	}
+	uses, err := apiUses(ctrlDirs, src.path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse source controllers: %w", err)
+	}
+	ct := &customTypes{src: src, svcVer: svcVer, kinds: o.Kinds, srcKinds: all, tgt: tgt, rw: rw, report: r, ctrlUses: uses}
 	if err := ct.run(); err != nil {
 		return nil, fmt.Errorf("cannot import custom types: %w", err)
 	}

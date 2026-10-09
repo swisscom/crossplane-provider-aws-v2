@@ -13,7 +13,8 @@ models and, where needed, imported from
 [crossplane-contrib/provider-aws](https://github.com/crossplane-contrib/provider-aws)
 with `codegen/cmd/import`.
 
-Status: proof of concept. Imported so far: `rds/DBInstance`.
+Status: proof of concept. Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
+`docdb/DBInstance`.
 
 ## Layout
 

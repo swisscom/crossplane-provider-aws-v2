@@ -19,11 +19,13 @@ limitations under the License.
 package apis
 
 import (
+	docdbv1alpha1 "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
 	rdsv1alpha1 "github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1"
 )
 
 func init() {
 	AddToSchemes = append(AddToSchemes,
+		docdbv1alpha1.SchemeBuilder.AddToScheme,
 		rdsv1alpha1.SchemeBuilder.AddToScheme,
 	)
 }

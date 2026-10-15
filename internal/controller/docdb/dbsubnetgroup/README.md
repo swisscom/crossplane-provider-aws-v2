@@ -6,7 +6,7 @@ Manages an Amazon DocumentDB subnet group
 ## Origin
 
 Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
-`apis/docdb/import.yaml`), ported by hand.
+`apis/docdb/import.yaml`), ported by hand in `0bc1dd7`.
 
 ## Behavior
 
@@ -46,4 +46,4 @@ Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
 
 | Date | Commit | Change |
 |------|--------|--------|
-| 2026-10-15 | — | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced |
+| 2026-10-15 | `0bc1dd7` | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced |

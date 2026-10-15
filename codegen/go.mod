@@ -1,4 +1,4 @@
-module github.com/teeverr/provider-aws-v2/codegen
+module github.com/swisscom/crossplane-provider-aws-v2/codegen
 
 go 1.26.0
 

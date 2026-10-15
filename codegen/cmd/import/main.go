@@ -26,7 +26,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/teeverr/provider-aws-v2/codegen/internal/importer"
+	"github.com/swisscom/crossplane-provider-aws-v2/codegen/internal/importer"
 )
 
 func main() {

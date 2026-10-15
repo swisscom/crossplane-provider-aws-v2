@@ -31,7 +31,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 
-	"github.com/teeverr/provider-aws-v2/codegen/internal/generator"
+	"github.com/swisscom/crossplane-provider-aws-v2/codegen/internal/generator"
 )
 
 // SourceModule is the Go module of crossplane-contrib/provider-aws.

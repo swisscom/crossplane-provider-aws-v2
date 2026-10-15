@@ -37,10 +37,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	svcapitypes "github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1"
-	"github.com/teeverr/provider-aws-v2/apis/v1alpha1"
-	awsclient "github.com/teeverr/provider-aws-v2/internal/clients/aws"
-	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
+	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
+	"github.com/swisscom/crossplane-provider-aws-v2/apis/v1alpha1"
+	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
 )
 
 const (

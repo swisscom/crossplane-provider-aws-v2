@@ -23,8 +23,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/teeverr/provider-aws-v2/internal/controller/docdb/dbcluster"
-	"github.com/teeverr/provider-aws-v2/internal/controller/docdb/dbinstance"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb/dbcluster"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb/dbinstance"
 )
 
 // SetupGated adds all docdb controllers to the manager,

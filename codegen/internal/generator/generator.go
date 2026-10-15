@@ -43,7 +43,7 @@ import (
 
 const (
 	// ModulePath is the Go module of the provider.
-	ModulePath = "github.com/teeverr/provider-aws-v2"
+	ModulePath = "github.com/swisscom/crossplane-provider-aws-v2"
 	// GroupSuffix is appended to the service name to form the API group.
 	GroupSuffix = "aws2.crossplane.io"
 )

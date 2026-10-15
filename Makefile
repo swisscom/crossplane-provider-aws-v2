@@ -1,7 +1,7 @@
 # ====================================================================================
 # Setup Project
 PROJECT_NAME := provider-aws-v2
-PROJECT_REPO := github.com/teeverr/$(PROJECT_NAME)
+PROJECT_REPO := github.com/swisscom/crossplane-$(PROJECT_NAME)
 
 PLATFORMS ?= linux_amd64 linux_arm64
 -include build/makelib/common.mk
@@ -50,10 +50,10 @@ IMAGES = provider-aws-v2
 # ====================================================================================
 # Setup XPKG
 
-XPKG_REG_ORGS ?= ghcr.io/teeverr
+XPKG_REG_ORGS ?= ghcr.io/swisscom
 # NOTE(hasheddan): skip promoting on xpkg.upbound.io as channel tags are
 # inferred.
-XPKG_REG_ORGS_NO_PROMOTE ?= ghcr.io/teeverr
+XPKG_REG_ORGS_NO_PROMOTE ?= ghcr.io/swisscom
 XPKGS = provider-aws-v2
 -include build/makelib/xpkg.mk
 

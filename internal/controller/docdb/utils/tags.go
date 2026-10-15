@@ -25,8 +25,8 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 
-	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
-	pointer "github.com/teeverr/provider-aws-v2/internal/utils/pointer"
+	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
+	pointer "github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
 const (

@@ -20,7 +20,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/teeverr/provider-aws-v2/internal/controller/config"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/config"
 )
 
 // SetupGated creates all AWS controllers with safe-start support and adds them to

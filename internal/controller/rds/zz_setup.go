@@ -23,7 +23,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/teeverr/provider-aws-v2/internal/controller/rds/dbinstance"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/rds/dbinstance"
 )
 
 // SetupGated adds all rds controllers to the manager,

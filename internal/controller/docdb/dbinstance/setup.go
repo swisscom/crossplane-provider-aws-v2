@@ -29,11 +29,11 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
-	awsclient "github.com/teeverr/provider-aws-v2/internal/clients/aws"
-	svcutils "github.com/teeverr/provider-aws-v2/internal/controller/docdb/utils"
-	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
-	pointer "github.com/teeverr/provider-aws-v2/internal/utils/pointer"
+	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
+	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
+	svcutils "github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb/utils"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
+	pointer "github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
 type hooks struct {

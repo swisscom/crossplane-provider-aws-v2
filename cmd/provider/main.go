@@ -48,9 +48,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
-	"github.com/teeverr/provider-aws-v2/apis"
-	awscontroller "github.com/teeverr/provider-aws-v2/internal/controller"
-	"github.com/teeverr/provider-aws-v2/internal/version"
+	"github.com/swisscom/crossplane-provider-aws-v2/apis"
+	awscontroller "github.com/swisscom/crossplane-provider-aws-v2/internal/controller"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/version"
 )
 
 func main() {

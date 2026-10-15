@@ -29,8 +29,8 @@ import (
 	"github.com/aws/smithy-go"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
-	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
+	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
 )
 
 // GenerateDescribeDBInstancesInput returns input for read

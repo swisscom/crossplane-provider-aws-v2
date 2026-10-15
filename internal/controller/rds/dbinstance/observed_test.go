@@ -27,7 +27,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
-	svcapitypes "github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1"
+	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
 )
 
 // observedDB is a DBInstance as returned by DescribeDBInstances with all the

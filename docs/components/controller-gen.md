@@ -25,8 +25,25 @@ the single definition; CRDs are never written by hand.
 - `allowDangerousTypes=true` permits `float64` fields
   ([ADR 0006](../adr/0006-allow-float-fields.md)).
 
-Markers come from the generator templates (`codegen/templates/apis/crd.go.tpl`)
-and from hand-written types:
+### Where markers come from
+
+Markers are plain `// +…` comments in the Go API types. Nobody runs a tool
+to add them; they are either rendered by our templates or written by hand.
+
+| Source | Markers | In |
+|--------|---------|----|
+| Our templates, fixed text | `+kubebuilder:object:root`, `resource:scope=Namespaced`, `subresource:status`, `printcolumn`, `storageversion` (`crd.go.tpl`); `+kubebuilder:object:generate`, `+groupName`, `+versionName` (`doc.go.tpl`); `+kubebuilder:skipversion` (`type_def.go.tpl`) | `zz_*.go` |
+| Our templates, from the ACK model | `+kubebuilder:validation:Required` when the field is `required` in the AWS model (`$field.IsRequired`) | `zz_<kind>.go` |
+| ACK model | Field doc comments (AWS API documentation, `ShapeRef.Documentation`); controller-gen turns them into CRD `description`s | `zz_*.go` |
+| Hand-written (or copied by the importer from provider-aws and rewritten) | `+optional`, `+kubebuilder:validation:…`, `+crossplane:generate:reference:…` | `custom_types.go` |
+
+To change a generated marker, change the template and regenerate; to add one
+to a single kind, add a field or rule in `custom_types.go`. Markers are read
+by controller-gen (`+kubebuilder:…`, `+groupName`) and
+[angryjet](angryjet.md) (`+crossplane:generate:reference:…`), both run by
+`make generate` from the `//go:generate` lines in `apis/generate.go`.
+
+Common markers:
 
 | Marker | Effect |
 |--------|--------|

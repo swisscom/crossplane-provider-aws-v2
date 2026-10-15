@@ -779,26 +779,39 @@ func targetGeneratedNames(dir string) (map[string]bool, error) {
 }
 
 // writeTypes emits kept types and constants into custom_types.go, replacing still empty
-// generated stubs. Other kept declarations are emitted by writeOther, after
-// deepcopy and managed resource methods were generated.
+// generated stubs. Struct types that already exist there (e.g. from an earlier
+// import) are not overwritten, but get the fields of the source they lack,
+// e.g. Ref and Selector fields of references to kinds imported now. Other
+// kept declarations are emitted by writeOther, after deepcopy and managed
+// resource methods were generated.
 func (c *customTypes) writeTypes(dir string) error {
 	ctPath := filepath.Join(dir, "custom_types.go")
-	ct, err := os.ReadFile(ctPath)
+	orig, err := os.ReadFile(ctPath)
 	if err != nil {
 		return err
 	}
-	header := ct[:bytes.Index(ct, []byte("\npackage "))+1]
-	ct, existing, err := removeStubs(ct, c.src.path)
+	header := orig[:bytes.Index(orig, []byte("\npackage "))+1]
+	ct, existing, err := removeStubs(bytes.Clone(orig), c.src.path)
 	if err != nil {
 		return err
 	}
+	merged := orig
 	var types, other []*decl
 	for _, d := range c.src.order {
 		if !c.keep[d.key] {
 			continue
 		}
 		if existing[d.key] {
-			c.report.Add(topicTypes, "`%s` already exists in %s; not overwritten", d.key, ctPath)
+			out, fields, err := c.mergeFields(merged, d)
+			if err != nil {
+				return err
+			}
+			if len(fields) == 0 {
+				c.report.Add(topicTypes, "`%s` already exists in %s; not overwritten", d.key, ctPath)
+				continue
+			}
+			merged = out
+			c.report.Add(topicTypes, "`%s` already exists in %s; added the fields it lacks: `%s`. Check them", d.key, ctPath, strings.Join(fields, "`, `"))
 			continue
 		}
 		if g, ok := d.node.(*ast.GenDecl); ok && (g.Tok == token.CONST || g.Tok == token.TYPE && !isInterface(g)) {
@@ -809,7 +822,15 @@ func (c *customTypes) writeTypes(dir string) error {
 	}
 	c.other, c.header = other, header
 	if len(types) == 0 {
-		return nil
+		if bytes.Equal(merged, orig) {
+			return nil
+		}
+		return os.WriteFile(ctPath, merged, 0o600)
+	}
+	if !bytes.Equal(merged, orig) {
+		if ct, _, err = removeStubs(bytes.Clone(merged), c.src.path); err != nil {
+			return err
+		}
 	}
 	out, err := c.render(header, types, ct)
 	if err != nil {
@@ -818,24 +839,219 @@ func (c *customTypes) writeTypes(dir string) error {
 	return os.WriteFile(ctPath, out, 0o600)
 }
 
-// writeOther emits kept declarations other than types into <kind>.go.
+// mergeFields adds the fields of the source struct type d that the struct of
+// the same name in the target file src lacks. A missing field is inserted
+// after the target field that precedes it in the source. It returns the new
+// file and the names of the added fields.
+func (c *customTypes) mergeFields(src []byte, d *decl) ([]byte, []string, error) {
+	g, ok := d.node.(*ast.GenDecl)
+	if !ok || g.Tok != token.TYPE {
+		return src, nil, nil
+	}
+	if _, ok := g.Specs[0].(*ast.TypeSpec).Type.(*ast.StructType); !ok {
+		return src, nil, nil
+	}
+	tfset := token.NewFileSet()
+	tf, err := parser.ParseFile(tfset, "custom_types.go", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return nil, nil, err
+	}
+	tst := structOf(tf, d.key)
+	if tst == nil {
+		return src, nil, nil
+	}
+	have := map[string]token.Pos{}
+	for _, f := range tst.Fields.List {
+		end := f.End()
+		if f.Comment != nil {
+			end = f.Comment.End()
+		}
+		for _, n := range f.Names {
+			have[n.Name] = end
+		}
+	}
+
+	// Render the source type rewritten to the target, then cut its fields.
+	text, imps, err := c.renderDecls(d.file, []*decl{d})
+	if err != nil {
+		return nil, nil, err
+	}
+	rendered := append([]byte("package p\n"), text...)
+	sfset := token.NewFileSet()
+	sf, err := parser.ParseFile(sfset, "", rendered, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot parse rendered %s: %w", d.key, err)
+	}
+	sst := structOf(sf, d.key)
+	if sst == nil {
+		return src, nil, nil
+	}
+
+	type insertion struct {
+		at   int
+		text []string
+	}
+	var ins []*insertion
+	var added []string
+	anchor := tfset.Position(tst.Fields.Opening).Offset + 1
+	var cur *insertion
+	for _, f := range sst.Fields.List {
+		if len(f.Names) != 1 {
+			cur = nil
+			continue
+		}
+		name := f.Names[0].Name
+		if end, ok := have[name]; ok {
+			anchor, cur = tfset.Position(end).Offset, nil
+			continue
+		}
+		start := f.Pos()
+		if f.Doc != nil {
+			start = f.Doc.Pos()
+		}
+		ft := string(rendered[sfset.Position(start).Offset:sfset.Position(f.End()).Offset])
+		if f.Comment != nil {
+			ft += " " + string(rendered[sfset.Position(f.Comment.Pos()).Offset:sfset.Position(f.Comment.End()).Offset])
+		}
+		if cur == nil {
+			cur = &insertion{at: anchor}
+			ins = append(ins, cur)
+		}
+		cur.text = append(cur.text, ft)
+		added = append(added, name)
+	}
+	if len(added) == 0 {
+		return src, nil, nil
+	}
+	// Splice from the end of the file, so that earlier offsets stay valid.
+	// The target may order its fields differently from the source.
+	sort.SliceStable(ins, func(i, j int) bool { return ins[i].at < ins[j].at })
+	out := append([]byte{}, src...)
+	for i := len(ins) - 1; i >= 0; i-- {
+		t := []byte("\n\n" + strings.Join(ins[i].text, "\n\n") + "\n")
+		out = append(out[:ins[i].at], append(t, out[ins[i].at:]...)...)
+	}
+	// Imports the added fields use, e.g. xpv2.
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "custom_types.go", out, parser.ParseComments)
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot parse merged %s: %w", d.key, err)
+	}
+	joined := strings.Join(func() []string {
+		var all []string
+		for _, i := range ins {
+			all = append(all, i.text...)
+		}
+		return all
+	}(), "\n")
+	for p, n := range imps {
+		if strings.Contains(joined, n+".") {
+			if n == path.Base(p) {
+				n = ""
+			}
+			astutil.AddNamedImport(fset, f, n, p)
+		}
+	}
+	var b bytes.Buffer
+	if err := format.Node(&b, fset, f); err != nil {
+		return nil, nil, err
+	}
+	res, err := format.Source(b.Bytes())
+	return res, added, err
+}
+
+// structOf returns the struct type declared as name in f.
+func structOf(f *ast.File, name string) *ast.StructType {
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok || g.Tok != token.TYPE {
+			continue
+		}
+		for _, s := range g.Specs {
+			if ts, ok := s.(*ast.TypeSpec); ok && ts.Name.Name == name {
+				st, _ := ts.Type.(*ast.StructType)
+				return st
+			}
+		}
+	}
+	return nil
+}
+
+// writeOther emits kept declarations other than types into <kinds>.go,
+// named after the kinds that own them. Declarations that already exist in
+// a hand-written file of the target package (e.g. from an earlier import)
+// are not overwritten.
 func (c *customTypes) writeOther() error {
-	other, header := c.other, c.header
+	dir := filepath.Join(c.tgt.root, "apis", c.svcVer)
+	existing, err := handWrittenDecls(dir)
+	if err != nil {
+		return err
+	}
+	var other []*decl
+	owners := map[string]bool{}
+	for _, d := range c.other {
+		if f, ok := existing[d.key]; ok {
+			c.report.Add(topicTypes, "`%s` already exists in %s; not overwritten", d.key, f)
+			continue
+		}
+		other = append(other, d)
+		owner := ""
+		if f, ok := d.node.(*ast.FuncDecl); ok {
+			owner = recvType(f)
+		}
+		if !slices.Contains(c.kinds, owner) {
+			owner = ""
+		}
+		owners[owner] = true
+	}
 	if len(other) == 0 {
 		return nil
 	}
-	dir := filepath.Join(c.tgt.root, "apis", c.svcVer)
-	name := snake(strings.Join(c.kinds, "_")) + ".go"
-	p := filepath.Join(dir, name)
+	kinds := c.kinds
+	if !owners[""] {
+		kinds = sortedKeys(owners)
+	}
+	var names []string
+	for _, k := range kinds {
+		names = append(names, snake(k))
+	}
+	p := filepath.Join(dir, strings.Join(names, "_")+".go")
 	if _, err := os.Stat(p); err == nil {
 		c.report.Add(topicTypes, "%s exists; not overwritten. Compare it with the source by hand", p)
 		return nil
 	}
-	out, err := c.render(header, other, nil)
+	out, err := c.render(c.header, other, nil)
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(p, out, 0o600)
+}
+
+// handWrittenDecls returns the declaration keys of the hand-written Go files
+// of dir and the file that declares each.
+func handWrittenDecls(dir string) (map[string]string, error) {
+	out := map[string]string{}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	fset := token.NewFileSet()
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasPrefix(n, "zz_") || strings.HasSuffix(n, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, n), nil, parser.SkipObjectResolution)
+		if err != nil {
+			return nil, err
+		}
+		for _, d := range f.Decls {
+			if k := declKey(d); k != "" {
+				out[k] = filepath.Join(dir, n)
+			}
+		}
+	}
+	return out, nil
 }
 
 func isInterface(g *ast.GenDecl) bool {

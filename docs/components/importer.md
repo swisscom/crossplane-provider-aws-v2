@@ -38,7 +38,7 @@ flowchart TD
 | `apis/<svc>/import.yaml` | Imported kinds, `ignoreFieldPaths`, and per kind the source `revisions` (repository, commit, `dirty`) |
 | `apis/<svc>/generator-config.yaml` | Source config with every other kind ignored |
 | `apis/<svc>/codegen.yaml` | SDK operations the ported code calls |
-| `apis/<svc>/v1alpha1/custom_types.go`, … | Ported custom types and helpers |
+| `apis/<svc>/v1alpha1/custom_types.go`, … | Ported custom types and helpers; other declarations (e.g. `ResolveReferences`) go to `<kinds>.go`, named after the kinds that own them |
 | `internal/controller/<svc>/<kind>/setup.go`, tests | Ported controller code |
 | `internal/clients/<svc>`, `internal/utils/*` | Ported helper packages (closure of what the controller imports) |
 | `*_importtodo.go` | Code that still needs a human; excluded from the build |
@@ -68,6 +68,20 @@ The full workflow, including porting the quarantined code, is the
   manual and go to [porting-notes.md](../porting-notes.md).
 - **Never overwrite hand-written files.**
 
+## Importing more kinds of a service
+
+Run the importer with **all** kinds of the service, the already imported
+ones included (`--kinds DBCluster,DBInstance,DBSubnetGroup`), so that
+references between them are kept. Ported controllers, tests and helpers of
+the old kinds stay untouched. For the API package:
+
+- A struct type that already exists in `custom_types.go` keeps its
+  hand-written content but gets the fields of the source it lacks, e.g. the
+  `*Ref`/`*Selector` fields of references to kinds imported now. The report
+  lists them ("added the fields it lacks").
+- Methods and functions that already exist in a hand-written file of the
+  package (e.g. `DBInstance.ResolveReferences`) are not written again.
+
 ## Pitfalls
 
 - References to kinds that are not imported are dropped with their
@@ -76,6 +90,9 @@ The full workflow, including porting the quarantined code, is the
 - The importer generates from the **current** SDK model, not the one
   provider-aws used; new fields appear and some may break generation
   (`ignoreFieldPaths`).
+- A generated SDK shape with the name of a newly imported kind is renamed
+  (`DBSubnetGroup` → `DBSubnetGroup_SDK`); the JSON of other kinds that use
+  it does not change.
 - Imported `isUpToDate` hooks compare a hand-picked subset of fields;
   rebase them on `DiffUpdatableParameters`
   ([code-generator.md](code-generator.md#drift-detection-diffupdatableparameters)).

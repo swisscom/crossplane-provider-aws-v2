@@ -16,6 +16,11 @@ Pitfalls: `docs/porting-notes.md`. Background: `docs/components/importer.md`.
   existing hand-written files).
 - Kinds whose source has a reference to another kind: import the referenced
   kind in the same run (or accept that the reference is dropped).
+- Adding kinds to a service that has imported kinds: pass all kinds, old and
+  new, in `--kinds`. Existing hand-written files are kept; existing custom
+  structs get the fields they lack (e.g. `*Ref`/`*Selector` of references
+  to the new kinds) — check them in the report
+  ([importer.md](../../../docs/components/importer.md#importing-more-kinds-of-a-service)).
 
 ## 2. Run the importer
 

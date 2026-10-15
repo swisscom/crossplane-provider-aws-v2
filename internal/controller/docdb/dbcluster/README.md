@@ -78,7 +78,7 @@ Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
 
 | Date | Commit | Change |
 |------|--------|--------|
-| 2026-10-15 | — | References to DBSubnetGroup and DBClusterParameterGroup |
+| 2026-10-15 | `0bc1dd7` | References to DBSubnetGroup and DBClusterParameterGroup |
 | 2026-10-09 | `1a8d835` | Compare all updatable fields; restore without CreateDBCluster; password change applied before it is published |
 | 2026-10-09 | `3adf7eb` | `serverlessV2ScalingConfiguration` supported (float fields allowed) |
 | 2026-10-09 | `2362ae0` | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced secrets |

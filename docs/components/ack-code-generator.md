@@ -50,6 +50,102 @@ it.
 5. Post-processing: unkeyed `metav1.Time{…}` literals are keyed, then
    `goimports`.
 
+## Worked example: docdb DBInstance
+
+"Field-mapping code" is the Go code that copies values field by field
+between the Kubernetes object (`cr.Spec.ForProvider`, `cr.Status.AtProvider`)
+and the SDK input/output structs. Every API call of a controller needs it,
+and it is the part ACK writes for us.
+
+```mermaid
+flowchart LR
+    m["API model<br/>docdb-2014-10-31.json"] --> model
+    c["generator-config.yaml"] --> model
+    model["ACK resource model<br/>kind, spec/status fields,<br/>operations, shapes"] --> t["our templates"]
+    model -- "code.SetSDK / code.SetResource<br/>(Go source as strings)" --> t
+    t --> f1["zz_db_instance.go<br/>(API types)"]
+    t --> f2["zz_conversions.go<br/>(field mapping)"]
+    t --> f3["zz_controller.go<br/>(controller)"]
+```
+
+**1. ACK builds the resource model** (`ackmodel.New`, `GetCRDs`):
+
+- Kinds: `CreateDBInstance` → kind `DBInstance`. Operations are matched by
+  name: `DescribeDBInstances` (read), `ModifyDBInstance` (update),
+  `DeleteDBInstance` (delete).
+- Spec fields: the members of the create input, minus `ignore.field_paths`,
+  plus fields added with `from:`.
+- Status fields: members of the create/read output that are not spec fields
+  (`Endpoint`, `BackupRetentionPeriod`, …).
+- Names and types: `PerformanceInsightsKMSKeyId` → `PerformanceInsightsKMSKeyID`,
+  integer → `*int64`, list of strings → `[]*string`, timestamp →
+  `metav1.Time`, structures → API types such as `CertificateDetails`.
+
+Nothing is written yet; this is an in-memory model.
+
+**2. Templates render the files and ask ACK for snippets.** The API types
+come from the model (`apis/docdb/v1alpha1/zz_db_instance.go`):
+
+```go
+DBInstanceClass *string `json:"dbInstanceClass"`
+PromotionTier   *int64  `json:"promotionTier,omitempty"`
+```
+
+A template line such as `{{ GoCodeSetCreateInput .CRD "cr" "res" 1 }}`
+calls `code.SetSDK`, which returns the body of `GenerateCreateDBInstanceInput`
+(Kubernetes object → SDK input):
+
+```go
+if cr.Spec.ForProvider.PerformanceInsightsKMSKeyID != nil {   // renamed field
+    res.PerformanceInsightsKMSKeyId = cr.Spec.ForProvider.PerformanceInsightsKMSKeyID
+}
+if cr.Spec.ForProvider.PromotionTier != nil {                 // *int64 → *int32
+    promotionTierCopy0 := *cr.Spec.ForProvider.PromotionTier
+    if promotionTierCopy0 > math.MaxInt32 || promotionTierCopy0 < math.MinInt32 {
+        return nil, fmt.Errorf("error: field PromotionTier is of type int32")
+    }
+    promotionTierCopy := int32(promotionTierCopy0)
+    res.PromotionTier = &promotionTierCopy
+}
+```
+
+`code.SetResource` returns the body of `GenerateDBInstance` (SDK output →
+Kubernetes object), including unwrapping the list of `DescribeDBInstances`
+and splitting fields between spec and status:
+
+```go
+for _, elem := range resp.DBInstances {
+    if elem.CACertificateIdentifier != nil {                      // spec field
+        cr.Spec.ForProvider.CACertificateIdentifier = elem.CACertificateIdentifier
+    }
+    if elem.CertificateDetails != nil {                           // nested struct, status
+        f4 := &svcapitypes.CertificateDetails{}
+        if elem.CertificateDetails.ValidTill != nil {
+            f4.ValidTill = &metav1.Time{Time: *elem.CertificateDetails.ValidTill}
+        }
+        cr.Status.AtProvider.CertificateDetails = f4
+    }
+    …
+```
+
+The snippets handle renames, `int64`/`int32`, pointer vs value slices,
+nested structs, lists of structs, maps, enums, timestamps and list/wrapper
+outputs — for every field of every operation.
+
+**3. Our templates add everything around the snippets:**
+
+| Generated function | Body from ACK | From our templates |
+|--------------------|---------------|--------------------|
+| `GenerateCreate…Input`, `GenerateModify…Input`, `GenerateDelete…Input` | `code.SetSDK` | signature, error return |
+| `Generate<Kind>` (read output → object) | `code.SetResource` | signature |
+| `DiffUpdatableParameters` | — | everything ([code-generator.md](code-generator.md)) |
+| `zz_controller.go` | operation and shape names only | everything (crossplane-runtime v2, hooks, `Client`) |
+
+In short: ACK decides what the resource looks like and how its fields map
+to the SDK; our templates decide how the controller behaves; hand-written
+`setup.go` adds what neither can infer (identity, states, secrets, special
+fields).
+
 ## `generator-config.yaml` essentials
 
 The format is ACK's ([reference](https://github.com/aws-controllers-k8s/code-generator/blob/main/pkg/config/config.go)).

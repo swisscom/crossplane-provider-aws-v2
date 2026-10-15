@@ -66,6 +66,21 @@ generation:
   into `[]` — guard with `out.X != nil`. Likewise a test helper
   `f(values ...string) []string { return values }` returns nil for `f()`.
 
+## Importing more kinds of a service
+
+- Re-run the importer with all kinds of the service; old kinds keep their
+  ported code. References that were dropped because the target kind was
+  missing come back: the importer adds the `*Ref`/`*Selector` fields to the
+  existing struct and ports the resolver (docdb `DBCluster` →
+  `DBSubnetGroup`/`DBClusterParameterGroup`). Update the README of the old
+  kind ("Differences from provider-aws") and its examples.
+- Extending a shared SDK fake (`internal/clients/<svc>/fake`): add the
+  `Mock<Op>` field, the `Called` slice and the method for every new
+  operation, or tests of the new kinds don't compile.
+- `aws.ToStringSlice(nil)` returns `[]string{}`; use
+  `pointer.SlicePtrToValue` where a nil spec field must stay nil in the
+  request (tests compare inputs).
+
 ## Tests
 
 - `cmp.Diff` on SDK v2 structs panics on the unexported `noSmithyDocumentSerde`

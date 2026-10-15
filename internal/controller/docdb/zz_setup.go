@@ -24,7 +24,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb/dbcluster"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb/dbclusterparametergroup"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb/dbinstance"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb/dbsubnetgroup"
 )
 
 // SetupGated adds all docdb controllers to the manager,
@@ -32,7 +34,9 @@ import (
 func SetupGated(mgr ctrl.Manager, o controller.Options) error {
 	for _, setup := range []func(ctrl.Manager, controller.Options) error{
 		dbcluster.SetupGated,
+		dbclusterparametergroup.SetupGated,
 		dbinstance.SetupGated,
+		dbsubnetgroup.SetupGated,
 	} {
 		if err := setup(mgr, o); err != nil {
 			return err

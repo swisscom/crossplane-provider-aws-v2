@@ -1,0 +1,22 @@
+# DocumentDB subnet group. examples/docdb/dbcluster.yaml references it with
+# dbSubnetGroupNameRef. Description, subnets and tags can be changed.
+apiVersion: docdb.aws2.crossplane.io/v1alpha1
+kind: DBSubnetGroup
+metadata:
+  namespace: default
+  name: example-docdb-subnet-group
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    dbSubnetGroupDescription: Subnets of the example DocumentDB cluster
+    # At least two subnets in different availability zones.
+    subnetIDs:
+      - subnet-0123456789abcdef0
+      - subnet-0123456789abcdef1
+      - subnet-0123456789abcdef2
+    tags:
+      - key: environment
+        value: example

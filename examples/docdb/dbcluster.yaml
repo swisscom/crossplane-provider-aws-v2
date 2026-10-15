@@ -1,5 +1,7 @@
 # DocumentDB cluster with a master password from a Secret in the same
-# namespace. Add instances with examples/docdb/dbinstance.yaml.
+# namespace, the subnet group of examples/docdb/dbsubnetgroup.yaml and the
+# parameter group of examples/docdb/dbclusterparametergroup.yaml. Add
+# instances with examples/docdb/dbinstance.yaml.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -41,10 +43,15 @@ spec:
       - eu-central-1a
       - eu-central-1b
       - eu-central-1c
-    dbSubnetGroupName: REPLACE_ME-docdb-subnet-group
+    # References resolve in the namespace of the DBCluster; alternatively set
+    # dbSubnetGroupName, or select with dbSubnetGroupNameSelector.
+    dbSubnetGroupNameRef:
+      name: example-docdb-subnet-group
     vpcSecurityGroupIDs:
       - sg-0123456789abcdef0
-    dbClusterParameterGroupName: default.docdb5.0
+    # Or dbClusterParameterGroupName: default.docdb5.0
+    dbClusterParameterGroupNameRef:
+      name: example-docdb-cluster-parameter-group
     port: 27017
     networkType: IPV4
     storageType: standard

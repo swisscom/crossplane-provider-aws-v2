@@ -12,6 +12,10 @@ Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
 
 - **External name**: `metadata.name` by default; used as
   `DBClusterIdentifier` in every call.
+- **References**: `dbSubnetGroupNameRef`/`Selector` to a
+  `docdb/DBSubnetGroup` and `dbClusterParameterGroupNameRef`/`Selector` to a
+  `docdb/DBClusterParameterGroup` in the same namespace (hand-written
+  resolver in `apis/docdb/v1alpha1/dbcluster.go`).
 - **Create**: `CreateDBCluster` with the master password from
   `masterUserPasswordSecretRef`, or generated with `autogeneratePassword`
   and written to that secret. With `manageMasterUserPassword` AWS manages it
@@ -50,8 +54,8 @@ Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
   the connection secret during Observe, so the change was never detected).
 - `serverlessV2ScalingConfiguration` (new in the SDK v2 model) is supported.
 - Secrets are read from the MR's namespace.
-- References to DBSubnetGroup, DBClusterParameterGroup, kms/Key and
-  ec2/SecurityGroup were dropped (kinds not imported); the plain fields stay.
+- References to kms/Key and ec2/SecurityGroup were dropped (kinds not
+  imported); the plain fields stay.
 
 ## Limitations
 
@@ -74,6 +78,7 @@ Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-10-15 | — | References to DBSubnetGroup and DBClusterParameterGroup |
 | 2026-10-09 | `1a8d835` | Compare all updatable fields; restore without CreateDBCluster; password change applied before it is published |
 | 2026-10-09 | `3adf7eb` | `serverlessV2ScalingConfiguration` supported (float fields allowed) |
 | 2026-10-09 | `2362ae0` | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced secrets |

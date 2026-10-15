@@ -43,6 +43,3 @@ ignore:
         - DBClusterSnapshot
         - GlobalCluster
         - EventSubscription
-        # not imported (codegen/cmd/import)
-        - DBClusterParameterGroup
-        - DBSubnetGroup

@@ -6,7 +6,16 @@ clientOperations:
   - RemoveTagsFromResource
   - RestoreDBClusterFromSnapshot
   - RestoreDBClusterToPointInTime
+  DBClusterParameterGroup:
+  - AddTagsToResource
+  - DescribeDBClusterParameters
+  - ListTagsForResource
+  - RemoveTagsFromResource
   DBInstance:
+  - AddTagsToResource
+  - ListTagsForResource
+  - RemoveTagsFromResource
+  DBSubnetGroup:
   - AddTagsToResource
   - ListTagsForResource
   - RemoveTagsFromResource

@@ -9,6 +9,10 @@ releases yet; everything is under "Unreleased". Per-kind details are in
 
 ### Added
 
+- docdb: `DBSubnetGroup` and `DBClusterParameterGroup`, imported from
+  provider-aws; all their updatable fields are compared. `DBCluster` can
+  reference them (`dbSubnetGroupNameRef`, `dbClusterParameterGroupNameRef`
+  and selectors).
 - docdb: `DBCluster` and `DBInstance`, imported from provider-aws, including
   restore from snapshot / point in time and `serverlessV2ScalingConfiguration`.
 - rds: `DBInstance`, imported from provider-aws, including read replicas,

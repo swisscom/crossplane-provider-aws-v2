@@ -123,7 +123,7 @@ type DBInstanceObservation struct {
 	DBInstanceStatus *string `json:"dbInstanceStatus,omitempty"`
 	// Specifies information on the subnet group that is associated with the instance,
 	// including the name, description, and subnets in the subnet group.
-	DBSubnetGroup *DBSubnetGroup `json:"dbSubnetGroup,omitempty"`
+	DBSubnetGroup *DBSubnetGroup_SDK `json:"dbSubnetGroup,omitempty"`
 	// The Amazon Web Services Region-unique, immutable identifier for the instance.
 	// This identifier is found in CloudTrail log entries whenever the KMS key for
 	// the instance is accessed.

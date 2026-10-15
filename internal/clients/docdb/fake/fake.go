@@ -26,38 +26,56 @@ import (
 // MockDocDBClient is a mock DocumentDB client that records its calls in
 // Called. Unset mock functions return empty outputs.
 type MockDocDBClient struct {
-	MockListTagsForResource           func(context.Context, *docdb.ListTagsForResourceInput, ...func(*docdb.Options)) (*docdb.ListTagsForResourceOutput, error)
-	MockAddTagsToResource             func(context.Context, *docdb.AddTagsToResourceInput, ...func(*docdb.Options)) (*docdb.AddTagsToResourceOutput, error)
-	MockRemoveTagsFromResource        func(context.Context, *docdb.RemoveTagsFromResourceInput, ...func(*docdb.Options)) (*docdb.RemoveTagsFromResourceOutput, error)
-	MockDescribeDBInstances           func(context.Context, *docdb.DescribeDBInstancesInput, ...func(*docdb.Options)) (*docdb.DescribeDBInstancesOutput, error)
-	MockCreateDBInstance              func(context.Context, *docdb.CreateDBInstanceInput, ...func(*docdb.Options)) (*docdb.CreateDBInstanceOutput, error)
-	MockModifyDBInstance              func(context.Context, *docdb.ModifyDBInstanceInput, ...func(*docdb.Options)) (*docdb.ModifyDBInstanceOutput, error)
-	MockDeleteDBInstance              func(context.Context, *docdb.DeleteDBInstanceInput, ...func(*docdb.Options)) (*docdb.DeleteDBInstanceOutput, error)
-	MockDescribeDBClusters            func(context.Context, *docdb.DescribeDBClustersInput, ...func(*docdb.Options)) (*docdb.DescribeDBClustersOutput, error)
-	MockCreateDBCluster               func(context.Context, *docdb.CreateDBClusterInput, ...func(*docdb.Options)) (*docdb.CreateDBClusterOutput, error)
-	MockModifyDBCluster               func(context.Context, *docdb.ModifyDBClusterInput, ...func(*docdb.Options)) (*docdb.ModifyDBClusterOutput, error)
-	MockDeleteDBCluster               func(context.Context, *docdb.DeleteDBClusterInput, ...func(*docdb.Options)) (*docdb.DeleteDBClusterOutput, error)
-	MockRestoreDBClusterFromSnapshot  func(context.Context, *docdb.RestoreDBClusterFromSnapshotInput, ...func(*docdb.Options)) (*docdb.RestoreDBClusterFromSnapshotOutput, error)
-	MockRestoreDBClusterToPointInTime func(context.Context, *docdb.RestoreDBClusterToPointInTimeInput, ...func(*docdb.Options)) (*docdb.RestoreDBClusterToPointInTimeOutput, error)
+	MockListTagsForResource              func(context.Context, *docdb.ListTagsForResourceInput, ...func(*docdb.Options)) (*docdb.ListTagsForResourceOutput, error)
+	MockAddTagsToResource                func(context.Context, *docdb.AddTagsToResourceInput, ...func(*docdb.Options)) (*docdb.AddTagsToResourceOutput, error)
+	MockRemoveTagsFromResource           func(context.Context, *docdb.RemoveTagsFromResourceInput, ...func(*docdb.Options)) (*docdb.RemoveTagsFromResourceOutput, error)
+	MockDescribeDBInstances              func(context.Context, *docdb.DescribeDBInstancesInput, ...func(*docdb.Options)) (*docdb.DescribeDBInstancesOutput, error)
+	MockCreateDBInstance                 func(context.Context, *docdb.CreateDBInstanceInput, ...func(*docdb.Options)) (*docdb.CreateDBInstanceOutput, error)
+	MockModifyDBInstance                 func(context.Context, *docdb.ModifyDBInstanceInput, ...func(*docdb.Options)) (*docdb.ModifyDBInstanceOutput, error)
+	MockDeleteDBInstance                 func(context.Context, *docdb.DeleteDBInstanceInput, ...func(*docdb.Options)) (*docdb.DeleteDBInstanceOutput, error)
+	MockDescribeDBClusters               func(context.Context, *docdb.DescribeDBClustersInput, ...func(*docdb.Options)) (*docdb.DescribeDBClustersOutput, error)
+	MockCreateDBCluster                  func(context.Context, *docdb.CreateDBClusterInput, ...func(*docdb.Options)) (*docdb.CreateDBClusterOutput, error)
+	MockModifyDBCluster                  func(context.Context, *docdb.ModifyDBClusterInput, ...func(*docdb.Options)) (*docdb.ModifyDBClusterOutput, error)
+	MockDeleteDBCluster                  func(context.Context, *docdb.DeleteDBClusterInput, ...func(*docdb.Options)) (*docdb.DeleteDBClusterOutput, error)
+	MockRestoreDBClusterFromSnapshot     func(context.Context, *docdb.RestoreDBClusterFromSnapshotInput, ...func(*docdb.Options)) (*docdb.RestoreDBClusterFromSnapshotOutput, error)
+	MockRestoreDBClusterToPointInTime    func(context.Context, *docdb.RestoreDBClusterToPointInTimeInput, ...func(*docdb.Options)) (*docdb.RestoreDBClusterToPointInTimeOutput, error)
+	MockDescribeDBSubnetGroups           func(context.Context, *docdb.DescribeDBSubnetGroupsInput, ...func(*docdb.Options)) (*docdb.DescribeDBSubnetGroupsOutput, error)
+	MockCreateDBSubnetGroup              func(context.Context, *docdb.CreateDBSubnetGroupInput, ...func(*docdb.Options)) (*docdb.CreateDBSubnetGroupOutput, error)
+	MockModifyDBSubnetGroup              func(context.Context, *docdb.ModifyDBSubnetGroupInput, ...func(*docdb.Options)) (*docdb.ModifyDBSubnetGroupOutput, error)
+	MockDeleteDBSubnetGroup              func(context.Context, *docdb.DeleteDBSubnetGroupInput, ...func(*docdb.Options)) (*docdb.DeleteDBSubnetGroupOutput, error)
+	MockDescribeDBClusterParameterGroups func(context.Context, *docdb.DescribeDBClusterParameterGroupsInput, ...func(*docdb.Options)) (*docdb.DescribeDBClusterParameterGroupsOutput, error)
+	MockDescribeDBClusterParameters      func(context.Context, *docdb.DescribeDBClusterParametersInput, ...func(*docdb.Options)) (*docdb.DescribeDBClusterParametersOutput, error)
+	MockCreateDBClusterParameterGroup    func(context.Context, *docdb.CreateDBClusterParameterGroupInput, ...func(*docdb.Options)) (*docdb.CreateDBClusterParameterGroupOutput, error)
+	MockModifyDBClusterParameterGroup    func(context.Context, *docdb.ModifyDBClusterParameterGroupInput, ...func(*docdb.Options)) (*docdb.ModifyDBClusterParameterGroupOutput, error)
+	MockDeleteDBClusterParameterGroup    func(context.Context, *docdb.DeleteDBClusterParameterGroupInput, ...func(*docdb.Options)) (*docdb.DeleteDBClusterParameterGroupOutput, error)
 
 	Called MockDocDBClientCall
 }
 
 // MockDocDBClientCall records the calls of a MockDocDBClient.
 type MockDocDBClientCall struct {
-	ListTagsForResource           []*CallListTagsForResource
-	AddTagsToResource             []*CallAddTagsToResource
-	RemoveTagsFromResource        []*CallRemoveTagsFromResource
-	DescribeDBInstances           []*CallDescribeDBInstances
-	CreateDBInstance              []*CallCreateDBInstance
-	ModifyDBInstance              []*CallModifyDBInstance
-	DeleteDBInstance              []*CallDeleteDBInstance
-	DescribeDBClusters            []*CallDescribeDBClusters
-	CreateDBCluster               []*CallCreateDBCluster
-	ModifyDBCluster               []*CallModifyDBCluster
-	DeleteDBCluster               []*CallDeleteDBCluster
-	RestoreDBClusterFromSnapshot  []*CallRestoreDBClusterFromSnapshot
-	RestoreDBClusterToPointInTime []*CallRestoreDBClusterToPointInTime
+	ListTagsForResource              []*CallListTagsForResource
+	AddTagsToResource                []*CallAddTagsToResource
+	RemoveTagsFromResource           []*CallRemoveTagsFromResource
+	DescribeDBInstances              []*CallDescribeDBInstances
+	CreateDBInstance                 []*CallCreateDBInstance
+	ModifyDBInstance                 []*CallModifyDBInstance
+	DeleteDBInstance                 []*CallDeleteDBInstance
+	DescribeDBClusters               []*CallDescribeDBClusters
+	CreateDBCluster                  []*CallCreateDBCluster
+	ModifyDBCluster                  []*CallModifyDBCluster
+	DeleteDBCluster                  []*CallDeleteDBCluster
+	RestoreDBClusterFromSnapshot     []*CallRestoreDBClusterFromSnapshot
+	RestoreDBClusterToPointInTime    []*CallRestoreDBClusterToPointInTime
+	DescribeDBSubnetGroups           []*CallDescribeDBSubnetGroups
+	CreateDBSubnetGroup              []*CallCreateDBSubnetGroup
+	ModifyDBSubnetGroup              []*CallModifyDBSubnetGroup
+	DeleteDBSubnetGroup              []*CallDeleteDBSubnetGroup
+	DescribeDBClusterParameterGroups []*CallDescribeDBClusterParameterGroups
+	DescribeDBClusterParameters      []*CallDescribeDBClusterParameters
+	CreateDBClusterParameterGroup    []*CallCreateDBClusterParameterGroup
+	ModifyDBClusterParameterGroup    []*CallModifyDBClusterParameterGroup
+	DeleteDBClusterParameterGroup    []*CallDeleteDBClusterParameterGroup
 }
 
 // CallListTagsForResource is a call of ListTagsForResource.
@@ -266,4 +284,148 @@ func (m *MockDocDBClient) RestoreDBClusterToPointInTime(ctx context.Context, i *
 		return &docdb.RestoreDBClusterToPointInTimeOutput{}, nil
 	}
 	return m.MockRestoreDBClusterToPointInTime(ctx, i, opts...)
+}
+
+// CallDescribeDBSubnetGroups is a call of DescribeDBSubnetGroups.
+type CallDescribeDBSubnetGroups struct {
+	Ctx  context.Context
+	I    *docdb.DescribeDBSubnetGroupsInput
+	Opts []func(*docdb.Options)
+}
+
+// DescribeDBSubnetGroups records the call and calls MockDescribeDBSubnetGroups.
+func (m *MockDocDBClient) DescribeDBSubnetGroups(ctx context.Context, i *docdb.DescribeDBSubnetGroupsInput, opts ...func(*docdb.Options)) (*docdb.DescribeDBSubnetGroupsOutput, error) {
+	m.Called.DescribeDBSubnetGroups = append(m.Called.DescribeDBSubnetGroups, &CallDescribeDBSubnetGroups{Ctx: ctx, I: i, Opts: opts})
+	if m.MockDescribeDBSubnetGroups == nil {
+		return &docdb.DescribeDBSubnetGroupsOutput{}, nil
+	}
+	return m.MockDescribeDBSubnetGroups(ctx, i, opts...)
+}
+
+// CallCreateDBSubnetGroup is a call of CreateDBSubnetGroup.
+type CallCreateDBSubnetGroup struct {
+	Ctx  context.Context
+	I    *docdb.CreateDBSubnetGroupInput
+	Opts []func(*docdb.Options)
+}
+
+// CreateDBSubnetGroup records the call and calls MockCreateDBSubnetGroup.
+func (m *MockDocDBClient) CreateDBSubnetGroup(ctx context.Context, i *docdb.CreateDBSubnetGroupInput, opts ...func(*docdb.Options)) (*docdb.CreateDBSubnetGroupOutput, error) {
+	m.Called.CreateDBSubnetGroup = append(m.Called.CreateDBSubnetGroup, &CallCreateDBSubnetGroup{Ctx: ctx, I: i, Opts: opts})
+	if m.MockCreateDBSubnetGroup == nil {
+		return &docdb.CreateDBSubnetGroupOutput{}, nil
+	}
+	return m.MockCreateDBSubnetGroup(ctx, i, opts...)
+}
+
+// CallModifyDBSubnetGroup is a call of ModifyDBSubnetGroup.
+type CallModifyDBSubnetGroup struct {
+	Ctx  context.Context
+	I    *docdb.ModifyDBSubnetGroupInput
+	Opts []func(*docdb.Options)
+}
+
+// ModifyDBSubnetGroup records the call and calls MockModifyDBSubnetGroup.
+func (m *MockDocDBClient) ModifyDBSubnetGroup(ctx context.Context, i *docdb.ModifyDBSubnetGroupInput, opts ...func(*docdb.Options)) (*docdb.ModifyDBSubnetGroupOutput, error) {
+	m.Called.ModifyDBSubnetGroup = append(m.Called.ModifyDBSubnetGroup, &CallModifyDBSubnetGroup{Ctx: ctx, I: i, Opts: opts})
+	if m.MockModifyDBSubnetGroup == nil {
+		return &docdb.ModifyDBSubnetGroupOutput{}, nil
+	}
+	return m.MockModifyDBSubnetGroup(ctx, i, opts...)
+}
+
+// CallDeleteDBSubnetGroup is a call of DeleteDBSubnetGroup.
+type CallDeleteDBSubnetGroup struct {
+	Ctx  context.Context
+	I    *docdb.DeleteDBSubnetGroupInput
+	Opts []func(*docdb.Options)
+}
+
+// DeleteDBSubnetGroup records the call and calls MockDeleteDBSubnetGroup.
+func (m *MockDocDBClient) DeleteDBSubnetGroup(ctx context.Context, i *docdb.DeleteDBSubnetGroupInput, opts ...func(*docdb.Options)) (*docdb.DeleteDBSubnetGroupOutput, error) {
+	m.Called.DeleteDBSubnetGroup = append(m.Called.DeleteDBSubnetGroup, &CallDeleteDBSubnetGroup{Ctx: ctx, I: i, Opts: opts})
+	if m.MockDeleteDBSubnetGroup == nil {
+		return &docdb.DeleteDBSubnetGroupOutput{}, nil
+	}
+	return m.MockDeleteDBSubnetGroup(ctx, i, opts...)
+}
+
+// CallDescribeDBClusterParameterGroups is a call of DescribeDBClusterParameterGroups.
+type CallDescribeDBClusterParameterGroups struct {
+	Ctx  context.Context
+	I    *docdb.DescribeDBClusterParameterGroupsInput
+	Opts []func(*docdb.Options)
+}
+
+// DescribeDBClusterParameterGroups records the call and calls MockDescribeDBClusterParameterGroups.
+func (m *MockDocDBClient) DescribeDBClusterParameterGroups(ctx context.Context, i *docdb.DescribeDBClusterParameterGroupsInput, opts ...func(*docdb.Options)) (*docdb.DescribeDBClusterParameterGroupsOutput, error) {
+	m.Called.DescribeDBClusterParameterGroups = append(m.Called.DescribeDBClusterParameterGroups, &CallDescribeDBClusterParameterGroups{Ctx: ctx, I: i, Opts: opts})
+	if m.MockDescribeDBClusterParameterGroups == nil {
+		return &docdb.DescribeDBClusterParameterGroupsOutput{}, nil
+	}
+	return m.MockDescribeDBClusterParameterGroups(ctx, i, opts...)
+}
+
+// CallDescribeDBClusterParameters is a call of DescribeDBClusterParameters.
+type CallDescribeDBClusterParameters struct {
+	Ctx  context.Context
+	I    *docdb.DescribeDBClusterParametersInput
+	Opts []func(*docdb.Options)
+}
+
+// DescribeDBClusterParameters records the call and calls MockDescribeDBClusterParameters.
+func (m *MockDocDBClient) DescribeDBClusterParameters(ctx context.Context, i *docdb.DescribeDBClusterParametersInput, opts ...func(*docdb.Options)) (*docdb.DescribeDBClusterParametersOutput, error) {
+	m.Called.DescribeDBClusterParameters = append(m.Called.DescribeDBClusterParameters, &CallDescribeDBClusterParameters{Ctx: ctx, I: i, Opts: opts})
+	if m.MockDescribeDBClusterParameters == nil {
+		return &docdb.DescribeDBClusterParametersOutput{}, nil
+	}
+	return m.MockDescribeDBClusterParameters(ctx, i, opts...)
+}
+
+// CallCreateDBClusterParameterGroup is a call of CreateDBClusterParameterGroup.
+type CallCreateDBClusterParameterGroup struct {
+	Ctx  context.Context
+	I    *docdb.CreateDBClusterParameterGroupInput
+	Opts []func(*docdb.Options)
+}
+
+// CreateDBClusterParameterGroup records the call and calls MockCreateDBClusterParameterGroup.
+func (m *MockDocDBClient) CreateDBClusterParameterGroup(ctx context.Context, i *docdb.CreateDBClusterParameterGroupInput, opts ...func(*docdb.Options)) (*docdb.CreateDBClusterParameterGroupOutput, error) {
+	m.Called.CreateDBClusterParameterGroup = append(m.Called.CreateDBClusterParameterGroup, &CallCreateDBClusterParameterGroup{Ctx: ctx, I: i, Opts: opts})
+	if m.MockCreateDBClusterParameterGroup == nil {
+		return &docdb.CreateDBClusterParameterGroupOutput{}, nil
+	}
+	return m.MockCreateDBClusterParameterGroup(ctx, i, opts...)
+}
+
+// CallModifyDBClusterParameterGroup is a call of ModifyDBClusterParameterGroup.
+type CallModifyDBClusterParameterGroup struct {
+	Ctx  context.Context
+	I    *docdb.ModifyDBClusterParameterGroupInput
+	Opts []func(*docdb.Options)
+}
+
+// ModifyDBClusterParameterGroup records the call and calls MockModifyDBClusterParameterGroup.
+func (m *MockDocDBClient) ModifyDBClusterParameterGroup(ctx context.Context, i *docdb.ModifyDBClusterParameterGroupInput, opts ...func(*docdb.Options)) (*docdb.ModifyDBClusterParameterGroupOutput, error) {
+	m.Called.ModifyDBClusterParameterGroup = append(m.Called.ModifyDBClusterParameterGroup, &CallModifyDBClusterParameterGroup{Ctx: ctx, I: i, Opts: opts})
+	if m.MockModifyDBClusterParameterGroup == nil {
+		return &docdb.ModifyDBClusterParameterGroupOutput{}, nil
+	}
+	return m.MockModifyDBClusterParameterGroup(ctx, i, opts...)
+}
+
+// CallDeleteDBClusterParameterGroup is a call of DeleteDBClusterParameterGroup.
+type CallDeleteDBClusterParameterGroup struct {
+	Ctx  context.Context
+	I    *docdb.DeleteDBClusterParameterGroupInput
+	Opts []func(*docdb.Options)
+}
+
+// DeleteDBClusterParameterGroup records the call and calls MockDeleteDBClusterParameterGroup.
+func (m *MockDocDBClient) DeleteDBClusterParameterGroup(ctx context.Context, i *docdb.DeleteDBClusterParameterGroupInput, opts ...func(*docdb.Options)) (*docdb.DeleteDBClusterParameterGroupOutput, error) {
+	m.Called.DeleteDBClusterParameterGroup = append(m.Called.DeleteDBClusterParameterGroup, &CallDeleteDBClusterParameterGroup{Ctx: ctx, I: i, Opts: opts})
+	if m.MockDeleteDBClusterParameterGroup == nil {
+		return &docdb.DeleteDBClusterParameterGroupOutput{}, nil
+	}
+	return m.MockDeleteDBClusterParameterGroup(ctx, i, opts...)
 }

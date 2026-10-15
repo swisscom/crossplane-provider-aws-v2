@@ -14,7 +14,7 @@ models and, where needed, imported from
 with `codegen/cmd/import`.
 
 Status: proof of concept. Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
-`docdb/DBInstance`.
+`docdb/DBInstance`, `docdb/DBSubnetGroup`, `docdb/DBClusterParameterGroup`.
 
 **Before changing a kind, read its `internal/controller/<svc>/<kind>/README.md`**
 (origin, behavior, limitations, history).

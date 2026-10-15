@@ -63,8 +63,6 @@ type srcFile struct {
 	ast  *ast.File
 	// imports maps local import names to paths.
 	imports map[string]string
-	// keep are the declarations to emit, in source order.
-	keep []*decl
 	// removed are source ranges whose comments must not be emitted.
 	removed [][2]token.Pos
 }
@@ -377,7 +375,7 @@ func (c *customTypes) run() error {
 	// target, e.g. DBCluster; they are not available.
 	available := func(name string) bool { return (tgtNames[name] && !notImported[name]) || c.keep[name] }
 	for _, s := range seeds {
-		c.closure(s, available, true)
+		c.closure(s, available)
 	}
 	// Other declarations that use a kept declaration and only depend on
 	// available code, e.g. interfaces the kinds implement.
@@ -388,7 +386,7 @@ func (c *customTypes) run() error {
 				continue
 			}
 			if c.resolvable(d, available, map[string]bool{}) {
-				c.closure(d.key, available, false)
+				c.closure(d.key, available)
 				changed = true
 			}
 		}
@@ -400,7 +398,7 @@ func (c *customTypes) run() error {
 			continue
 		}
 		if c.resolvable(d, available, map[string]bool{}) {
-			c.closure(n, available, false)
+			c.closure(n, available)
 		}
 	}
 	for k, d := range c.resolvers {
@@ -455,7 +453,7 @@ func (c *customTypes) resolvable(d *decl, available func(string) bool, seen map[
 }
 
 // closure keeps name and the hand-written declarations it depends on.
-func (c *customTypes) closure(name string, available func(string) bool, seed bool) {
+func (c *customTypes) closure(name string, available func(string) bool) {
 	d, ok := c.src.decls[name]
 	if !ok || c.keep[name] {
 		return
@@ -466,7 +464,7 @@ func (c *customTypes) closure(name string, available func(string) bool, seed boo
 			continue
 		}
 		if _, ok := c.src.decls[dep]; ok {
-			c.closure(dep, available, seed)
+			c.closure(dep, available)
 			continue
 		}
 		c.report.Add(topicTypes, "`%s` uses `%s`, which is not generated in the target; port it by hand", name, dep)
@@ -557,7 +555,8 @@ func (c *customTypes) portResolver(kind string, d *decl) { //nolint:gocyclo // a
 			Value: &ast.CallExpr{Fun: &ast.SelectorExpr{X: ast.NewIdent(recvName(f)), Sel: ast.NewIdent("GetNamespace")}},
 		})
 	}
-	f.Body.List = append(body, epilogue...)
+	body = append(body, epilogue...)
+	f.Body.List = body
 	c.keep[d.key] = true
 	c.report.Add(topicReferences, "%s: ported hand-written `ResolveReferences` to namespaced references. angryjet does not generate resolvers for kinds with a hand-written one, so `%s` markers of %s are ignored", kind, markerPrefix, kind)
 }
@@ -1156,7 +1155,7 @@ func (c *customTypes) render(header []byte, decls []*decl, base []byte) ([]byte,
 func (c *customTypes) renderDecls(sf *srcFile, ds []*decl) ([]byte, map[string]string, error) {
 	f := &ast.File{Name: sf.ast.Name, Package: sf.ast.Package}
 	// Imports are needed so that the rewriter can resolve selectors.
-	var specs []ast.Spec
+	specs := make([]ast.Spec, 0, len(sf.ast.Imports))
 	for _, is := range sf.ast.Imports {
 		specs = append(specs, is)
 		f.Imports = append(f.Imports, is)
@@ -1172,8 +1171,9 @@ func (c *customTypes) renderDecls(sf *srcFile, ds []*decl) ([]byte, map[string]s
 		}
 		return false
 	}
-	var keepRanges [][2]token.Pos
-	for _, n := range regroup(ds) {
+	nodes := regroup(ds)
+	keepRanges := make([][2]token.Pos, 0, len(nodes))
+	for _, n := range nodes {
 		f.Decls = append(f.Decls, n)
 		start := n.Pos()
 		if doc := docOf(n); doc != nil {
@@ -1226,7 +1226,7 @@ func regroup(ds []*decl) []ast.Decl {
 			last, lastGroup = nil, nil
 			continue
 		}
-		g := d.node.(*ast.GenDecl) //nolint:forcetypeassert // only split GenDecls have a group
+		g := d.node.(*ast.GenDecl)        //nolint:forcetypeassert // only split GenDecls have a group
 		vs := g.Specs[0].(*ast.ValueSpec) //nolint:forcetypeassert // groups are recorded for value specs
 		if vs.Doc == nil {
 			vs.Doc = g.Doc
@@ -1255,7 +1255,7 @@ func snake(s string) string {
 	var b strings.Builder
 	for i, r := range s {
 		if r >= 'A' && r <= 'Z' {
-			if i > 0 && s[i-1] != '_' && !(s[i-1] >= 'A' && s[i-1] <= 'Z') {
+			if i > 0 && s[i-1] != '_' && (s[i-1] < 'A' || s[i-1] > 'Z') {
 				b.WriteByte('_')
 			}
 			r += 'a' - 'A'

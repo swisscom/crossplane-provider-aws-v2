@@ -77,6 +77,13 @@ jobs:
         with:
           version: ${{ env.GOLANGCI_VERSION }}
 
+      # codegen is a separate Go module; ./... of the root module skips it.
+      - name: Lint codegen
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: ${{ env.GOLANGCI_VERSION }}
+          working-directory: codegen
+
   check-diff:
     runs-on: ubuntu-22.04
     needs: detect-noop

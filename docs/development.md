@@ -125,7 +125,9 @@ behavior change don't need a row.
 ## Definition of done
 
 - [ ] `make services` and `make generate` produce no diff.
-- [ ] `go build ./... && go vet ./... && go test ./...`, `make codegen.test` pass.
+- [ ] `go build ./... && go vet ./...`, `make test` and `make lint` pass
+      (both cover the `codegen/` module; `golangci-lint fmt ./...` fixes
+      import grouping).
 - [ ] No `*_importtodo.go` files, no `TODO(import)`.
 - [ ] Tests cover the new behavior (including the "not called" case for
       AWS operations where it matters).

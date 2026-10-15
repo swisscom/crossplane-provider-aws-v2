@@ -45,7 +45,8 @@ Status: proof of concept. Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
 make services SERVICES="rds"   # generate types + controllers from generator-config.yaml
 make generate                  # deepcopy, managed methods, reference resolvers, CRDs
 go build ./... && go vet ./... && go test ./...   # root module
-make codegen.test              # tests of the codegen module
+make lint                      # golangci-lint (.golangci.yml) on both modules, as in CI
+make test                      # unit tests of both modules (codegen: make codegen.test)
 ```
 
 Order matters: `make services` → `make generate` → build. Hand-written code

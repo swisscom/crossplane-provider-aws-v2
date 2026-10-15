@@ -18,7 +18,15 @@ and uses Crossplane's shared make machinery
 | `make reviewable` | generate + lint + test |
 | `make build` | Binary, image, Crossplane package (xpkg) |
 | `make dev` / `make dev-clean` | kind cluster with CRDs, provider running locally |
-| `make codegen.test` | Tests of the `codegen/` module |
+| `make lint` | golangci-lint of the root and `codegen/` modules (`.golangci.yml`) |
+| `make test` | Unit tests of the root and `codegen/` modules |
+| `make codegen.test` / `make codegen.lint` | Only the `codegen/` module |
+
+`codegen/` is a separate Go module, so `./...` in the root skips it; the
+`codegen.*` targets are hooked into `test.run`/`lint.run`, and CI lints it in
+its own step. In `.golangci.yml`, gocyclo, gosec and noctx are off for
+`codegen/`: a developer CLI that works on the paths and runs the `go`
+commands it is given, with switch-heavy AST walkers.
 
 `make` pins `GOTOOLCHAIN` to the Go version of `go.mod`.
 

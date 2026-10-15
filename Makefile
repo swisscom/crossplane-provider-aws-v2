@@ -134,7 +134,18 @@ codegen.test:
 	@cd codegen && $(GO) test ./...
 	@$(OK) Testing codegen
 
-.PHONY: submodules fallthrough test-integration run dev dev-clean services codegen.test
+# golangci-lint of the code generator; ./... of the root module stops at
+# codegen/go.mod. Uses the root .golangci.yml.
+codegen.lint: $(GOLANGCILINT)
+	@$(INFO) golangci-lint codegen
+	@cd codegen && $(GOLANGCILINT) run ./... || $(FAIL)
+	@$(OK) golangci-lint codegen
+
+# make test and make lint cover both modules.
+test.run: codegen.test
+lint.run: codegen.lint
+
+.PHONY: submodules fallthrough test-integration run dev dev-clean services codegen.test codegen.lint
 
 # ====================================================================================
 # Special Targets
@@ -145,6 +156,7 @@ Crossplane Targets:
     run                   Run crossplane locally, out-of-cluster. Useful for development.
     services              Generate AWS services, e.g. make services SERVICES=servicecatalog.
     codegen.test          Run the unit tests of the code generator.
+    codegen.lint          Run golangci-lint on the code generator.
 
 endef
 # The reason CROSSPLANE_MAKE_HELP is used instead of CROSSPLANE_HELP is because the crossplane

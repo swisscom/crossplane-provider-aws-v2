@@ -6,7 +6,7 @@
 |-------|------|-------|-----|
 | Unit: hooks | Table tests of `setup.go` hooks and the generated controller with a fake SDK client | `internal/controller/<svc>/<kind>/*_test.go` | `go test ./...` |
 | Unit: helpers | `internal/utils/*`, `internal/clients/*` | next to the code | `go test ./...` |
-| Generator/importer | Generate a fixture service, check output; importer units | `codegen/internal/*` | `make codegen.test` |
+| Generator/importer | Generate a fixture service, check output; importer units | `codegen/internal/*` | `make codegen.test` (part of `make test`) |
 | Schema | Install `package/crds` in envtest, apply examples with `--dry-run=server --validate=strict` | ad hoc | see below |
 | End to end | Real AWS (planned: [uptest](https://github.com/crossplane/uptest)) | — | — |
 

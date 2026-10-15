@@ -17,6 +17,7 @@ limitations under the License.
 package importer
 
 import (
+	"bytes"
 	"maps"
 	"os"
 	"path/filepath"
@@ -132,7 +133,7 @@ type CustomFooParameters struct {
 			t.Errorf("merged file lacks %q:\n%s", s, merged)
 		}
 	}
-	if strings.Index(string(merged), "BarNameRef") > strings.Index(string(merged), "Last") {
+	if bytes.Index(merged, []byte("BarNameRef")) > bytes.Index(merged, []byte("Last")) {
 		t.Errorf("BarNameRef must be inserted before Last, after Kept:\n%s", merged)
 	}
 

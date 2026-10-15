@@ -53,7 +53,10 @@ func ResolveServiceModule(o *Options) error {
 	if err != nil {
 		return fmt.Errorf("cannot resolve %s: %w", mod, err)
 	}
-	var m struct{ Version, Dir string }
+	var m struct {
+		Version string `json:"Version"`
+		Dir     string `json:"Dir"`
+	}
 	if err := json.Unmarshal(out, &m); err != nil {
 		return err
 	}

@@ -88,6 +88,14 @@ linters:
       - linters:
           - staticcheck
         text: 'SA3000:'
+      # codegen is a developer CLI: it reads and writes the paths and runs
+      # the go commands it is given, has no request context, and its AST
+      # walkers are switch-heavy.
+      - linters:
+          - gocyclo
+          - gosec
+          - noctx
+        path: ^codegen/
       # Table tests ported from provider-aws select through embedded
       # args/want structs; keep them close to upstream.
       - linters:

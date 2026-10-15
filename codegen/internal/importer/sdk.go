@@ -56,20 +56,23 @@ func loadSDKNames(dir, svc string) (*sdkNames, error) {
 
 func exportedNames(dir string) (map[string]bool, error) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, parser.SkipObjectResolution)
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, errors.Wrapf(err, "cannot parse %s", dir)
+		return nil, errors.Wrapf(err, "cannot read %s", dir)
 	}
 	names := map[string]bool{}
-	for _, p := range pkgs {
-		for _, f := range p.Files {
-			for _, d := range f.Decls {
-				for _, name := range declNames(d) {
-					if token.IsExported(name) {
-						names[name] = true
-					}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, filepath.Join(dir, e.Name()), nil, parser.SkipObjectResolution)
+		if err != nil {
+			return nil, errors.Wrapf(err, "cannot parse %s", dir)
+		}
+		for _, d := range f.Decls {
+			for _, name := range declNames(d) {
+				if token.IsExported(name) {
+					names[name] = true
 				}
 			}
 		}

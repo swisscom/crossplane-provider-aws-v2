@@ -74,7 +74,7 @@ func init() {
 
 ```sh
 go build ./... && go vet ./... && go test ./...
-make codegen.test   # if you touched codegen/
+make codegen.test codegen.lint   # if you touched codegen/
 ```
 
 ## 5. Finish

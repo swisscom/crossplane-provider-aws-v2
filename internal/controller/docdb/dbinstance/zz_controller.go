@@ -275,7 +275,7 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 		cr.Status.AtProvider.DBInstanceStatus = nil
 	}
 	if resp.DBInstance.DBSubnetGroup != nil {
-		f11 := &svcapitypes.DBSubnetGroup{}
+		f11 := &svcapitypes.DBSubnetGroup_SDK{}
 		if resp.DBInstance.DBSubnetGroup.DBSubnetGroupArn != nil {
 			f11.DBSubnetGroupARN = resp.DBInstance.DBSubnetGroup.DBSubnetGroupArn
 		}

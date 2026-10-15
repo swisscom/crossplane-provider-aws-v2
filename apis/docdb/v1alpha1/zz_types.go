@@ -79,7 +79,7 @@ type DBClusterMember struct {
 }
 
 // +kubebuilder:skipversion
-type DBClusterParameterGroup struct {
+type DBClusterParameterGroup_SDK struct {
 	DBClusterParameterGroupARN *string `json:"dbClusterParameterGroupARN,omitempty"`
 
 	DBClusterParameterGroupName *string `json:"dbClusterParameterGroupName,omitempty"`
@@ -284,7 +284,7 @@ type DBInstance_SDK struct {
 
 	DBInstanceStatus *string `json:"dbInstanceStatus,omitempty"`
 	// Detailed information about a subnet group.
-	DBSubnetGroup *DBSubnetGroup `json:"dbSubnetGroup,omitempty"`
+	DBSubnetGroup *DBSubnetGroup_SDK `json:"dbSubnetGroup,omitempty"`
 
 	DBIResourceID *string `json:"dbiResourceID,omitempty"`
 
@@ -326,7 +326,7 @@ type DBInstance_SDK struct {
 }
 
 // +kubebuilder:skipversion
-type DBSubnetGroup struct {
+type DBSubnetGroup_SDK struct {
 	DBSubnetGroupARN *string `json:"dbSubnetGroupARN,omitempty"`
 
 	DBSubnetGroupDescription *string `json:"dbSubnetGroupDescription,omitempty"`
@@ -356,6 +356,8 @@ type EngineDefaults struct {
 	DBParameterGroupFamily *string `json:"dbParameterGroupFamily,omitempty"`
 
 	Marker *string `json:"marker,omitempty"`
+
+	Parameters []*Parameter `json:"parameters,omitempty"`
 }
 
 // +kubebuilder:skipversion
@@ -457,6 +459,8 @@ type OrderableDBInstanceOption struct {
 // +kubebuilder:skipversion
 type Parameter struct {
 	AllowedValues *string `json:"allowedValues,omitempty"`
+
+	ApplyMethod *string `json:"applyMethod,omitempty"`
 
 	ApplyType *string `json:"applyType,omitempty"`
 

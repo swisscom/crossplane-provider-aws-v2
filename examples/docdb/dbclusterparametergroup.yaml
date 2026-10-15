@@ -1,0 +1,35 @@
+# DocumentDB cluster parameter group. examples/docdb/dbcluster.yaml
+# references it with dbClusterParameterGroupNameRef. Parameters and tags can
+# be changed; family and description can't be changed after creation.
+apiVersion: docdb.aws2.crossplane.io/v1alpha1
+kind: DBClusterParameterGroup
+metadata:
+  namespace: default
+  name: example-docdb-cluster-parameter-group
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    dbParameterGroupFamily: docdb5.0
+    description: Parameters of the example DocumentDB cluster
+    # Parameters that are not listed are added with their current values
+    # (late initialization). AWS changes applyMethod only together with the
+    # value.
+    parameters:
+      - parameterName: tls
+        parameterValue: enabled
+        applyMethod: pending-reboot
+      - parameterName: audit_logs
+        parameterValue: enabled
+        applyMethod: immediate
+      - parameterName: profiler
+        parameterValue: enabled
+        applyMethod: immediate
+      - parameterName: profiler_threshold_ms
+        parameterValue: "200"
+        applyMethod: immediate
+    tags:
+      - key: environment
+        value: example

@@ -17,8 +17,26 @@ func (l *DBClusterList) GetItems() []resource.Managed {
 	return items
 }
 
+// GetItems of this DBClusterParameterGroupList.
+func (l *DBClusterParameterGroupList) GetItems() []resource.Managed {
+	items := make([]resource.Managed, len(l.Items))
+	for i := range l.Items {
+		items[i] = &l.Items[i]
+	}
+	return items
+}
+
 // GetItems of this DBInstanceList.
 func (l *DBInstanceList) GetItems() []resource.Managed {
+	items := make([]resource.Managed, len(l.Items))
+	for i := range l.Items {
+		items[i] = &l.Items[i]
+	}
+	return items
+}
+
+// GetItems of this DBSubnetGroupList.
+func (l *DBSubnetGroupList) GetItems() []resource.Managed {
 	items := make([]resource.Managed, len(l.Items))
 	for i := range l.Items {
 		items[i] = &l.Items[i]

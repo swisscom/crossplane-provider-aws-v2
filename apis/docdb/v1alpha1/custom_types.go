@@ -127,13 +127,18 @@ type CustomDBClusterParameters struct {
 	// Constraints: Must contain from 8 to 100 characters.
 	MasterUserPasswordSecretRef *xpv2.LocalSecretKeySelector `json:"masterUserPasswordSecretRef,omitempty"`
 
+	DBSubnetGroupNameRef *xpv2.NamespacedReference `json:"dbSubnetGroupNameRef,omitempty"`
+
+	DBSubnetGroupNameSelector *xpv2.NamespacedSelector `json:"dbSubnetGroupNameSelector,omitempty"`
+
+	DBClusterParameterGroupNameRef *xpv2.NamespacedReference `json:"dbClusterParameterGroupNameRef,omitempty"`
+
+	DBClusterParameterGroupNameSelector *xpv2.NamespacedSelector `json:"dbClusterParameterGroupNameSelector,omitempty"`
+
 	// RestoreFrom specifies the details of the backup to restore when creating a new DBCluster.
 	// +optional
 	RestoreFrom *RestoreDBClusterBackupConfiguration `json:"restoreFrom,omitempty"`
 }
-
-// CustomDBClusterObservation for DBCluster
-type CustomDBClusterObservation struct{}
 
 // RestoreSnapshotConfiguration defines the details of the snapshot to restore from.
 type RestoreSnapshotConfiguration struct {
@@ -204,4 +209,46 @@ type RestoreDBClusterBackupConfiguration struct {
 	// Snapshot and PointInTime are supported.
 	// +kubebuilder:validation:Enum=Snapshot;PointInTime
 	Source RestoreSource `json:"source"`
+}
+
+// CustomDBSubnetGroupParameters for DBSubnetGroupParameters
+type CustomDBSubnetGroupParameters struct {
+	SubnetIDs []*string `json:"subnetIDs,omitempty"`
+}
+
+// CustomDBSubnetGroupObservation for DBSubnetGroupParameters
+type CustomDBSubnetGroupObservation struct{}
+
+// CustomDBClusterParameterGroupParameters for DBClusterParameterGroup
+type CustomDBClusterParameterGroupParameters struct {
+	// A list of parameters to associate with this DB parameter group.
+	// The fields ApplyMethod, ParameterName and ParameterValue are required
+	// for every parameter.
+	// Note: AWS actually only modifies the ApplyMethod of a parameter,
+	// if the ParameterValue changes too.
+	// +optional
+	Parameters []*CustomParameter `json:"parameters,omitempty"`
+}
+
+// CustomDBClusterParameterGroupObservation for DBClusterParameterGroup
+type CustomDBClusterParameterGroupObservation struct{}
+
+// CustomDBClusterObservation for DBCluster
+type CustomDBClusterObservation struct{}
+
+// CustomParameter are custom parameters for the Parameter
+type CustomParameter struct {
+	// The apply method of the parameter.
+	// AWS actually only modifies to value set here, if the parameter value changes too.
+	// +kubebuilder:validation:Enum=immediate;pending-reboot
+	// +kubebuilder:validation:Required
+	ApplyMethod *string `json:"applyMethod"`
+
+	// The name of the parameter.
+	// +kubebuilder:validation:Required
+	ParameterName *string `json:"parameterName"`
+
+	// The value of the parameter.
+	// +kubebuilder:validation:Required
+	ParameterValue *string `json:"parameterValue"`
 }

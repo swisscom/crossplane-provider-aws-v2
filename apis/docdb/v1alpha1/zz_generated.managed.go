@@ -48,6 +48,46 @@ func (mg *DBCluster) SetWriteConnectionSecretToReference(r *xpv2.LocalSecretRefe
 	mg.Spec.WriteConnectionSecretToReference = r
 }
 
+// GetCondition of this DBClusterParameterGroup.
+func (mg *DBClusterParameterGroup) GetCondition(ct xpv2.ConditionType) xpv2.Condition {
+	return mg.Status.GetCondition(ct)
+}
+
+// GetManagementPolicies of this DBClusterParameterGroup.
+func (mg *DBClusterParameterGroup) GetManagementPolicies() xpv2.ManagementPolicies {
+	return mg.Spec.ManagementPolicies
+}
+
+// GetProviderConfigReference of this DBClusterParameterGroup.
+func (mg *DBClusterParameterGroup) GetProviderConfigReference() *xpv2.ProviderConfigReference {
+	return mg.Spec.ProviderConfigReference
+}
+
+// GetWriteConnectionSecretToReference of this DBClusterParameterGroup.
+func (mg *DBClusterParameterGroup) GetWriteConnectionSecretToReference() *xpv2.LocalSecretReference {
+	return mg.Spec.WriteConnectionSecretToReference
+}
+
+// SetConditions of this DBClusterParameterGroup.
+func (mg *DBClusterParameterGroup) SetConditions(c ...xpv2.Condition) {
+	mg.Status.SetConditions(c...)
+}
+
+// SetManagementPolicies of this DBClusterParameterGroup.
+func (mg *DBClusterParameterGroup) SetManagementPolicies(r xpv2.ManagementPolicies) {
+	mg.Spec.ManagementPolicies = r
+}
+
+// SetProviderConfigReference of this DBClusterParameterGroup.
+func (mg *DBClusterParameterGroup) SetProviderConfigReference(r *xpv2.ProviderConfigReference) {
+	mg.Spec.ProviderConfigReference = r
+}
+
+// SetWriteConnectionSecretToReference of this DBClusterParameterGroup.
+func (mg *DBClusterParameterGroup) SetWriteConnectionSecretToReference(r *xpv2.LocalSecretReference) {
+	mg.Spec.WriteConnectionSecretToReference = r
+}
+
 // GetCondition of this DBInstance.
 func (mg *DBInstance) GetCondition(ct xpv2.ConditionType) xpv2.Condition {
 	return mg.Status.GetCondition(ct)
@@ -85,5 +125,45 @@ func (mg *DBInstance) SetProviderConfigReference(r *xpv2.ProviderConfigReference
 
 // SetWriteConnectionSecretToReference of this DBInstance.
 func (mg *DBInstance) SetWriteConnectionSecretToReference(r *xpv2.LocalSecretReference) {
+	mg.Spec.WriteConnectionSecretToReference = r
+}
+
+// GetCondition of this DBSubnetGroup.
+func (mg *DBSubnetGroup) GetCondition(ct xpv2.ConditionType) xpv2.Condition {
+	return mg.Status.GetCondition(ct)
+}
+
+// GetManagementPolicies of this DBSubnetGroup.
+func (mg *DBSubnetGroup) GetManagementPolicies() xpv2.ManagementPolicies {
+	return mg.Spec.ManagementPolicies
+}
+
+// GetProviderConfigReference of this DBSubnetGroup.
+func (mg *DBSubnetGroup) GetProviderConfigReference() *xpv2.ProviderConfigReference {
+	return mg.Spec.ProviderConfigReference
+}
+
+// GetWriteConnectionSecretToReference of this DBSubnetGroup.
+func (mg *DBSubnetGroup) GetWriteConnectionSecretToReference() *xpv2.LocalSecretReference {
+	return mg.Spec.WriteConnectionSecretToReference
+}
+
+// SetConditions of this DBSubnetGroup.
+func (mg *DBSubnetGroup) SetConditions(c ...xpv2.Condition) {
+	mg.Status.SetConditions(c...)
+}
+
+// SetManagementPolicies of this DBSubnetGroup.
+func (mg *DBSubnetGroup) SetManagementPolicies(r xpv2.ManagementPolicies) {
+	mg.Spec.ManagementPolicies = r
+}
+
+// SetProviderConfigReference of this DBSubnetGroup.
+func (mg *DBSubnetGroup) SetProviderConfigReference(r *xpv2.ProviderConfigReference) {
+	mg.Spec.ProviderConfigReference = r
+}
+
+// SetWriteConnectionSecretToReference of this DBSubnetGroup.
+func (mg *DBSubnetGroup) SetWriteConnectionSecretToReference(r *xpv2.LocalSecretReference) {
 	mg.Spec.WriteConnectionSecretToReference = r
 }

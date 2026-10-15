@@ -115,7 +115,7 @@ func GenerateDBInstance(resp *svcsdk.DescribeDBInstancesOutput) *svcapitypes.DBI
 			cr.Status.AtProvider.DBInstanceStatus = nil
 		}
 		if elem.DBSubnetGroup != nil {
-			f11 := &svcapitypes.DBSubnetGroup{}
+			f11 := &svcapitypes.DBSubnetGroup_SDK{}
 			if elem.DBSubnetGroup.DBSubnetGroupArn != nil {
 				f11.DBSubnetGroupARN = elem.DBSubnetGroup.DBSubnetGroupArn
 			}

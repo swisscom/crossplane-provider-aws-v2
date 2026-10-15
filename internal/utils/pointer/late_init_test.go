@@ -17,10 +17,11 @@ limitations under the License.
 package pointer
 
 import (
-	"github.com/google/go-cmp/cmp"
-	"k8s.io/utils/ptr"
 	"reflect"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"k8s.io/utils/ptr"
 )
 
 func expect[T any](t *testing.T, got, want T) {

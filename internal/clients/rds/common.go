@@ -165,7 +165,7 @@ func PasswordUpToDate(ctx context.Context, kube client.Client, cr svcapitypes.RD
 	passwordFromSecret := desiredPassword != ""
 	secretPasswordMatchesCachedPassword := desiredPassword == cachedPassword
 	newPasswordFromSecret := passwordFromSecret && !secretPasswordMatchesCachedPassword
-	upToDate = !(newPasswordFromSecret || wasRestored)
+	upToDate = !newPasswordFromSecret && !wasRestored
 
 	return upToDate, desiredPassword, nil
 }

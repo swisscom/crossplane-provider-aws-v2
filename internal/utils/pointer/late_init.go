@@ -17,9 +17,10 @@ limitations under the License.
 package pointer
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
-	"time"
 )
 
 // LateInitialize return from if current matches the default value of T.

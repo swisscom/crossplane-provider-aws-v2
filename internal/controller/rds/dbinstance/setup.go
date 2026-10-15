@@ -22,15 +22,16 @@ import (
 	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"k8s.io/utils/ptr"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
 	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
 	dbinstance "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/rds"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/rds/utils"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/jsonpatch"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
-	"k8s.io/utils/ptr"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // error constants
@@ -707,8 +708,8 @@ func (s *shared) isUpToDate(ctx context.Context, cr *svcapitypes.DBInstance, out
 	// If the instance is a read replica and the password was not created before, and it is not assumed to be
 	// generated/created(by autogenerate or masterUserPasswordSecretRef), we don't check the password. By
 	// default, a read replica has the same credentials as the primary instance.
-	if !(pointer.StringValue(cr.Status.AtProvider.DatabaseRole) == databaseRoleReadReplica &&
-		!autogenerate && masterUserPasswordSecretRef == nil && !cachedMasterPasswordExist) {
+	if pointer.StringValue(cr.Status.AtProvider.DatabaseRole) != databaseRoleReadReplica ||
+		autogenerate || masterUserPasswordSecretRef != nil || cachedMasterPasswordExist {
 		passwordIsUpToDate, desiredPassword, err := dbinstance.PasswordUpToDate(ctx, s.kube, cr)
 		s.cache.desiredPassword = desiredPassword
 		s.cache.passwordChanged = !passwordIsUpToDate
@@ -763,8 +764,8 @@ func (s *shared) isUpToDate(ctx context.Context, cr *svcapitypes.DBInstance, out
 					gp3AllocatedStorageThreshold(cr), pointer.StringValue(cr.Spec.ForProvider.Engine))
 			}
 		} else {
-			iopsChanged = !(pointer.Int64Value(cr.Spec.ForProvider.IOPS) == int64(pointer.Int32Value(db.Iops)))
-			storageThroughputChanged = !(pointer.Int64Value(cr.Spec.ForProvider.StorageThroughput) == int64(pointer.Int32Value(db.StorageThroughput)))
+			iopsChanged = pointer.Int64Value(cr.Spec.ForProvider.IOPS) != int64(pointer.Int32Value(db.Iops))
+			storageThroughputChanged = pointer.Int64Value(cr.Spec.ForProvider.StorageThroughput) != int64(pointer.Int32Value(db.StorageThroughput))
 		}
 	}
 	s.cache.engineVersionUpToDate = isEngineVersionUpToDate(cr, out)
@@ -950,6 +951,9 @@ func newCustomExternal(kube client.Client, client Client) *customExternal {
 }
 
 func (s *shared) postCreate(ctx context.Context, cr *svcapitypes.DBInstance, out *svcsdk.CreateDBInstanceOutput, extCreation managed.ExternalCreation, err error) (managed.ExternalCreation, error) {
+	if err != nil {
+		return managed.ExternalCreation{}, err
+	}
 	cd, err := s.updateConnectionDetails(ctx, cr, managed.ConnectionDetails{})
 	if err != nil {
 		return managed.ExternalCreation{}, err

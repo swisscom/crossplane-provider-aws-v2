@@ -152,8 +152,9 @@ func AddExternalTags(mg resource.Managed, spec []*svcapitypes.Tag) []*svcapitype
 
 // GetExternalTags is a wrapper around resource.GetExternalTags to return a sorted array instead of a map
 func GetExternalTags(mg resource.Managed) []*svcapitypes.Tag {
-	externalTags := []*svcapitypes.Tag{}
-	for k, v := range resource.GetExternalTags(mg) {
+	tags := resource.GetExternalTags(mg)
+	externalTags := make([]*svcapitypes.Tag, 0, len(tags))
+	for k, v := range tags {
 		externalTags = append(externalTags, &svcapitypes.Tag{Key: pointer.ToOrNilIfZeroValue(k), Value: pointer.ToOrNilIfZeroValue(v)})
 	}
 

@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	svcapitypes "github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1"
+	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
 )
 
 // Publicly usable variables

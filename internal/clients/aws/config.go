@@ -36,7 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/teeverr/provider-aws-v2/apis/v1alpha1"
+	"github.com/swisscom/crossplane-provider-aws-v2/apis/v1alpha1"
 )
 
 const (

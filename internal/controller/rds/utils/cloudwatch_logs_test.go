@@ -23,7 +23,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
-	"github.com/teeverr/provider-aws-v2/internal/utils/pointer"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
 func strPtrs(vals ...string) []*string {

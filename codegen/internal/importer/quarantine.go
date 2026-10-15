@@ -36,7 +36,7 @@ import (
 	"golang.org/x/tools/go/packages"
 	"sigs.k8s.io/yaml"
 
-	"github.com/teeverr/provider-aws-v2/codegen/internal/generator"
+	"github.com/swisscom/crossplane-provider-aws-v2/codegen/internal/generator"
 )
 
 const (

@@ -23,8 +23,8 @@ import (
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/rds"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 
-	"github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1"
-	"github.com/teeverr/provider-aws-v2/internal/utils/pointer"
+	"github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
 // ProcessorFeatures converts the processor features of p to SDK types.

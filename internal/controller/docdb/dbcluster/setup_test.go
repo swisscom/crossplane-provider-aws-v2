@@ -38,11 +38,11 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	svcapitypes "github.com/teeverr/provider-aws-v2/apis/docdb/v1alpha1"
-	awsclient "github.com/teeverr/provider-aws-v2/internal/clients/aws"
-	fake "github.com/teeverr/provider-aws-v2/internal/clients/docdb/fake"
-	"github.com/teeverr/provider-aws-v2/internal/utils/compare"
-	pointer "github.com/teeverr/provider-aws-v2/internal/utils/pointer"
+	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
+	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
+	fake "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/docdb/fake"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
+	pointer "github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
 var (

@@ -21,7 +21,7 @@ import (
 
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 
-	"github.com/teeverr/provider-aws-v2/internal/utils/pointer"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
 // AreSameElements reports whether the desired and observed slices contain

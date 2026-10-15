@@ -23,9 +23,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 
-	svcapitypes "github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1"
-	"github.com/teeverr/provider-aws-v2/internal/controller/rds/utils"
-	"github.com/teeverr/provider-aws-v2/internal/utils/pointer"
+	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/rds/utils"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
 // setObservedForComparison fills modifiable fields that DescribeDBInstances

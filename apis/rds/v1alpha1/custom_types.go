@@ -245,7 +245,7 @@ type CustomDBInstanceParameters struct {
 	// [Read replica limitations with SQL Server]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/SQLServer.ReadReplicas.html#SQLServer.ReadReplicas.Limitations
 	// [Version and licensing considerations for RDS for Oracle replicas]: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/oracle-read-replicas.limitations.html#oracle-read-replicas.limitations.versions-and-licenses
 	// +immutable
-	// +crossplane:generate:reference:type=github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1.DBInstance
+	// +crossplane:generate:reference:type=github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1.DBInstance
 	SourceDBInstanceID *string `json:"sourceDBInstanceID,omitempty"`
 
 	// SourceDBInstanceIDRef is a reference to a DBInstance used to set

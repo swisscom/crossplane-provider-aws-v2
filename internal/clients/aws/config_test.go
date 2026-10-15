@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/teeverr/provider-aws-v2/apis/v1alpha1"
+	"github.com/swisscom/crossplane-provider-aws-v2/apis/v1alpha1"
 )
 
 const nsA = "team-a"

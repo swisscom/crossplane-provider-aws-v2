@@ -1,4 +1,4 @@
-module github.com/teeverr/provider-aws-v2
+module github.com/swisscom/crossplane-provider-aws-v2
 
 go 1.26.0
 

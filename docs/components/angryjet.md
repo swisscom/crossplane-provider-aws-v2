@@ -34,7 +34,7 @@ A reference lets a user point at another managed resource instead of
 copying its ID. In a hand-written type (`apis/rds/v1alpha1/custom_types.go`):
 
 ```go
-// +crossplane:generate:reference:type=github.com/teeverr/provider-aws-v2/apis/rds/v1alpha1.DBInstance
+// +crossplane:generate:reference:type=github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1.DBInstance
 SourceDBInstanceID *string `json:"sourceDBInstanceID,omitempty"`
 
 // +optional

@@ -88,6 +88,11 @@ linters:
       - linters:
           - staticcheck
         text: 'SA3000:'
+      # Table tests ported from provider-aws select through embedded
+      # args/want structs; keep them close to upstream.
+      - linters:
+          - staticcheck
+        text: 'QF1008:'
       - linters:
           - gosec
         text: 'G101:'

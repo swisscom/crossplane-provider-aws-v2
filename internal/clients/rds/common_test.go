@@ -34,6 +34,8 @@ import (
 const (
 	ns  = "team-a"
 	uid = "1234"
+
+	passwordKey = "password"
 )
 
 func newKube(t *testing.T, objs ...client.Object) client.Client {
@@ -87,13 +89,13 @@ func TestCacheLivesInManagedResourceNamespace(t *testing.T) {
 }
 
 func TestGetSecretValue(t *testing.T) {
-	ref := &xpv2.LocalSecretKeySelector{LocalSecretReference: xpv2.LocalSecretReference{Name: "creds"}, Key: "password"}
+	ref := &xpv2.LocalSecretKeySelector{LocalSecretReference: xpv2.LocalSecretReference{Name: "creds"}, Key: passwordKey}
 	cases := map[string]struct {
 		objs []client.Object
 		want string
 	}{
-		"SameNamespace":  {objs: []client.Object{secret(ns, "creds", map[string]string{"password": "s3cret"})}, want: "s3cret"},
-		"OtherNamespace": {objs: []client.Object{secret("other", "creds", map[string]string{"password": "s3cret"})}},
+		"SameNamespace":  {objs: []client.Object{secret(ns, "creds", map[string]string{passwordKey: "s3cret"})}, want: "s3cret"},
+		"OtherNamespace": {objs: []client.Object{secret("other", "creds", map[string]string{passwordKey: "s3cret"})}},
 		"MissingKey":     {objs: []client.Object{secret(ns, "creds", nil)}},
 		"MissingSecret":  {},
 	}
@@ -108,7 +110,7 @@ func TestGetSecretValue(t *testing.T) {
 }
 
 func TestPasswords(t *testing.T) {
-	ref := &xpv2.LocalSecretKeySelector{LocalSecretReference: xpv2.LocalSecretReference{Name: "creds"}, Key: "password"}
+	ref := &xpv2.LocalSecretKeySelector{LocalSecretReference: xpv2.LocalSecretReference{Name: "creds"}, Key: passwordKey}
 	cache := func(data map[string]string) client.Object { return secret(ns, "dbinstance."+uid, data) }
 	cases := map[string]struct {
 		ref          *xpv2.LocalSecretKeySelector
@@ -123,13 +125,13 @@ func TestPasswords(t *testing.T) {
 		},
 		"SecretMatchesCache": {
 			ref:          ref,
-			objs:         []client.Object{cache(map[string]string{PasswordCacheKey: "pw"}), secret(ns, "creds", map[string]string{"password": "pw"})},
+			objs:         []client.Object{cache(map[string]string{PasswordCacheKey: "pw"}), secret(ns, "creds", map[string]string{passwordKey: "pw"})},
 			wantDesired:  "pw",
 			wantUpToDate: true,
 		},
 		"SecretChanged": {
 			ref:         ref,
-			objs:        []client.Object{cache(map[string]string{PasswordCacheKey: "old"}), secret(ns, "creds", map[string]string{"password": "new"})},
+			objs:        []client.Object{cache(map[string]string{PasswordCacheKey: "old"}), secret(ns, "creds", map[string]string{passwordKey: "new"})},
 			wantDesired: "new",
 		},
 		"Restored": {

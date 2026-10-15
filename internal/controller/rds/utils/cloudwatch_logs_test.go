@@ -26,6 +26,11 @@ import (
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
+const (
+	logAudit = "audit"
+	logError = "error"
+)
+
 func strPtrs(vals ...string) []*string {
 	out := make([]*string, 0, len(vals))
 	for _, v := range vals {
@@ -40,10 +45,10 @@ func TestAreSameElements(t *testing.T) {
 		a2   []string
 		want bool
 	}{
-		"SameOrder":        {strPtrs("audit", "error"), []string{"audit", "error"}, true},
-		"DifferentOrder":   {strPtrs("audit", "error"), []string{"error", "audit"}, true},
-		"DifferentLength":  {strPtrs("audit"), []string{"audit", "error"}, false},
-		"DifferentElement": {strPtrs("audit", "error"), []string{"audit", "general"}, false},
+		"SameOrder":        {strPtrs(logAudit, logError), []string{logAudit, logError}, true},
+		"DifferentOrder":   {strPtrs(logAudit, logError), []string{logError, logAudit}, true},
+		"DifferentLength":  {strPtrs(logAudit), []string{logAudit, logError}, false},
+		"DifferentElement": {strPtrs(logAudit, logError), []string{logAudit, "general"}, false},
 		"BothEmpty":        {nil, nil, true},
 	}
 
@@ -63,25 +68,25 @@ func TestGenerateCloudWatchExportConfiguration(t *testing.T) {
 		want    *svcsdktypes.CloudwatchLogsExportConfiguration
 	}{
 		"NoChange": {
-			spec:    strPtrs("audit", "error"),
-			current: []string{"error", "audit"},
+			spec:    strPtrs(logAudit, logError),
+			current: []string{logError, logAudit},
 		},
 		"EnableOnly": {
-			spec:    strPtrs("audit", "error"),
-			current: []string{"audit"},
-			want:    &svcsdktypes.CloudwatchLogsExportConfiguration{EnableLogTypes: []string{"error"}},
+			spec:    strPtrs(logAudit, logError),
+			current: []string{logAudit},
+			want:    &svcsdktypes.CloudwatchLogsExportConfiguration{EnableLogTypes: []string{logError}},
 		},
 		"DisableOnly": {
-			spec:    strPtrs("audit"),
-			current: []string{"audit", "error"},
-			want:    &svcsdktypes.CloudwatchLogsExportConfiguration{DisableLogTypes: []string{"error"}},
+			spec:    strPtrs(logAudit),
+			current: []string{logAudit, logError},
+			want:    &svcsdktypes.CloudwatchLogsExportConfiguration{DisableLogTypes: []string{logError}},
 		},
 		"EnableAndDisable": {
-			spec:    strPtrs("audit", "general"),
-			current: []string{"audit", "error"},
+			spec:    strPtrs(logAudit, "general"),
+			current: []string{logAudit, logError},
 			want: &svcsdktypes.CloudwatchLogsExportConfiguration{
 				EnableLogTypes:  []string{"general"},
-				DisableLogTypes: []string{"error"},
+				DisableLogTypes: []string{logError},
 			},
 		},
 		"BothEmpty": {},

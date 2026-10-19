@@ -71,11 +71,17 @@ Otherwise set the external name.
 The AWS resources are kept; only the Kubernetes objects are replaced.
 
 1. Make the upjet `SecurityGroup` and rule resources orphan their AWS
-   resources: `managementPolicies` without `Delete` (or
-   `deletionPolicy: Orphan`). Apply, then delete the upjet objects.
+   resources: `managementPolicies: [Observe, Create, Update, LateInitialize]`
+   (namespaced resources have no `deletionPolicy`). Apply, wait until
+   they are synced, then delete the upjet objects.
 2. Create the resources of this provider with the
    `crossplane.io/external-name` annotation copied from the upjet objects
-   (`sg-…` for groups, `sgr-…` for rules).
+   (`sg-…` for groups, `sgr-…` for rules). Check that
+   `status.atProvider.groupID`/`securityGroupRuleID` equal the copied IDs:
+   an ID that doesn't exist makes the provider create a new resource.
+
+Verified on 2026-10-19 in a dev account: IDs unchanged, no create calls,
+one update each (Crossplane's `crossplane-*` tags).
 
 | upjet | here |
 |-------|------|

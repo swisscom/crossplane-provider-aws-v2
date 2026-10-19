@@ -128,10 +128,9 @@ func preCreate(_ context.Context, cr *svcapitypes.SecurityGroup, obj *svcsdk.Cre
 }
 
 // postCreate revokes the rules allowing all egress that AWS adds to every new
-// group, so that egress is only what SecurityGroupEgressRules allow (as in
-// Terraform). If that fails, it deletes the group again:
-// a later reconcile would not retry the revoke, but it recreates a group
-// that is gone.
+// group, so that egress is only what SecurityGroupEgressRules allow. If that
+// fails, it deletes the group again: a later reconcile would not retry the
+// revoke, but it recreates a group that is gone.
 func (h *hooks) postCreate(ctx context.Context, cr *svcapitypes.SecurityGroup, resp *svcsdk.CreateSecurityGroupOutput, cre managed.ExternalCreation, err error) (managed.ExternalCreation, error) {
 	if err != nil {
 		return cre, err

@@ -51,6 +51,9 @@ clientOperations:          # extra SDK operations in the Client interface
 
 ## The generated controller
 
+A worked example of one kind, hook by hook:
+[Anatomy of a kind](../anatomy-of-a-kind.md).
+
 ```mermaid
 classDiagram
     class connector {
@@ -104,6 +107,12 @@ skip the delete call (e.g. already deleting).
 | `isUpToDate` | `isUpToDateUpdatable`, or always up to date if the kind has no update or read operation |
 | `preCreate`/`postCreate`, `preUpdate`/`postUpdate`, `preDelete`/`postDelete` | no-op |
 
+**Kinds without an update operation** (e.g. ec2 `SecurityGroup`: AWS has
+no "modify security group"): `Update` calls a single `update` hook (default:
+do nothing) instead of `preUpdate` → SDK call → `postUpdate`, and
+`isUpToDate` defaults to always up to date, since nothing could be
+updated. Set both if something can change, e.g. tags via `CreateTags`.
+
 The generated controller does **not** set the `Available` condition: that
 needs knowledge of the resource's states and belongs in `postObserve`.
 
@@ -126,6 +135,11 @@ func init() {
 	}
 }
 ```
+
+`configure` runs once in `Setup`, before any `Connect`; it is the only
+hook that receives the manager. Code that needs the manager inside a
+wrapped client (e.g. an event recorder) can set `wrapExternal` from
+`configure` (ec2 `SecurityGroup`, `adoptingWrapper`).
 
 Reconciler options from `configure` are appended after the defaults, so
 they can override them (e.g. a custom connector). Logger, poll interval,

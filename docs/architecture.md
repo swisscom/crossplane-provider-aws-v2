@@ -140,6 +140,8 @@ a decision of similar weight.
 
 ## Further reading
 
+- [anatomy-of-a-kind.md](anatomy-of-a-kind.md): one kind (ec2 SecurityGroup)
+  through its code, hook by hook; start here to read or change a kind.
 - [development.md](development.md): workflow, conventions, definition of done.
 - [porting-notes.md](porting-notes.md): pitfalls when porting provider-aws code.
 - [`AGENTS.md`](../AGENTS.md): condensed rules for AI coding agents.

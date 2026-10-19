@@ -4,7 +4,7 @@ Manages an EC2 (VPC) security group without its rules
 (`SecurityGroup.ec2.aws2.crossplane.io`). Rules are separate kinds:
 [`SecurityGroupIngressRule`](../securitygroupingressrule/README.md) and
 [`SecurityGroupEgressRule`](../securitygroupegressrule/README.md), as in the AWS
-API and Terraform ([ADR 0009](../../../../docs/adr/0009-ec2-security-group-model.md)).
+API ([ADR 0009](../../../../docs/adr/0009-ec2-security-group-model.md)).
 
 ## Origin
 

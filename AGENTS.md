@@ -38,7 +38,7 @@ Generated from scratch: `ec2/SecurityGroup`, `ec2/SecurityGroupIngressRule`,
 | `codegen/` | Separate Go module: generator (`cmd/generate`), importer (`cmd/import`), templates |
 | `package/crds` | Generated CRDs |
 | `build/` | Crossplane build submodule (`make submodules`) — don't edit |
-| `docs/` | `architecture.md` (overview, start here), `components/` (one page per component), `adr/` (decisions), `development.md` (workflow, definition of done), `porting-notes.md` |
+| `docs/` | `architecture.md` (overview, start here), `anatomy-of-a-kind.md` (one kind through its code), `components/` (one page per component), `adr/` (decisions), `development.md` (workflow, definition of done), `porting-notes.md` |
 | `CHANGELOG.md` | User-visible changes (Keep a Changelog, "Unreleased") |
 
 ## Commands
@@ -69,6 +69,9 @@ compiles after `make generate`.
   (`internal/utils/compare`); hand-written ones should build on it.
   If a hook is missing, change the template in `codegen/templates`, regenerate,
   don't edit `zz_` files.
+- Validate spec values in hooks (`preCreate`, `isUpToDate`), not with CEL
+  (`x-kubernetes-validations`): CEL can't see AWS state or values filled in
+  by references ([ADR 0009](docs/adr/0009-ec2-security-group-model.md)).
 - Need another SDK operation in the controller? Add it to
   `apis/<svc>/codegen.yaml` and run `make services`.
 - API types keep ACK's `*int64`/`[]*string`; the SDK v2 uses `*int32`/`[]string`.

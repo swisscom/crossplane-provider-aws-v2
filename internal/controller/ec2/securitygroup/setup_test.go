@@ -18,6 +18,8 @@ package securitygroup
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,10 +27,12 @@ import (
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/clients/ec2/fake"
@@ -78,7 +82,7 @@ func crossplaneTags() []svcsdktypes.Tag {
 }
 
 func newTestExternal(m *fake.MockEC2Client) *adoptingExternal {
-	return &adoptingExternal{external: newExternal(nil, m, []option{setupExternal})}
+	return &adoptingExternal{external: newExternal(nil, m, []option{setupExternal}), record: event.NewNopRecorder()}
 }
 
 func TestObserve(t *testing.T) {
@@ -133,49 +137,6 @@ func TestObserve(t *testing.T) {
 			}},
 			want: want{externalName: testID, err: true},
 		},
-		"AdoptByName": {
-			cr: group(func(cr *svcapitypes.SecurityGroup) {
-				cr.Spec.ForProvider.AdoptExistingByName = aws.Bool(true)
-				cr.Spec.ForProvider.VPCID = aws.String(testVPC)
-			}),
-			mock: &fake.MockEC2Client{MockDescribeSecurityGroups: func(_ context.Context, in *svcsdk.DescribeSecurityGroupsInput) (*svcsdk.DescribeSecurityGroupsOutput, error) {
-				if len(in.Filters) > 0 {
-					want := []svcsdktypes.Filter{
-						{Name: aws.String("group-name"), Values: []string{testName}},
-						{Name: aws.String("vpc-id"), Values: []string{testVPC}},
-					}
-					if diff := cmp.Diff(want, in.Filters, cmpopts.IgnoreUnexported(svcsdktypes.Filter{})); diff != "" {
-						t.Errorf("Filters -want +got:\n%s", diff)
-					}
-				}
-				return observed(), nil
-			}},
-			want: want{exists: true, lateInit: true, externalName: testID},
-		},
-		"AdoptNoMatch": {
-			cr: group(func(cr *svcapitypes.SecurityGroup) { cr.Spec.ForProvider.AdoptExistingByName = aws.Bool(true) }),
-			mock: &fake.MockEC2Client{MockDescribeSecurityGroups: func(context.Context, *svcsdk.DescribeSecurityGroupsInput) (*svcsdk.DescribeSecurityGroupsOutput, error) {
-				return &svcsdk.DescribeSecurityGroupsOutput{}, nil
-			}},
-			want: want{},
-		},
-		"AdoptAmbiguous": {
-			cr: group(func(cr *svcapitypes.SecurityGroup) { cr.Spec.ForProvider.AdoptExistingByName = aws.Bool(true) }),
-			mock: &fake.MockEC2Client{MockDescribeSecurityGroups: func(context.Context, *svcsdk.DescribeSecurityGroupsInput) (*svcsdk.DescribeSecurityGroupsOutput, error) {
-				o := observed()
-				o.SecurityGroups = append(o.SecurityGroups, o.SecurityGroups[0])
-				return o, nil
-			}},
-			want: want{err: true},
-		},
-		"AdoptDefault": {
-			cr: group(func(cr *svcapitypes.SecurityGroup) {
-				cr.Spec.ForProvider.AdoptExistingByName = aws.Bool(true)
-				cr.Spec.ForProvider.GroupName = aws.String("default")
-			}),
-			mock: &fake.MockEC2Client{},
-			want: want{err: true},
-		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -196,13 +157,218 @@ func TestObserve(t *testing.T) {
 	}
 }
 
+// recorder records the events it receives.
+type recorder struct{ events []event.Event }
+
+func (r *recorder) Event(_ runtime.Object, e event.Event) { r.events = append(r.events, e) }
+
+func (r *recorder) WithAnnotations(...string) event.Recorder { return r }
+
+// describeCalls is a fake DescribeSecurityGroups that records its inputs and
+// answers lookups by name (Filters) and by ID (GroupIds) separately.
+type describeCalls struct {
+	inputs   []*svcsdk.DescribeSecurityGroupsInput
+	byName   func() (*svcsdk.DescribeSecurityGroupsOutput, error)
+	byID     func() (*svcsdk.DescribeSecurityGroupsOutput, error)
+	unexpect func(string)
+}
+
+func (d *describeCalls) mock(_ context.Context, in *svcsdk.DescribeSecurityGroupsInput) (*svcsdk.DescribeSecurityGroupsOutput, error) {
+	d.inputs = append(d.inputs, in)
+	switch {
+	case len(in.Filters) > 0 && d.byName != nil:
+		return d.byName()
+	case len(in.GroupIds) > 0 && d.byID != nil:
+		return d.byID()
+	}
+	d.unexpect(fmt.Sprintf("unexpected DescribeSecurityGroups(Filters %v, GroupIds %v)", in.Filters, in.GroupIds))
+	return nil, apiErr("Unexpected")
+}
+
+func nameFilter(name string) svcsdktypes.Filter {
+	return svcsdktypes.Filter{Name: aws.String("group-name"), Values: []string{name}}
+}
+
+func vpcFilter(vpc string) svcsdktypes.Filter {
+	return svcsdktypes.Filter{Name: aws.String("vpc-id"), Values: []string{vpc}}
+}
+
+func withAdopt(cr *svcapitypes.SecurityGroup) {
+	cr.Spec.ForProvider.AdoptExistingByName = aws.Bool(true)
+}
+
+func TestAdoptExistingByName(t *testing.T) {
+	found := func() (*svcsdk.DescribeSecurityGroupsOutput, error) { return observed(), nil }
+	none := func() (*svcsdk.DescribeSecurityGroupsOutput, error) {
+		return &svcsdk.DescribeSecurityGroupsOutput{}, nil
+	}
+	adopted := event.Normal(reasonAdopted, `Adopted existing security group sg-123 (name "web", VPC vpc-1) found by name`)
+
+	type want struct {
+		exists, lateInit bool
+		externalName     string
+		err              string
+		// filters of the lookup by name; nil: no lookup.
+		filters []svcsdktypes.Filter
+		// describes is the number of DescribeSecurityGroups calls.
+		describes int
+		events    []event.Event
+	}
+	cases := map[string]struct {
+		cr       *svcapitypes.SecurityGroup
+		describe describeCalls
+		want     want
+	}{
+		"DisabledByDefault": {
+			cr:   group(),
+			want: want{},
+		},
+		"DisabledExplicitly": {
+			cr:   group(func(cr *svcapitypes.SecurityGroup) { cr.Spec.ForProvider.AdoptExistingByName = aws.Bool(false) }),
+			want: want{},
+		},
+		"AdoptsInVPC": {
+			cr:       group(withAdopt, func(cr *svcapitypes.SecurityGroup) { cr.Spec.ForProvider.VPCID = aws.String(testVPC) }),
+			describe: describeCalls{byName: found, byID: found},
+			want: want{
+				exists: true, lateInit: true, externalName: testID,
+				filters: []svcsdktypes.Filter{nameFilter(testName), vpcFilter(testVPC)}, describes: 2,
+				events: []event.Event{adopted},
+			},
+		},
+		"AdoptsInAnyVPCWithoutVPCID": {
+			cr:       group(withAdopt),
+			describe: describeCalls{byName: found, byID: found},
+			want: want{
+				exists: true, lateInit: true, externalName: testID,
+				filters: []svcsdktypes.Filter{nameFilter(testName)}, describes: 2,
+				events: []event.Event{adopted},
+			},
+		},
+		"LooksUpSpecGroupName": {
+			cr:       group(withAdopt, func(cr *svcapitypes.SecurityGroup) { cr.Spec.ForProvider.GroupName = aws.String("other") }),
+			describe: describeCalls{byName: none},
+			want:     want{filters: []svcsdktypes.Filter{nameFilter("other")}, describes: 1},
+		},
+		"NoMatchCreates": {
+			cr:       group(withAdopt),
+			describe: describeCalls{byName: none},
+			want:     want{filters: []svcsdktypes.Filter{nameFilter(testName)}, describes: 1},
+		},
+		"Ambiguous": {
+			cr: group(withAdopt),
+			describe: describeCalls{byName: func() (*svcsdk.DescribeSecurityGroupsOutput, error) {
+				o := observed()
+				o.SecurityGroups = append(o.SecurityGroups, o.SecurityGroups[0])
+				return o, nil
+			}},
+			want: want{err: `adoptExistingByName: 2 security groups are named "web"`, filters: []svcsdktypes.Filter{nameFilter(testName)}, describes: 1},
+		},
+		"LookupFails": {
+			cr:       group(withAdopt),
+			describe: describeCalls{byName: func() (*svcsdk.DescribeSecurityGroupsOutput, error) { return nil, apiErr("UnauthorizedOperation") }},
+			want:     want{err: errAdoptDescribe, filters: []svcsdktypes.Filter{nameFilter(testName)}, describes: 1},
+		},
+		"RefusesDefaultInSpec": {
+			cr:   group(withAdopt, func(cr *svcapitypes.SecurityGroup) { cr.Spec.ForProvider.GroupName = aws.String("default") }),
+			want: want{err: errAdoptDefault},
+		},
+		"RefusesDefaultFromMetadataName": {
+			cr:   group(withAdopt, func(cr *svcapitypes.SecurityGroup) { cr.Name = "default" }),
+			want: want{err: errAdoptDefault},
+		},
+		"ExternalNameWins": {
+			cr:       group(withAdopt, withExternalName("sg-other")),
+			describe: describeCalls{byID: found},
+			want:     want{exists: true, lateInit: true, externalName: "sg-other", describes: 1},
+		},
+		"ExternalNameNotFoundCreatesWithoutLookup": {
+			cr:       group(withAdopt, withExternalName("sg-gone")),
+			describe: describeCalls{byID: func() (*svcsdk.DescribeSecurityGroupsOutput, error) { return nil, apiErr("InvalidGroup.NotFound") }},
+			want:     want{externalName: "sg-gone", describes: 1},
+		},
+		"ObserveAfterLookupFails": {
+			cr: group(withAdopt),
+			describe: describeCalls{byName: found, byID: func() (*svcsdk.DescribeSecurityGroupsOutput, error) {
+				return nil, apiErr("RequestLimitExceeded")
+			}},
+			want: want{err: "RequestLimitExceeded", filters: []svcsdktypes.Filter{nameFilter(testName)}, describes: 2},
+		},
+		"GoneAfterLookupNoEvent": {
+			cr: group(withAdopt),
+			describe: describeCalls{byName: found, byID: func() (*svcsdk.DescribeSecurityGroupsOutput, error) {
+				return nil, apiErr("InvalidGroup.NotFound")
+			}},
+			want: want{lateInit: true, externalName: testID, filters: []svcsdktypes.Filter{nameFilter(testName)}, describes: 2},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			d := tc.describe
+			d.unexpect = func(msg string) { t.Error(msg) }
+			rec := &recorder{}
+			e := newTestExternal(&fake.MockEC2Client{MockDescribeSecurityGroups: d.mock})
+			e.record = rec
+
+			obs, err := e.Observe(context.Background(), tc.cr)
+
+			if tc.want.err == "" && err != nil {
+				t.Fatalf("Observe() error = %v", err)
+			}
+			if tc.want.err != "" && (err == nil || !strings.Contains(err.Error(), tc.want.err)) {
+				t.Fatalf("Observe() error = %v, want containing %q", err, tc.want.err)
+			}
+			if tc.want.err == "" && (obs.ResourceExists != tc.want.exists || obs.ResourceLateInitialized != tc.want.lateInit) {
+				t.Errorf("Observe() = exists %v, lateInit %v; want %v, %v", obs.ResourceExists, obs.ResourceLateInitialized, tc.want.exists, tc.want.lateInit)
+			}
+			if tc.want.err == "" {
+				if got := meta.GetExternalName(tc.cr); got != tc.want.externalName {
+					t.Errorf("external name = %q, want %q", got, tc.want.externalName)
+				}
+			}
+			if len(d.inputs) != tc.want.describes {
+				t.Errorf("DescribeSecurityGroups calls = %d, want %d", len(d.inputs), tc.want.describes)
+			}
+			var filters []svcsdktypes.Filter
+			for _, in := range d.inputs {
+				if len(in.Filters) > 0 {
+					filters = in.Filters
+				}
+			}
+			if diff := cmp.Diff(tc.want.filters, filters, cmpopts.IgnoreUnexported(svcsdktypes.Filter{})); diff != "" {
+				t.Errorf("lookup filters -want +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.events, rec.events); diff != "" {
+				t.Errorf("events -want +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAdoptingWrapper(t *testing.T) {
+	rec := &recorder{}
+	got, ok := adoptingWrapper(rec)(newExternal(nil, &fake.MockEC2Client{}, nil)).(*adoptingExternal)
+	if !ok {
+		t.Fatalf("adoptingWrapper() returned %T, want *adoptingExternal", got)
+	}
+	if got.record != rec {
+		t.Errorf("adoptingWrapper() recorder = %v, want %v", got.record, rec)
+	}
+}
+
 func TestCreate(t *testing.T) {
 	created := func(context.Context, *svcsdk.CreateSecurityGroupInput) (*svcsdk.CreateSecurityGroupOutput, error) {
 		return &svcsdk.CreateSecurityGroupOutput{GroupId: aws.String(testID)}, nil
 	}
+	groupNotFound := func(context.Context, *svcsdk.RevokeSecurityGroupEgressInput) (*svcsdk.RevokeSecurityGroupEgressOutput, error) {
+		return nil, apiErr("InvalidGroup.NotFound")
+	}
 	cases := map[string]struct {
 		mock        *fake.MockEC2Client
+		cancelled   bool
 		wantErr     bool
+		wantErrText string
+		wantNoName  bool
 		wantRevokes int
 		wantDeletes int
 	}{
@@ -233,8 +399,45 @@ func TestCreate(t *testing.T) {
 				return nil, apiErr("UnauthorizedOperation")
 			}},
 			wantErr:     true,
+			wantErrText: errRevokeEgress,
 			wantRevokes: 1,
 			wantDeletes: 1,
+		},
+		"RollbackFails": {
+			mock: &fake.MockEC2Client{MockCreateSecurityGroup: created,
+				MockRevokeSecurityGroupEgress: func(context.Context, *svcsdk.RevokeSecurityGroupEgressInput) (*svcsdk.RevokeSecurityGroupEgressOutput, error) {
+					return nil, apiErr("UnauthorizedOperation")
+				},
+				MockDeleteSecurityGroup: func(context.Context, *svcsdk.DeleteSecurityGroupInput) (*svcsdk.DeleteSecurityGroupOutput, error) {
+					return nil, apiErr("RequestLimitExceeded")
+				}},
+			wantErr:     true,
+			wantErrText: errRollback,
+			wantRevokes: 1,
+			wantDeletes: 1,
+		},
+		"GroupNeverVisibleRollsBack": {
+			mock:        &fake.MockEC2Client{MockCreateSecurityGroup: created, MockRevokeSecurityGroupEgress: groupNotFound},
+			wantErr:     true,
+			wantErrText: errRevokeEgress,
+			wantRevokes: 3, // first try plus one per revokeBackoff entry
+			wantDeletes: 1,
+		},
+		"CancelledWhileRetryingRollsBack": {
+			mock:        &fake.MockEC2Client{MockCreateSecurityGroup: created, MockRevokeSecurityGroupEgress: groupNotFound},
+			cancelled:   true,
+			wantErr:     true,
+			wantErrText: "context canceled",
+			wantRevokes: 1,
+			wantDeletes: 1,
+		},
+		"CreateFails": {
+			mock: &fake.MockEC2Client{MockCreateSecurityGroup: func(context.Context, *svcsdk.CreateSecurityGroupInput) (*svcsdk.CreateSecurityGroupOutput, error) {
+				return nil, apiErr("InvalidGroup.Duplicate")
+			}},
+			wantErr:     true,
+			wantErrText: "InvalidGroup.Duplicate",
+			wantNoName:  true,
 		},
 	}
 	for name, tc := range cases {
@@ -242,12 +445,24 @@ func TestCreate(t *testing.T) {
 			cr := group(func(cr *svcapitypes.SecurityGroup) {
 				cr.Spec.ForProvider.Tags = []*svcapitypes.Tag{{Key: aws.String("team"), Value: aws.String("a")}}
 			})
-			_, err := newTestExternal(tc.mock).Create(context.Background(), cr)
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if tc.cancelled {
+				cancel()
+			}
+			_, err := newTestExternal(tc.mock).Create(ctx, cr)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("Create() error = %v, wantErr %v", err, tc.wantErr)
 			}
-			if got := meta.GetExternalName(cr); got != testID {
-				t.Errorf("external name = %q, want %q", got, testID)
+			if err != nil && !strings.Contains(err.Error(), tc.wantErrText) {
+				t.Errorf("Create() error = %v, want containing %q", err, tc.wantErrText)
+			}
+			wantName := testID
+			if tc.wantNoName {
+				wantName = ""
+			}
+			if got := meta.GetExternalName(cr); got != wantName {
+				t.Errorf("external name = %q, want %q", got, wantName)
 			}
 			in := tc.mock.Calls["CreateSecurityGroup"][0].(*svcsdk.CreateSecurityGroupInput)
 			if aws.ToString(in.GroupName) != testName {

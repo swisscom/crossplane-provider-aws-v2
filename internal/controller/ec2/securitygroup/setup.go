@@ -18,6 +18,7 @@ package securitygroup
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -25,6 +26,7 @@ import (
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
 	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
@@ -47,7 +49,11 @@ const (
 	errFmtAdoptAmbiguous = "adoptExistingByName: %d security groups are named %q; set vpcID or the crossplane.io/external-name annotation"
 	errAdoptDefault      = "adoptExistingByName: the default security group can't be adopted"
 	errInUse             = "security group is still in use (by network interfaces or rules of other groups)"
+
+	msgFmtAdopted = "Adopted existing security group %s (name %q, VPC %s) found by name"
 )
+
+const reasonAdopted event.Reason = "AdoptedExistingSecurityGroup"
 
 // revokeBackoff is the wait before each retry of revoking the default egress
 // rule of a new group, which AWS may not know yet (eventual consistency).
@@ -123,7 +129,7 @@ func preCreate(_ context.Context, cr *svcapitypes.SecurityGroup, obj *svcsdk.Cre
 
 // postCreate revokes the rules allowing all egress that AWS adds to every new
 // group, so that egress is only what SecurityGroupEgressRules allow (as in
-// the Terraform/upjet provider). If that fails, it deletes the group again:
+// Terraform). If that fails, it deletes the group again:
 // a later reconcile would not retry the revoke, but it recreates a group
 // that is gone.
 func (h *hooks) postCreate(ctx context.Context, cr *svcapitypes.SecurityGroup, resp *svcsdk.CreateSecurityGroupOutput, cre managed.ExternalCreation, err error) (managed.ExternalCreation, error) {
@@ -195,29 +201,34 @@ func postDelete(_ context.Context, _ *svcapitypes.SecurityGroup, _ *svcsdk.Delet
 // generated client: without an external name, it looks the group up by name.
 type adoptingExternal struct {
 	*external
+	record event.Recorder
 }
 
 func (e *adoptingExternal) Observe(ctx context.Context, cr *svcapitypes.SecurityGroup) (managed.ExternalObservation, error) {
 	if meta.GetExternalName(cr) != "" || !pointer.BoolValue(cr.Spec.ForProvider.AdoptExistingByName) {
 		return e.external.Observe(ctx, cr)
 	}
-	id, err := e.findByName(ctx, cr)
-	if err != nil || id == "" {
+	g, err := e.findByName(ctx, cr)
+	if err != nil || g == nil {
 		return managed.ExternalObservation{}, err
 	}
+	id := pointer.StringValue(g.GroupId)
 	meta.SetExternalName(cr, id)
 	obs, err := e.external.Observe(ctx, cr)
+	if err == nil && obs.ResourceExists {
+		e.record.Event(cr, event.Normal(reasonAdopted, fmt.Sprintf(msgFmtAdopted, id, pointer.StringValue(g.GroupName), pointer.StringValue(g.VpcId))))
+	}
 	// Have the runtime save the external name.
 	obs.ResourceLateInitialized = true
 	return obs, err
 }
 
-// findByName returns the ID of the group with the name of cr, in the VPC of
-// cr if set, or "" if there is none.
-func (e *adoptingExternal) findByName(ctx context.Context, cr *svcapitypes.SecurityGroup) (string, error) {
+// findByName returns the group with the name of cr, in the VPC of cr if
+// set, or nil if there is none.
+func (e *adoptingExternal) findByName(ctx context.Context, cr *svcapitypes.SecurityGroup) (*svcsdktypes.SecurityGroup, error) {
 	name := groupName(cr)
 	if name == defaultGroupName {
-		return "", errors.New(errAdoptDefault)
+		return nil, errors.New(errAdoptDefault)
 	}
 	filters := []svcsdktypes.Filter{{Name: aws.String("group-name"), Values: []string{name}}}
 	if vpc := pointer.StringValue(cr.Spec.ForProvider.VPCID); vpc != "" {
@@ -225,15 +236,22 @@ func (e *adoptingExternal) findByName(ctx context.Context, cr *svcapitypes.Secur
 	}
 	resp, err := e.client.DescribeSecurityGroups(ctx, &svcsdk.DescribeSecurityGroupsInput{Filters: filters})
 	if err != nil {
-		return "", awsclient.Wrap(err, errAdoptDescribe)
+		return nil, awsclient.Wrap(err, errAdoptDescribe)
 	}
 	switch n := len(resp.SecurityGroups); n {
 	case 0:
-		return "", nil
+		return nil, nil
 	case 1:
-		return pointer.StringValue(resp.SecurityGroups[0].GroupId), nil
+		return &resp.SecurityGroups[0], nil
 	default:
-		return "", errors.Errorf(errFmtAdoptAmbiguous, n, name)
+		return nil, errors.Errorf(errFmtAdoptAmbiguous, n, name)
+	}
+}
+
+// adoptingWrapper returns a wrapExternal that emits adoption events to rec.
+func adoptingWrapper(rec event.Recorder) func(*external) managed.TypedExternalClient[*svcapitypes.SecurityGroup] {
+	return func(e *external) managed.TypedExternalClient[*svcapitypes.SecurityGroup] {
+		return &adoptingExternal{external: e, record: rec}
 	}
 }
 
@@ -251,6 +269,8 @@ func setupExternal(e *external) {
 }
 
 func configureSecurityGroup(mgr ctrl.Manager, _ controller.Options) ([]option, []managed.ReconcilerOption, error) {
+	// Setup reads wrapExternal only after configure, in Connect.
+	wrapExternal = adoptingWrapper(event.NewAPIRecorder(mgr.GetEventRecorderFor(managed.ControllerName(svcapitypes.SecurityGroupGroupKind)))) //nolint:staticcheck // same recorder as the generated controller
 	return []option{setupExternal}, []managed.ReconcilerOption{
 		managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
 		// AWS assigns the group ID; the default would use metadata.name.
@@ -260,7 +280,5 @@ func configureSecurityGroup(mgr ctrl.Manager, _ controller.Options) ([]option, [
 
 func init() {
 	configure = configureSecurityGroup
-	wrapExternal = func(e *external) managed.TypedExternalClient[*svcapitypes.SecurityGroup] {
-		return &adoptingExternal{external: e}
-	}
+	wrapExternal = adoptingWrapper(event.NewNopRecorder())
 }

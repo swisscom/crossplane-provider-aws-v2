@@ -7,24 +7,21 @@
 
 provider-aws manages a security group with all its rules inline
 (`spec.forProvider.ingress`/`egress`); its separate `SecurityGroupRule`
-kind uses the older Authorize/Revoke API without rule IDs. The upjet
-provider (Terraform) has a `SecurityGroup` without rules plus
-`SecurityGroupIngressRule`/`SecurityGroupEgressRule`, one rule each,
-identified by the AWS rule ID (`sgr-…`), as in the AWS API since 2021
-(`DescribeSecurityGroupRules`, `ModifySecurityGroupRules`).
+kind uses the older Authorize/Revoke API without rule IDs. Since 2021 the
+AWS API identifies each rule by an ID (`sgr-…`;
+`DescribeSecurityGroupRules`, `ModifySecurityGroupRules`), and Terraform
+models a group without rules plus one resource per rule
+(`aws_vpc_security_group_ingress_rule`/`_egress_rule`).
 
 Inline rules make several owners of one group (compositions, teams)
 overwrite each other, and a change to one rule is a diff of the whole list.
-Our existing compositions use the upjet kinds; we want to migrate them to
-this provider by changing the API group and field names, keeping the AWS
-resources (same sg-/sgr- IDs as external names).
 
 provider-aws can also find a group by name, which is convenient where one
 team owns the account and VPC.
 
 ## Decision
 
-- Follow the upjet/AWS model: `SecurityGroup` (rules only in the status),
+- Follow the AWS/Terraform model: `SecurityGroup` (rules only in the status),
   `SecurityGroupIngressRule`, `SecurityGroupEgressRule`, external names are
   AWS IDs. Field names follow the generator (`securityGroupID`, `cidrIPv4`,
   `referencedSecurityGroupID`, …); tags are a list of key/value like all our
@@ -45,9 +42,8 @@ team owns the account and VPC.
 
 - One resource per rule: more objects, but independent owners and in-place
   updates (`ModifySecurityGroupRules`) that keep rule IDs.
-- Migration from upjet: orphan the upjet resources, then create ours with
-  the same external names
-  ([internal/controller/ec2/securitygroup/README.md](../../internal/controller/ec2/securitygroup/README.md)).
+- Existing groups and rules are taken over by setting their AWS IDs as
+  external names.
 - Migration from provider-aws inline rules needs one rule resource per
   rule.
 - With adoption, two resources can manage the same group; the risks are

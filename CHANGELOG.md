@@ -10,10 +10,10 @@ releases yet; everything is under "Unreleased". Per-kind details are in
 ### Added
 
 - ec2: `SecurityGroup`, `SecurityGroupIngressRule` and
-  `SecurityGroupEgressRule`, generated from scratch with the model of the
-  upjet provider (one resource per rule, AWS IDs as external names). New
-  groups have no default egress; `adoptExistingByName` (opt-in) adopts an
-  existing group by name.
+  `SecurityGroupEgressRule`, generated from scratch (one resource per rule,
+  AWS IDs as external names). New groups have no default egress;
+  `adoptExistingByName` (opt-in) adopts an existing group by name
+  and reports it with an event.
 - codegen: `generate --list-kinds` prints the kinds of a service and their
   AWS model names.
 

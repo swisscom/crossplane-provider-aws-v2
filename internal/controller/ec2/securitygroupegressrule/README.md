@@ -2,7 +2,7 @@
 
 Manages one egress rule of an EC2 security group
 (`SecurityGroupEgressRule.ec2.aws2.crossplane.io`), like
-`aws_vpc_security_group_egress_rule` in Terraform and upjet
+`aws_vpc_security_group_egress_rule` in Terraform
 ([ADR 0009](../../../../docs/adr/0009-ec2-security-group-model.md)).
 
 ## Origin

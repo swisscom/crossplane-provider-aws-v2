@@ -1,8 +1,8 @@
 # ec2/SecurityGroupIngressRule
 
 Manages one ingress rule of an EC2 security group
-(`SecurityGroupIngressRule.ec2.aws2.crossplane.io`), like
-`aws_vpc_security_group_ingress_rule` in Terraform
+(`SecurityGroupIngressRule.ec2.aws2.crossplane.io`), identified by its AWS
+security group rule ID (`sgr-…`) as in the AWS API
 ([ADR 0009](../../../../docs/adr/0009-ec2-security-group-model.md)).
 
 ## Origin

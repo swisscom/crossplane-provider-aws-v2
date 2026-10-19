@@ -19,19 +19,24 @@ can uncomment the below line to indicate which issue your PR fixes, for example
 -->
 Fixes #
 
-I have:
+**Before requesting review, I confirm that I have:**
 
 - [ ] Read and followed Crossplane's [contribution process].
-- [ ] Run `make reviewable` to ensure this PR is ready for review.
-- [ ] Updated `AGENTS.md`, `.agents/skills` and `docs/` if this PR changes a workflow, the design or a convention.
-- [ ] Added `backport release-x.y` labels to auto-backport this PR if necessary.
+- [ ] Run `make reviewable test` to ensure this PR is ready for review.
+- [ ] Validated AWS-dependent changes against live AWS resources, or explained below why validation is not applicable or feasible.
+- [ ] Updated the docs this PR makes outdated (kind README, `CHANGELOG.md`, `docs/`, `AGENTS.md`, `.agents/skills`), or checked that none are.
 
 ### How has this code been tested
 
 <!--
 Before reviewers can be confident in the correctness of this pull request, it
-needs to tested and shown to be correct. Briefly describe the testing that has
+needs to be tested and shown to be correct. Briefly describe the testing that has
 already been done or which is planned for this change.
+
+For AWS-dependent changes, describe the live validation performed and the
+observed behavior before and after the change, or explain why live validation
+is not applicable or feasible. Unit tests alone may not establish actual AWS
+API behavior. How to validate: docs/components/testing.md.
 -->
 
 [contribution process]: https://git.io/fj2m9

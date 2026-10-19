@@ -2,7 +2,8 @@
 
 How to work on provider-aws-v2: setup, the workflow for kinds, conventions
 and what "done" means. The design behind it is in
-[architecture.md](architecture.md).
+[architecture.md](architecture.md); how one kind's code fits together is in
+[anatomy-of-a-kind.md](anatomy-of-a-kind.md).
 
 ## Setup
 
@@ -132,4 +133,7 @@ behavior change don't need a row.
 - [ ] Tests cover the new behavior (including the "not called" case for
       AWS operations where it matters).
 - [ ] Examples apply against the CRDs (`--dry-run=server --validate=strict`).
+- [ ] AWS-dependent changes validated against live AWS (checklist in
+      `.github/PULL_REQUEST_TEMPLATE.md`, how-to in
+      [testing.md](components/testing.md#manual-validation-against-aws)).
 - [ ] Kind README, `CHANGELOG.md` and affected docs updated.

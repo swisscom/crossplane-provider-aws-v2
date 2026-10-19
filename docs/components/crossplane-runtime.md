@@ -108,6 +108,19 @@ never sets `Available` never becomes Ready.
 Enabled by default (`--enable-management-policies`). With `Observe` only, the
 reconciler never calls Create/Update/Delete; hooks don't need to handle it.
 
+Namespaced resources have no `deletionPolicy`. To keep the AWS resource when
+the Kubernetes object is deleted (orphan), leave `Delete` out:
+`managementPolicies: [Observe, Create, Update, LateInitialize]`.
+
+### Events
+
+The reconciler emits events for its own steps (e.g.
+`CreatedExternalResource`, `UpdatedExternalResource`, errors). Hooks that
+make a decision the user should see, without failing, emit their own
+Normal event (e.g. `AdoptedExistingSecurityGroup`). The recorder comes from
+the manager (`event.NewAPIRecorder(mgr.GetEventRecorderFor(name))`), so
+only `configure` can create it.
+
 ## Pitfalls
 
 - `xpv1.ResourceCredentialsSecret*Key` constants are gone in v2; use

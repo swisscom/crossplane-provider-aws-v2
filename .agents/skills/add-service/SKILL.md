@@ -17,13 +17,16 @@ package name). It is an ACK generator config; see the
 [ACK docs](https://aws-controllers-k8s.github.io/community/docs/contributor-docs/code-generator-config/)
 and `apis/rds/generator-config.yaml` as an example. Typically:
 
-- `ignore.resource_names`: every resource of the service you don't want.
+- `ignore.resource_names`: every resource of the service you don't want,
+  by AWS model name (`Vpc`, not `VPC`). Before adding ignores, list all
+  kinds with `cd codegen && go run ./cmd/generate --list-kinds --service <svc>`.
 - `ignore.field_paths`: fields that break generation or must not be exposed
   (input members, e.g. `CreateDBClusterInput.MasterUserPassword`, and output
   shape members). `float64` fields need no ignore (CRDs are generated with
   `crd:allowDangerousTypes=true`). Members the SDK v2 keeps unexported are
   ignored automatically.
-- `resources.<Kind>`: renames, `is_read_only`, custom field config.
+- `resources.<Kind>`: renames, `is_read_only`, custom field config, and
+  `exceptions.errors.404.code` (otherwise `IsNotFound` never matches).
 
 Look at the AWS API model of the service to choose Create/Read/Update/Delete
 operations; ACK infers them from operation names (`Create<Kind>`, `Describe<Kind>s`, ...).
@@ -68,7 +71,12 @@ func init() {
 - Custom spec fields: hand-written `apis/<svc>/v1alpha1/custom_types.go`
   referenced from the generator config.
 - References to other kinds: `+crossplane:generate:reference` markers on
-  custom fields; namespaced types only (see `AGENTS.md`).
+  custom fields; namespaced types only (see `AGENTS.md`). To reference a
+  generated field, ignore it and re-add it as a custom field.
+- IDs assigned by AWS: set the external name in `postCreate` and pass
+  `managed.WithInitializers()` (see `internal/controller/ec2/securitygroup`).
+- More pitfalls: `docs/components/code-generator.md#pitfalls`,
+  `docs/components/ack-code-generator.md#pitfalls`.
 
 ## 4. Verify
 

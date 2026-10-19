@@ -65,7 +65,8 @@ Generated conversions handle this. In hand-written code use
   rds and docdb). Generated code could not set it, so the generator parses
   `api_op_*.go` of the module and ignores those members automatically.
 - **Errors.** No `awserr`: use `errors.As` with typed errors or
-  `smithy.APIError` (`ErrorCode()`); wrap with `awsclient.Wrap`.
+  `smithy.APIError` (`ErrorCode()`); wrap with `awsclient.Wrap`, which
+  shortens the message to code and message but keeps the error chain.
 - **`cmp.Diff` on SDK structs panics** on the unexported
   `noSmithyDocumentSerde` field; see [testing.md](testing.md).
 - **New model fields.** A newer model can add fields that provider-aws never

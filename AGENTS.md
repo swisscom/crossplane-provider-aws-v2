@@ -15,6 +15,8 @@ with `codegen/cmd/import`.
 
 Status: proof of concept. Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
 `docdb/DBInstance`, `docdb/DBSubnetGroup`, `docdb/DBClusterParameterGroup`.
+Generated from scratch: `ec2/SecurityGroup`, `ec2/SecurityGroupIngressRule`,
+`ec2/SecurityGroupEgressRule`.
 
 **Before changing a kind, read its `internal/controller/<svc>/<kind>/README.md`**
 (origin, behavior, limitations, history).

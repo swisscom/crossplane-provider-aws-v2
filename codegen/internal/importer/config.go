@@ -25,6 +25,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/swisscom/crossplane-provider-aws-v2/codegen/internal/generator"
 )
 
 // Manifest records which kinds of a service were imported. It lives in
@@ -80,9 +82,10 @@ func writeManifest(root, svc string, m *Manifest) error {
 }
 
 // writeGeneratorConfig copies the source generator config and adds every
-// kind that is not in keep to ignore.resource_names. Comments and order of
-// the source config are preserved.
-func writeGeneratorConfig(src, dst string, all []string, m *Manifest) error {
+// kind that is not in keep to ignore.resource_names, by its API model name
+// (e.g. Vpc for kind VPC). Comments and order of the source config are
+// preserved.
+func writeGeneratorConfig(src, dst string, all []generator.Kind, m *Manifest) error {
 	keep := m.Kinds
 	b, err := os.ReadFile(src) //nolint:gosec // path built from flags
 	if err != nil {
@@ -101,8 +104,8 @@ func writeGeneratorConfig(src, dst string, all []string, m *Manifest) error {
 	}
 	var ignore []string
 	for _, k := range all {
-		if !keepSet[k] {
-			ignore = append(ignore, k)
+		if !keepSet[k.Name] {
+			ignore = append(ignore, k.ModelName)
 		}
 	}
 	names := mapPath(doc.Content[0], "ignore", "resource_names")

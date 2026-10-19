@@ -36,7 +36,7 @@ flowchart TD
 | Output | Meaning |
 |--------|---------|
 | `apis/<svc>/import.yaml` | Imported kinds, `ignoreFieldPaths`, and per kind the source `revisions` (repository, commit, `dirty`) |
-| `apis/<svc>/generator-config.yaml` | Source config with every other kind ignored |
+| `apis/<svc>/generator-config.yaml` | Source config with every other kind ignored (by AWS model name, e.g. `Vpc` for kind `VPC`) |
 | `apis/<svc>/codegen.yaml` | SDK operations the ported code calls |
 | `apis/<svc>/v1alpha1/custom_types.go`, … | Ported custom types and helpers; other declarations (e.g. `ResolveReferences`) go to `<kinds>.go`, named after the kinds that own them |
 | `internal/controller/<svc>/<kind>/setup.go`, tests | Ported controller code |

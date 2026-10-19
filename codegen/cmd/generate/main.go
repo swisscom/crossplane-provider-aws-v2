@@ -38,6 +38,7 @@ func main() {
 	flag.StringVar(&o.CacheDir, "cache-dir", defaultCacheDir(), "Directory for cached AWS API models")
 	flag.StringVar(&o.TemplateDir, "template-dir", "templates", "Directory with the code templates")
 	registriesOnly := flag.Bool("registries-only", false, "Only regenerate apis/zz_services.go and internal/controller/zz_services.go, e.g. after removing a service")
+	listKinds := flag.Bool("list-kinds", false, "Print the kinds the generator config yields (kind and API model name; ignore.resource_names takes the model name) and exit")
 	flag.Parse()
 
 	if *registriesOnly {
@@ -55,8 +56,25 @@ func main() {
 	if err := generator.ResolveServiceModule(&o); err != nil {
 		fail(err)
 	}
+	if *listKinds {
+		printKinds(o)
+		return
+	}
 	if err := generator.Run(context.Background(), o); err != nil {
 		fail(err)
+	}
+}
+
+func printKinds(o generator.Options) {
+	if o.GeneratorConfig == "" {
+		o.GeneratorConfig = filepath.Join(o.OutputDir, "apis", o.Service, "generator-config.yaml")
+	}
+	kinds, err := generator.ListKinds(context.Background(), o)
+	if err != nil {
+		fail(err)
+	}
+	for _, k := range kinds {
+		fmt.Printf("%s\t%s\n", k.Name, k.ModelName)
 	}
 }
 

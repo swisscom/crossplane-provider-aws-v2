@@ -20,8 +20,40 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/swisscom/crossplane-provider-aws-v2/codegen/internal/generator"
 )
+
+// ignore.resource_names matches API model names, which differ from the kind
+// for initialisms (Vpc → VPC).
+func TestWriteGeneratorConfigIgnoresByModelName(t *testing.T) {
+	dir := t.TempDir()
+	src, dst := filepath.Join(dir, "src.yaml"), filepath.Join(dir, "dst.yaml")
+	if err := os.WriteFile(src, []byte("ignore:\n    resource_names:\n        - Snapshot\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	all := []generator.Kind{{Name: "SecurityGroup", ModelName: "SecurityGroup"}, {Name: "VPCEndpoint", ModelName: "VpcEndpoint"}}
+	if err := writeGeneratorConfig(src, dst, all, &Manifest{Kinds: []string{"SecurityGroup"}}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{"- Snapshot", "- VpcEndpoint"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("generator config lacks %q:\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"VPCEndpoint", "- SecurityGroup"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("generator config contains %q:\n%s", unwanted, got)
+		}
+	}
+}
 
 func TestSourceRevision(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {

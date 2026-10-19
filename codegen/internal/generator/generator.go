@@ -128,9 +128,18 @@ func Run(ctx context.Context, o Options) error {
 	return WriteRegistries(o.OutputDir)
 }
 
-// ListKinds returns the kinds the generator config of o yields, before
-// any resource is ignored by callers.
-func ListKinds(ctx context.Context, o Options) ([]string, error) {
+// Kind is a kind the generator yields.
+type Kind struct {
+	// Name is the Kubernetes kind, e.g. VPCEndpoint.
+	Name string
+	// ModelName is the resource name of the AWS API model, e.g. VpcEndpoint.
+	// ignore.resource_names of the generator config matches it.
+	ModelName string
+}
+
+// ListKinds returns the kinds the generator config of o yields, sorted by
+// name, before any resource is ignored by callers.
+func ListKinds(ctx context.Context, o Options) ([]Kind, error) {
 	cfg, err := ackgenconfig.New(o.GeneratorConfig, defaultConfig)
 	if err != nil {
 		return nil, fmt.Errorf("cannot load generator config: %w", err)
@@ -147,11 +156,11 @@ func ListKinds(ctx context.Context, o Options) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	kinds := make([]string, 0, len(crds))
+	kinds := make([]Kind, 0, len(crds))
 	for _, c := range crds {
-		kinds = append(kinds, c.Kind)
+		kinds = append(kinds, Kind{Name: c.Kind, ModelName: c.Names.Original})
 	}
-	sort.Strings(kinds)
+	sort.Slice(kinds, func(i, j int) bool { return kinds[i].Name < kinds[j].Name })
 	return kinds, nil
 }
 

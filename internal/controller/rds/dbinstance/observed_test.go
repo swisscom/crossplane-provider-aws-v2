@@ -110,11 +110,27 @@ func TestIsUpToDateObservedFields(t *testing.T) {
 		"EngineLifecycleSupportChanged": {spec: func(p *svcapitypes.DBInstanceParameters) {
 			p.EngineLifecycleSupport = aws.String("open-source-rds-extended-support")
 		}},
-		"NetworkTypeChanged":          {spec: func(p *svcapitypes.DBInstanceParameters) { p.NetworkType = aws.String("DUAL") }},
-		"MultiTenantChanged":          {spec: func(p *svcapitypes.DBInstanceParameters) { p.MultiTenant = aws.Bool(true) }},
-		"DedicatedLogVolumeChanged":   {spec: func(p *svcapitypes.DBInstanceParameters) { p.DedicatedLogVolume = aws.Bool(true) }},
-		"CustomerOwnedIPChanged":      {spec: func(p *svcapitypes.DBInstanceParameters) { p.EnableCustomerOwnedIP = aws.Bool(true) }},
-		"TDECredentialARNChanged":     {spec: func(p *svcapitypes.DBInstanceParameters) { p.TDECredentialARN = aws.String("arn:other") }},
+		"NetworkTypeChanged":        {spec: func(p *svcapitypes.DBInstanceParameters) { p.NetworkType = aws.String("DUAL") }},
+		"MultiTenantChanged":        {spec: func(p *svcapitypes.DBInstanceParameters) { p.MultiTenant = aws.Bool(true) }},
+		"DedicatedLogVolumeChanged": {spec: func(p *svcapitypes.DBInstanceParameters) { p.DedicatedLogVolume = aws.Bool(true) }},
+		"CustomerOwnedIPChanged":    {spec: func(p *svcapitypes.DBInstanceParameters) { p.EnableCustomerOwnedIP = aws.Bool(true) }},
+		"TDECredentialARNChanged":   {spec: func(p *svcapitypes.DBInstanceParameters) { p.TDECredentialARN = aws.String("arn:other") }},
+		"MonitoringOffAWSUnset":     {spec: func(p *svcapitypes.DBInstanceParameters) { p.MonitoringInterval = aws.Int64(0) }, upToDate: true},
+		"MonitoringOffAWSZero": {
+			spec:     func(p *svcapitypes.DBInstanceParameters) { p.MonitoringInterval = aws.Int64(0) },
+			observed: func(db *svcsdktypes.DBInstance) { db.MonitoringInterval = aws.Int32(0) },
+			upToDate: true,
+		},
+		"MonitoringEnabled": {spec: func(p *svcapitypes.DBInstanceParameters) { p.MonitoringInterval = aws.Int64(60) }},
+		"MonitoringDisabled": {
+			spec:     func(p *svcapitypes.DBInstanceParameters) { p.MonitoringInterval = aws.Int64(0) },
+			observed: func(db *svcsdktypes.DBInstance) { db.MonitoringInterval = aws.Int32(60) },
+		},
+		"MonitoringUnchanged": {
+			spec:     func(p *svcapitypes.DBInstanceParameters) { p.MonitoringInterval = aws.Int64(60) },
+			observed: func(db *svcsdktypes.DBInstance) { db.MonitoringInterval = aws.Int32(60) },
+			upToDate: true,
+		},
 		"ManageMasterUserPasswordOff": {spec: func(p *svcapitypes.DBInstanceParameters) { p.ManageMasterUserPassword = aws.Bool(false) }},
 		"ManageMasterUserPasswordOn": {
 			observed: func(db *svcsdktypes.DBInstance) { db.MasterUserSecret = nil },

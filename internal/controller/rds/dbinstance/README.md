@@ -22,8 +22,8 @@ the importer records revisions since docdb), ported by hand in `75acc8b`.
 - **Drift**: hand-written; builds a JSON patch between desired spec and the
   observed state (`createPatch`) with special rules for engine version,
   option/parameter groups, VPC security groups, backup window and retention,
-  storage (gp3 thresholds), additional storage volumes, KMS key and
-  SDK-v2-only fields. No update while `modifying`, `upgrading`, `rebooting`,
+  storage (gp3 thresholds), additional storage volumes, KMS key,
+  `monitoringInterval` (0 matches monitoring off) and SDK-v2-only fields. No update while `modifying`, `upgrading`, `rebooting`,
   `creating` or `deleting`.
 - **Delete**: final snapshot options, `deleteAutomatedBackups`; the cache
   secret is deleted afterwards.
@@ -57,6 +57,7 @@ replica, restore.
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-10-19 | | Fix update loop with `monitoringInterval: 0` (monitoring off) |
 | 2026-10-07 | `6a1364d` | Drift detection for fields new in SDK v2 (database insights, network type, …); additional storage volumes; managed password toggling |
 | 2026-10-06 | `68972b4` | Comprehensive examples |
 | 2026-10-05 | `75acc8b` | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced secrets |

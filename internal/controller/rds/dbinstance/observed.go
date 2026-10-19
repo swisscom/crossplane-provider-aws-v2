@@ -45,6 +45,10 @@ func setObservedForComparison(current, target *svcapitypes.DBInstanceParameters,
 	current.EnableCustomerOwnedIP = db.CustomerOwnedIpEnabled
 	current.TDECredentialARN = db.TdeCredentialArn
 
+	// lateInitialize skips a MonitoringInterval of 0 (monitoring off) so that
+	// it is not written into the spec. Compare with the value AWS reports,
+	// unset meaning 0, so that a spec of 0 matches disabled monitoring.
+	current.MonitoringInterval = aws.Int64(int64(pointer.Int32Value(db.MonitoringInterval)))
 	// MasterUserSecretKMSKeyID is not compared: AWS does not allow changing it
 	// once the password is managed in Secrets Manager.
 	current.ManageMasterUserPassword = aws.Bool(db.MasterUserSecret != nil)

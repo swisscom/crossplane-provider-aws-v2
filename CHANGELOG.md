@@ -44,3 +44,5 @@ releases yet; everything is under "Unreleased". Per-kind details are in
   hand-picked subset); restore no longer calls `CreateDBCluster`; a changed
   master password is sent to AWS.
 - docdb/DBInstance: changes of any updatable field are applied.
+- rds/DBInstance: `monitoringInterval: 0` no longer causes a
+  `ModifyDBInstance` every poll when enhanced monitoring is off.

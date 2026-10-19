@@ -31,6 +31,10 @@ func TestWrap(t *testing.T) {
 	if got, want := err.Error(), "describe: NotFound: gone"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
+	var ae smithy.APIError
+	if !errors.As(err, &ae) || ae.ErrorCode() != "NotFound" {
+		t.Fatalf("wrapped error must unwrap to the API error, got %v", err)
+	}
 	if got, want := Wrap(errors.New("boom"), "x").Error(), "x: boom"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}

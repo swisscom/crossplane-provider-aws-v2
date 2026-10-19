@@ -191,6 +191,7 @@ Hand-written code that needs generated methods (e.g.
 make services SERVICES="rds docdb"   # regenerate services
 make generate                        # deepcopy, managed methods, resolvers, CRDs
 make codegen.test                    # generator and importer tests
+cd codegen && go run ./cmd/generate --list-kinds --service ec2   # kinds (not ignored) and their model names
 cd codegen && go run ./cmd/generate --registries-only --output ..   # after removing a service
 ```
 
@@ -204,3 +205,14 @@ cd codegen && go run ./cmd/generate --registries-only --output ..   # after remo
   `DBInstance.CACertificateIdentifier`); remove the custom one.
 - Adding a `clientOperations` entry changes the `Client` interface: update
   the fakes in `internal/clients/<svc>/fake`.
+- `ignore.resource_names` takes AWS model names (`Vpc`, `DhcpOptions`), not
+  the kind names the generator derives (`VPC`, `DHCPOptions`). `--list-kinds`
+  prints both for the kinds the config does not ignore.
+- Generated fields can't carry `+crossplane:generate:reference` markers.
+  For a reference, ignore the field in the generator config and add it,
+  with `Ref`/`Selector`, to `Custom<Kind>Parameters` (ec2 rule kinds), or
+  write `ResolveReferences` by hand.
+- Generated controllers set the external name only for kinds whose name is
+  an input field. If AWS assigns the ID (`sg-…`), set it in `postCreate`
+  with `meta.SetExternalName` and disable the default initializer
+  (`managed.WithInitializers()`), which would use `metadata.name`.

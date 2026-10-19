@@ -1,0 +1,38 @@
+# Security group without rules: rules are separate SecurityGroupIngressRule and
+# SecurityGroupEgressRule resources (see securitygroup-rules.yaml). The rules
+# that AWS adds to allow all egress are revoked on creation. Only tags can be
+# changed; groupName (default metadata.name), description and vpcID are fixed.
+apiVersion: ec2.aws2.crossplane.io/v1alpha1
+kind: SecurityGroup
+metadata:
+  namespace: default
+  name: example-web
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    description: Web servers of the example
+    vpcID: vpc-0123456789abcdef0
+    tags:
+      - key: environment
+        value: example
+---
+# Adopts the group named example-db in the VPC if it exists, instead of
+# creating it. Read the risks in
+# internal/controller/ec2/securitygroup/README.md before enabling this.
+apiVersion: ec2.aws2.crossplane.io/v1alpha1
+kind: SecurityGroup
+metadata:
+  namespace: default
+  name: example-db
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    description: Databases of the example
+    vpcID: vpc-0123456789abcdef0
+    adoptExistingByName: true

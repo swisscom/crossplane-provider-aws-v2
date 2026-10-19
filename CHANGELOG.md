@@ -9,6 +9,14 @@ releases yet; everything is under "Unreleased". Per-kind details are in
 
 ### Added
 
+- ec2: `SecurityGroup`, `SecurityGroupIngressRule` and
+  `SecurityGroupEgressRule`, generated from scratch with the model of the
+  upjet provider (one resource per rule, AWS IDs as external names). New
+  groups have no default egress; `adoptExistingByName` (opt-in) adopts an
+  existing group by name.
+- codegen: `generate --list-kinds` prints the kinds of a service and their
+  AWS model names.
+
 - docdb: `DBSubnetGroup` and `DBClusterParameterGroup`, imported from
   provider-aws; all their updatable fields are compared. `DBCluster` can
   reference them (`dbSubnetGroupNameRef`, `dbClusterParameterGroupNameRef`
@@ -27,6 +35,11 @@ releases yet; everything is under "Unreleased". Per-kind details are in
 
 ### Fixed
 
+- codegen: `ignore.resource_names` written by the importer uses AWS model
+  names (e.g. `Vpc`), so kinds renamed by the generator (`VPC`) are
+  ignored.
+- AWS errors keep their code through wrapping (`errors.As` finds the
+  `smithy.APIError`), so hooks can check it.
 - docdb/DBCluster: changes of any updatable field are applied (previously a
   hand-picked subset); restore no longer calls `CreateDBCluster`; a changed
   master password is sent to AWS.

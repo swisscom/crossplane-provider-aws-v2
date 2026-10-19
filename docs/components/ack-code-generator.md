@@ -153,7 +153,7 @@ Settings used most here:
 
 ```yaml
 ignore:
-  resource_names: [GlobalCluster]       # kinds not to generate
+  resource_names: [GlobalCluster]       # model names (not kinds) not to generate
   field_paths:                          # members not to map
     - CreateDBClusterInput.DBClusterIdentifier   # external name instead
     - CreateDBClusterInput.MasterUserPassword    # secret ref instead
@@ -186,6 +186,17 @@ config afterwards.
   …). Irregular APIs need `operations:` overrides.
 - **Renames** (`renames.operations`) change the spec field name, not the SDK
   name; hand-written code must use the spec name.
+- **No `exceptions` 404** makes `IsNotFound` compare with `UNKNOWN`: a
+  deleted resource is an error instead of "does not exist". Set the code.
+- **Same member name, different type**: ACK maps an input member to the
+  spec/status field of the same name even if the shapes differ (ec2
+  `ModifySecurityGroupRulesInput.SecurityGroupRules` is `[]SecurityGroupRuleUpdate`,
+  the status field `[]SecurityGroupRule`); the generated code doesn't
+  compile. Ignore the input member and set it in a hook.
+- **Operations of other names** (ec2 `AuthorizeSecurityGroupIngress` as
+  Create of `SecurityGroupIngressRule`) need `operations:` with
+  `operation_type` and `resource_name`; the generated input may use legacy
+  members you then replace in `preCreate`.
 - **ReadMany vs ReadOne**: with `Describe…s` (ReadMany) the generated
   observe gets a list and calls `filterList`; most AWS "describe" calls are
   ReadMany.

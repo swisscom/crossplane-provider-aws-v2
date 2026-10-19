@@ -1,0 +1,58 @@
+# One rule per resource, with exactly one source/destination: cidrIPv4,
+# cidrIPv6, prefixListID or referencedSecurityGroupID (or its Ref/Selector).
+# All fields except securityGroupID can be changed in place.
+apiVersion: ec2.aws2.crossplane.io/v1alpha1
+kind: SecurityGroupIngressRule
+metadata:
+  namespace: default
+  name: example-web-https
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    securityGroupIDRef:
+      name: example-web
+    ipProtocol: tcp
+    fromPort: 443
+    toPort: 443
+    cidrIPv4: 10.0.0.0/8
+    description: HTTPS from the internal network
+---
+# Allows the web servers to reach the databases on PostgreSQL.
+apiVersion: ec2.aws2.crossplane.io/v1alpha1
+kind: SecurityGroupIngressRule
+metadata:
+  namespace: default
+  name: example-db-from-web
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    securityGroupIDRef:
+      name: example-db
+    ipProtocol: tcp
+    fromPort: 5432
+    toPort: 5432
+    referencedSecurityGroupIDRef:
+      name: example-web
+---
+# All egress over IPv4. ipProtocol "-1" means all protocols and ports.
+apiVersion: ec2.aws2.crossplane.io/v1alpha1
+kind: SecurityGroupEgressRule
+metadata:
+  namespace: default
+  name: example-web-all
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    securityGroupIDRef:
+      name: example-web
+    ipProtocol: "-1"
+    cidrIPv4: 0.0.0.0/0

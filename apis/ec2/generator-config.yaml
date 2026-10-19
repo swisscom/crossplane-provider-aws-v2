@@ -1,0 +1,225 @@
+# ACK generator config of ec2, see docs/components/ack-code-generator.md.
+# SecurityGroup follows the AWS/upjet model: rules are separate kinds
+# (SecurityGroupIngressRule/SecurityGroupEgressRule) backed by the security
+# group rule API (sgr-…), with flat source fields in custom_types.go instead
+# of IpPermissions. List all kinds with
+# `cd codegen && go run ./cmd/generate --service ec2 --list-kinds`.
+operations:
+    AuthorizeSecurityGroupIngress:
+        resource_name: SecurityGroupIngressRule
+        operation_type: Create
+    AuthorizeSecurityGroupEgress:
+        resource_name: SecurityGroupEgressRule
+        operation_type: Create
+    DescribeSecurityGroupRules:
+        resource_name:
+            - SecurityGroupIngressRule
+            - SecurityGroupEgressRule
+        operation_type: ReadMany
+    ModifySecurityGroupRules:
+        resource_name:
+            - SecurityGroupIngressRule
+            - SecurityGroupEgressRule
+        operation_type: Update
+    RevokeSecurityGroupIngress:
+        resource_name: SecurityGroupIngressRule
+        operation_type: Delete
+    RevokeSecurityGroupEgress:
+        resource_name: SecurityGroupEgressRule
+        operation_type: Delete
+resources:
+    SecurityGroup:
+        exceptions:
+            errors:
+                404:
+                    code: InvalidGroup.NotFound
+        fields:
+            # Optional: defaults to metadata.name (preCreate).
+            GroupName:
+                is_required: false
+            OwnerId:
+                is_read_only: true
+                from:
+                    operation: DescribeSecurityGroups
+                    path: SecurityGroups.OwnerId
+            IpPermissions:
+                is_read_only: true
+                from:
+                    operation: DescribeSecurityGroups
+                    path: SecurityGroups.IpPermissions
+            IpPermissionsEgress:
+                is_read_only: true
+                from:
+                    operation: DescribeSecurityGroups
+                    path: SecurityGroups.IpPermissionsEgress
+    SecurityGroupIngressRule:
+        exceptions:
+            errors:
+                404:
+                    code: InvalidSecurityGroupRuleId.NotFound
+    SecurityGroupEgressRule:
+        exceptions:
+            errors:
+                404:
+                    code: InvalidSecurityGroupRuleId.NotFound
+ignore:
+    field_paths:
+        - CreateSecurityGroupInput.DryRun
+        - DeleteSecurityGroupInput.DryRun
+        - DescribeSecurityGroupsInput.DryRun
+        - AuthorizeSecurityGroupIngressInput.DryRun
+        - AuthorizeSecurityGroupEgressInput.DryRun
+        - DescribeSecurityGroupRulesInput.DryRun
+        - ModifySecurityGroupRulesInput.DryRun
+        - RevokeSecurityGroupIngressInput.DryRun
+        - RevokeSecurityGroupEgressInput.DryRun
+        # tags: custom []Tag field, sent as TagSpecifications in preCreate
+        - CreateSecurityGroupInput.TagSpecifications
+        # rules: flat custom fields (custom_types.go) instead of IpPermissions;
+        # GroupId is the custom, referenceable securityGroupID
+        - AuthorizeSecurityGroupIngressInput.CidrIp
+        - AuthorizeSecurityGroupIngressInput.GroupId
+        - AuthorizeSecurityGroupIngressInput.GroupName
+        - AuthorizeSecurityGroupIngressInput.IpPermissions
+        - AuthorizeSecurityGroupIngressInput.SourceSecurityGroupName
+        - AuthorizeSecurityGroupIngressInput.SourceSecurityGroupOwnerId
+        - AuthorizeSecurityGroupIngressInput.TagSpecifications
+        - AuthorizeSecurityGroupEgressInput.CidrIp
+        - AuthorizeSecurityGroupEgressInput.GroupId
+        - AuthorizeSecurityGroupEgressInput.GroupName
+        - AuthorizeSecurityGroupEgressInput.IpPermissions
+        - AuthorizeSecurityGroupEgressInput.SourceSecurityGroupName
+        - AuthorizeSecurityGroupEgressInput.SourceSecurityGroupOwnerId
+        - AuthorizeSecurityGroupEgressInput.TagSpecifications
+        - AuthorizeSecurityGroupIngressOutput.Return
+        - AuthorizeSecurityGroupIngressOutput.SecurityGroupRules
+        - AuthorizeSecurityGroupEgressOutput.Return
+        - AuthorizeSecurityGroupEgressOutput.SecurityGroupRules
+        - ModifySecurityGroupRulesInput.GroupId
+        - ModifySecurityGroupRulesInput.SecurityGroupRules
+        - RevokeSecurityGroupIngressInput.CidrIp
+        - RevokeSecurityGroupIngressInput.FromPort
+        - RevokeSecurityGroupIngressInput.GroupId
+        - RevokeSecurityGroupIngressInput.GroupName
+        - RevokeSecurityGroupIngressInput.IpPermissions
+        - RevokeSecurityGroupIngressInput.IpProtocol
+        - RevokeSecurityGroupIngressInput.SecurityGroupRuleIds
+        - RevokeSecurityGroupIngressInput.SourceSecurityGroupName
+        - RevokeSecurityGroupIngressInput.SourceSecurityGroupOwnerId
+        - RevokeSecurityGroupIngressInput.ToPort
+        - RevokeSecurityGroupEgressInput.CidrIp
+        - RevokeSecurityGroupEgressInput.FromPort
+        - RevokeSecurityGroupEgressInput.GroupId
+        - RevokeSecurityGroupEgressInput.GroupName
+        - RevokeSecurityGroupEgressInput.IpPermissions
+        - RevokeSecurityGroupEgressInput.IpProtocol
+        - RevokeSecurityGroupEgressInput.SecurityGroupRuleIds
+        - RevokeSecurityGroupEgressInput.SourceSecurityGroupName
+        - RevokeSecurityGroupEgressInput.SourceSecurityGroupOwnerId
+        - RevokeSecurityGroupEgressInput.ToPort
+    resource_names:
+        - ApplicationStatusCheck
+        - CapacityManagerDataExport
+        - CapacityReservation
+        - CapacityReservationBySplitting
+        - CapacityReservationCancellationQuote
+        - CapacityReservationDateChangeQuote
+        - CapacityReservationFleet
+        - CarrierGateway
+        - ClientVpnEndpoint
+        - ClientVpnRoute
+        - CoipCidr
+        - CoipPool
+        - CustomerGateway
+        - DefaultSubnet
+        - DefaultVpc
+        - DelegateMacVolumeOwnershipTask
+        - EgressOnlyInternetGateway
+        - FpgaImage
+        - Fleet
+        - Ipam
+        - IpamExternalResourceVerificationToken
+        - IpamInternetRegistryAssociation
+        - IpamPolicy
+        - IpamPool
+        - IpamPrefixListResolver
+        - IpamPrefixListResolverTarget
+        - IpamResourceDiscovery
+        - IpamRoutingPolicyRegistration
+        - IpamScope
+        - Image
+        - ImageUsageReport
+        - InstanceConnectEndpoint
+        - InstanceEventWindow
+        - InstanceExportTask
+        - InternetGateway
+        - InterruptibleCapacityReservationAllocation
+        - KeyPair
+        - LaunchTemplate
+        - LaunchTemplateVersion
+        - LocalGatewayRoute
+        - LocalGatewayRouteTable
+        - LocalGatewayRouteTableVpcAssociation
+        - LocalGatewayRouteTableVirtualInterfaceGroupAssociation
+        - LocalGatewayVirtualInterface
+        - LocalGatewayVirtualInterfaceGroup
+        - MacSystemIntegrityProtectionModificationTask
+        - ManagedPrefixList
+        - NatGateway
+        - NetworkAcl
+        - NetworkAclEntry
+        - NetworkInsightsAccessScope
+        - NetworkInsightsPath
+        - NetworkInterface
+        - NetworkInterfacePermission
+        - PlacementGroup
+        - PublicIpv4Pool
+        - ReplaceRootVolumeTask
+        - ReservedInstancesListing
+        - RestoreImageTask
+        - Route
+        - RouteServer
+        - RouteServerEndpoint
+        - RouteServerPeer
+        - RouteTable
+        - SecondaryNetwork
+        - SecondarySubnet
+        - Snapshot
+        - SpotDatafeedSubscription
+        - StoreImageTask
+        - Subnet
+        - SubnetCidrReservation
+        - TrafficMirrorFilter
+        - TrafficMirrorFilterRule
+        - TrafficMirrorSession
+        - TrafficMirrorTarget
+        - TransitGateway
+        - TransitGatewayConnect
+        - TransitGatewayConnectPeer
+        - TransitGatewayMeteringPolicy
+        - TransitGatewayMeteringPolicyEntry
+        - TransitGatewayMulticastDomain
+        - TransitGatewayPeeringAttachment
+        - TransitGatewayPolicyTable
+        - TransitGatewayPolicyTableEntry
+        - TransitGatewayPrefixListReference
+        - TransitGatewayRoute
+        - TransitGatewayRouteTable
+        - TransitGatewayRouteTableAnnouncement
+        - TransitGatewayVpcAttachment
+        - Vpc
+        - VpcBlockPublicAccessExclusion
+        - VpcEncryptionControl
+        - VpcEndpoint
+        - VpcEndpointConnectionNotification
+        - VpcEndpointServiceConfiguration
+        - VpcPeeringConnection
+        - VpnConcentrator
+        - VpnConnection
+        - VpnConnectionRoute
+        - VpnGateway
+        - VerifiedAccessEndpoint
+        - VerifiedAccessGroup
+        - VerifiedAccessInstance
+        - VerifiedAccessTrustProvider
+        - Volume

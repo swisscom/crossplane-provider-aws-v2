@@ -158,7 +158,7 @@ operations. Differences from `SecurityGroup`:
 |---|---|---|
 | External name | `sg-…` from `CreateSecurityGroup` | `sgr-…` from `AuthorizeSecurityGroup{Ingress,Egress}` |
 | Update | `update` hook, tags only | `ModifySecurityGroupRules` (keeps the rule ID) + tags in `postUpdate` |
-| Drift | tags; immutable fields are errors | `svcutils.Rule.Diff`: protocol, ports, source, description, tags; another group or direction is an error |
+| Drift | tags; immutable fields are errors | `svcutils.Rule.Diff`: protocol, ports, source, description, tags; another group, direction or source type is an error |
 | Validation | — | `Rule.Validate` in `preCreate`/`preUpdate`: group and protocol set, exactly one source |
 | References | — | `securityGroupIDRef`, `referencedSecurityGroupIDRef` (custom fields) |
 

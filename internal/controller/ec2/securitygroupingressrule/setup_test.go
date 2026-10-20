@@ -99,6 +99,19 @@ func TestObserve(t *testing.T) {
 		"PortsChanged": {cr: rule(withExternalName), describe: observedRule(func(r *svcsdktypes.SecurityGroupRule) { r.FromPort, r.ToPort = aws.Int32(80), aws.Int32(80) }), exists: true},
 		"TagsChanged":  {cr: rule(withExternalName), describe: observedRule(func(r *svcsdktypes.SecurityGroupRule) { r.Tags = nil }), exists: true},
 		"EgressRule":   {cr: rule(withExternalName), describe: observedRule(func(r *svcsdktypes.SecurityGroupRule) { r.IsEgress = aws.Bool(true) }), isErr: true},
+		"PrefixListChanged": {
+			cr: rule(withExternalName, func(cr *svcapitypes.SecurityGroupIngressRule) {
+				cr.Spec.ForProvider.CIDRIPv4, cr.Spec.ForProvider.PrefixListID = nil, aws.String("pl-2")
+			}),
+			describe: observedRule(func(r *svcsdktypes.SecurityGroupRule) { r.CidrIpv4, r.PrefixListId = nil, aws.String("pl-1") }),
+			exists:   true,
+		},
+		"SourceTypeChanged": {
+			cr: rule(withExternalName, func(cr *svcapitypes.SecurityGroupIngressRule) {
+				cr.Spec.ForProvider.CIDRIPv4, cr.Spec.ForProvider.PrefixListID = nil, aws.String("pl-1")
+			}),
+			describe: observedRule(), isErr: true,
+		},
 		"OtherGroup": {
 			cr: rule(withExternalName, func(cr *svcapitypes.SecurityGroupIngressRule) {
 				cr.Spec.ForProvider.SecurityGroupID = aws.String("sg-2")

@@ -27,15 +27,16 @@ import (
 )
 
 const (
-	errNoGroup          = "securityGroupID is required (set it, securityGroupIDRef or securityGroupIDSelector)"
-	errNoProtocol       = "ipProtocol is required"
-	errSources          = "exactly one of cidrIPv4, cidrIPv6, prefixListID and referencedSecurityGroupID must be set"
-	errFmtImmutable     = "%s cannot be changed: it is %q in AWS but %q in the spec; delete and recreate the rule"
-	errFmtWrongKind     = "rule %s is an %s rule, but this kind manages %s rules"
-	ruleDirIngress      = "ingress"
-	ruleDirEgress       = "egress"
-	fieldGroupID        = "securityGroupID"
-	allPorts        int = -1
+	errNoGroup       = "securityGroupID is required (set it, securityGroupIDRef or securityGroupIDSelector)"
+	errNoProtocol    = "ipProtocol is required"
+	errSources       = "exactly one of cidrIPv4, cidrIPv6, prefixListID and referencedSecurityGroupID must be set"
+	errFmtImmutable  = "%s cannot be changed: it is %q in AWS but %q in the spec; delete and recreate the rule"
+	errFmtWrongKind  = "rule %s is an %s rule, but this kind manages %s rules"
+	errFmtSourceType = "the source type cannot be changed: the rule has %s in AWS but %s in the spec; delete and recreate the rule"
+	ruleDirIngress   = "ingress"
+	ruleDirEgress    = "egress"
+	fieldGroupID     = "securityGroupID"
+	allPorts         = -1
 )
 
 // Rule is a single security group rule, as specified by the
@@ -94,7 +95,8 @@ func (r Rule) IPPermission() svcsdktypes.IpPermission {
 }
 
 // RuleUpdate returns the ModifySecurityGroupRules entry that makes the rule
-// with the given ID equal r. All fields but the group can be changed in place.
+// with the given ID equal r. AWS can't change the group or the source type in
+// place; Diff reports those as errors.
 func (r Rule) RuleUpdate(id string) svcsdktypes.SecurityGroupRuleUpdate {
 	return svcsdktypes.SecurityGroupRuleUpdate{
 		SecurityGroupRuleId: aws.String(id),
@@ -113,8 +115,9 @@ func (r Rule) RuleUpdate(id string) svcsdktypes.SecurityGroupRuleUpdate {
 
 // Diff returns the JSON names of the spec fields whose desired value differs
 // from the observed rule. It returns an error if the observed rule can't be
-// changed into the desired one: it belongs to another group, or it has the
-// other direction (egress is true for SecurityGroupEgressRule).
+// changed into the desired one: it belongs to another group, has the other
+// direction (egress is true for SecurityGroupEgressRule), or has another
+// source type (e.g. a prefix list instead of an IPv4 CIDR).
 func (r Rule) Diff(observed svcsdktypes.SecurityGroupRule, egress bool) ([]string, error) {
 	if pointer.BoolValue(observed.IsEgress) != egress {
 		return nil, errors.Errorf(errFmtWrongKind, pointer.StringValue(observed.SecurityGroupRuleId), direction(!egress), direction(egress))
@@ -126,6 +129,10 @@ func (r Rule) Diff(observed svcsdktypes.SecurityGroupRule, egress bool) ([]strin
 	var referenced *string
 	if observed.ReferencedGroupInfo != nil {
 		referenced = observed.ReferencedGroupInfo.GroupId
+	}
+	want := sourceType(r.CIDRIPv4, r.CIDRIPv6, r.PrefixListID, r.ReferencedSecurityGroupID)
+	if got := sourceType(observed.CidrIpv4, observed.CidrIpv6, observed.PrefixListId, referenced); want != "" && got != "" && want != got {
+		return nil, errors.Errorf(errFmtSourceType, got, want)
 	}
 	var diff []string
 	add := func(name string, equal bool) {
@@ -165,9 +172,27 @@ func NormalizeProtocol(p string) string {
 // without ports.
 func port(p *int64) int64 {
 	if p == nil {
-		return int64(allPorts)
+		return allPorts
 	}
 	return *p
+}
+
+// sourceType returns the JSON name of the first set source, or "" if none is.
+func sourceType(cidrIPv4, cidrIPv6, prefixListID, referencedGroupID *string) string {
+	for _, s := range []struct {
+		name  string
+		value *string
+	}{
+		{"cidrIPv4", cidrIPv4},
+		{"cidrIPv6", cidrIPv6},
+		{"prefixListID", prefixListID},
+		{"referencedSecurityGroupID", referencedGroupID},
+	} {
+		if pointer.StringValue(s.value) != "" {
+			return s.name
+		}
+	}
+	return ""
 }
 
 func direction(egress bool) string {

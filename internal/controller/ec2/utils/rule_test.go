@@ -127,12 +127,51 @@ func TestRuleDiff(t *testing.T) {
 		"Changed": {
 			desired: desired,
 			observed: obs(func(o *svcsdktypes.SecurityGroupRule) {
+				o.IpProtocol = aws.String("udp")
+				o.FromPort = aws.Int32(21)
 				o.ToPort = aws.Int32(23)
-				o.CidrIpv4 = nil
-				o.CidrIpv6 = aws.String("::/0")
+				o.CidrIpv4 = aws.String("10.1.0.0/16")
 				o.Description = aws.String("x")
 			}),
-			want: []string{"toPort", "cidrIPv4", "cidrIPv6", "description"},
+			want: []string{"ipProtocol", "fromPort", "toPort", "cidrIPv4", "description"},
+		},
+		"OtherPrefixList": {
+			desired: Rule{GroupID: aws.String("sg-1"), IPProtocol: aws.String("tcp"), FromPort: aws.Int64(443), ToPort: aws.Int64(443), PrefixListID: aws.String("pl-2")},
+			observed: obs(func(o *svcsdktypes.SecurityGroupRule) {
+				o.FromPort, o.ToPort, o.CidrIpv4, o.PrefixListId = aws.Int32(443), aws.Int32(443), nil, aws.String("pl-1")
+			}),
+			want: []string{"prefixListID"},
+		},
+		"OtherReferencedGroup": {
+			desired:  Rule{GroupID: aws.String("sg-1"), IPProtocol: aws.String("-1"), ReferencedSecurityGroupID: aws.String("sg-3")},
+			observed: svcsdktypes.SecurityGroupRule{GroupId: aws.String("sg-1"), IsEgress: aws.Bool(false), IpProtocol: aws.String("-1"), FromPort: aws.Int32(-1), ToPort: aws.Int32(-1), ReferencedGroupInfo: &svcsdktypes.ReferencedSecurityGroup{GroupId: aws.String("sg-2")}},
+			want:     []string{"referencedSecurityGroupID"},
+		},
+		// AWS: "You may not specify CidrIpv6 for an existing IPv4 CIDR rule."
+		"SourceTypeIPv4ToIPv6": {
+			desired:  func() Rule { r := desired; r.CIDRIPv4, r.CIDRIPv6 = nil, aws.String("::/0"); return r }(),
+			observed: observed,
+			wantErr:  true,
+		},
+		"SourceTypeIPv4ToPrefixList": {
+			desired:  func() Rule { r := desired; r.CIDRIPv4, r.PrefixListID = nil, aws.String("pl-1"); return r }(),
+			observed: observed,
+			wantErr:  true,
+		},
+		"SourceTypePrefixListToIPv4": {
+			desired:  desired,
+			observed: obs(func(o *svcsdktypes.SecurityGroupRule) { o.CidrIpv4, o.PrefixListId = nil, aws.String("pl-1") }),
+			wantErr:  true,
+		},
+		"SourceTypeIPv4ToReferencedGroup": {
+			desired:  func() Rule { r := desired; r.CIDRIPv4, r.ReferencedSecurityGroupID = nil, aws.String("sg-2"); return r }(),
+			observed: observed,
+			wantErr:  true,
+		},
+		"NoDesiredSourceIsDiffNotError": {
+			desired:  func() Rule { r := desired; r.CIDRIPv4 = nil; return r }(),
+			observed: observed,
+			want:     []string{"cidrIPv4"},
 		},
 		"OtherGroup": {
 			desired:  desired,

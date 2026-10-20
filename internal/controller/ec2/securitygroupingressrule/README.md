@@ -24,10 +24,11 @@ operations mapped by hand: `AuthorizeSecurityGroupIngress`, `DescribeSecurityGro
 - **Create**: `AuthorizeSecurityGroupIngress` with one `IpPermissions` entry and tags.
 - **Drift**: every spec field. Protocols are compared as AWS reports them
   (lower case, `6`/`17`/`1`/`58` → `tcp`/`udp`/`icmp`/`icmpv6`); unset
-  ports equal `-1`. A different `securityGroupID`, or an external name
-  pointing to an egress rule, is an error.
-- **Update**: `ModifySecurityGroupRules` (all fields but the group, in
-  place, keeping the rule ID), then `CreateTags`/`DeleteTags`.
+  ports equal `-1`. A different `securityGroupID`, another source type
+  (see Limitations), or an external name pointing to an egress rule, is
+  an error.
+- **Update**: `ModifySecurityGroupRules` (in place, keeping the rule ID),
+  then `CreateTags`/`DeleteTags`.
 - **Delete**: `RevokeSecurityGroupIngress` by rule ID; done if the rule or
   the group is already gone.
 - **Status**: `securityGroupRuleID`, `securityGroupRuleARN`,
@@ -48,7 +49,11 @@ Shared logic is in [`../utils`](../utils) (`Rule`).
 
 ## Limitations
 
-- `securityGroupID` can't be changed; delete and recreate.
+- `securityGroupID` and the source type (`cidrIPv4`, `cidrIPv6`,
+  `prefixListID` or `referencedSecurityGroupID`) can't be changed: AWS
+  rejects it. Changing the value of the same source type (another CIDR,
+  prefix list or group) works in place. To change the type, delete and
+  recreate the rule.
 - Creating a rule identical to an existing one (e.g. created by another
   tool) fails with `InvalidPermission.Duplicate`; set the external name to
   the existing rule ID instead.
@@ -62,3 +67,4 @@ Shared logic is in [`../utils`](../utils) (`Rule`).
 | Date | Commit | Change |
 |------|--------|--------|
 | 2026-10-19 | — | Generated from scratch |
+| 2026-10-20 | | A source type change is an error instead of a modify AWS rejects; prefix lists validated against AWS |

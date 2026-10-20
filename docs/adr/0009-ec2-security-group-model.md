@@ -27,9 +27,12 @@ team owns the account and VPC.
   kinds.
 - A new group's default allow-all egress rules (added by AWS) are revoked:
   egress is what egress rule resources allow.
-- Adopting an existing group by name is opt-in per resource
-  (`adoptExistingByName`), filters by VPC if set, and refuses ambiguous
-  matches and the `default` group.
+- Adopting existing AWS resources is opt-in per resource and only fills an
+  empty external name with the AWS ID it looks up. A group is looked up by
+  name (`adoptExistingByName`), in its VPC if set; ambiguous matches and
+  the `default` group are refused. A rule has no name; it is looked up by
+  its content (`adoptExisting`): AWS allows only one rule per group with
+  the same direction, protocol, ports and source.
 - Rules are validated at runtime (before create/update), not with CEL
   rules in the CRD: CEL can't compare against AWS, rejects values that
   references fill in only after admission, and needs newer Kubernetes
@@ -46,5 +49,5 @@ team owns the account and VPC.
   external names.
 - Migration from provider-aws inline rules needs one rule resource per
   rule.
-- With adoption, two resources can manage the same group; the risks are
-  documented in the kind README.
+- With adoption, two resources can manage the same group or rule; the
+  risks are documented in the kind READMEs.

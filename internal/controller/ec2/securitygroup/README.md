@@ -24,8 +24,10 @@ a separate resource with its AWS rule ID.
   visible yet. If revoking fails, the group is deleted
   again and the error reported, so the next reconcile starts over.
 - **Adopt by name** (`adoptExistingByName: true`, opt-in): without an
-  external name, the group is looked up by `groupName` (and `vpcID` if set)
-  before creating one. One match is adopted as is (its rules and default
+  external name, the group's ID is looked up by `groupName` (in `vpcID` if
+  set, otherwise in all VPCs) before creating one, and written to the
+  external name; from then on the group is managed by ID, as if the ID had
+  been set by hand. One match is adopted as is (its rules and default
   egress are not changed) and reported with a Normal event
   `AdoptedExistingSecurityGroup`; no match creates the group; several
   matches and the group `default` are errors.
@@ -85,3 +87,4 @@ Otherwise set the external name.
 | Date | Commit | Change |
 |------|--------|--------|
 | 2026-10-19 | — | Generated from scratch |
+| 2026-10-19 | 0d67c8b | Adoption reports an event |

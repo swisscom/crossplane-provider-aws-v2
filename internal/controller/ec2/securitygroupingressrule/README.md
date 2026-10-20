@@ -21,6 +21,15 @@ operations mapped by hand: `AuthorizeSecurityGroupIngress`, `DescribeSecurityGro
 - **Validation** (before create and update, no CEL): `securityGroupID` and
   `ipProtocol` set, exactly one source.
 - **External name**: the rule ID (`sgr-…`), set after creation.
+- **Adopt existing** (`adoptExisting: true`, opt-in): rules have no name, but
+  AWS allows only one rule per group with the same direction, protocol,
+  ports and source. Without an external name, the rules of the group are
+  listed (`DescribeSecurityGroupRules`, filter `group-id`) and the ID of
+  the one with the same content (compared as for drift, see below) is
+  written to the external name, reported with a Normal event
+  `AdoptedExistingSecurityGroupRule`. The description and tags don't count
+  and are updated afterwards. No match creates the rule; an invalid spec is
+  not looked up (Create reports why).
 - **Create**: `AuthorizeSecurityGroupIngress` with one `IpPermissions` entry and tags.
 - **Drift**: every spec field. Protocols are compared as AWS reports them
   (lower case, `6`/`17`/`1`/`58` → `tcp`/`udp`/`icmp`/`icmpv6`); unset
@@ -46,6 +55,22 @@ Shared logic is in [`../utils`](../utils) (`Rule`).
 | `preUpdate`, `postUpdate` | `SecurityGroupRules` of the modify call, tags |
 | `preDelete`, `postDelete` | revoke by rule ID; group already deleted |
 | `postObserve` | status fields, condition |
+| `wrapExternal` (`adoptingExternal.Observe`) | `adoptExisting`, adoption event |
+
+## Risks of `adoptExisting`
+
+Adoption takes over a rule nobody declared to Crossplane:
+
+- Two resources with the same group and content (in any namespace or
+  cluster) manage the same rule; deleting one deletes the rule of the other.
+- A rule created by hand or another tool is taken over silently, apart from
+  the event.
+- When moving rules from another Crossplane provider, make that provider
+  orphan them first (no `Delete` in its `managementPolicies`), otherwise it
+  deletes them while they are adopted.
+
+Use it to take over rules whose group you control; to import a known rule,
+set the external name instead.
 
 ## Limitations
 
@@ -56,7 +81,7 @@ Shared logic is in [`../utils`](../utils) (`Rule`).
   recreate the rule.
 - Creating a rule identical to an existing one (e.g. created by another
   tool) fails with `InvalidPermission.Duplicate`; set the external name to
-  the existing rule ID instead.
+  the existing rule ID instead, or set `adoptExisting`.
 
 ## Examples
 
@@ -68,3 +93,4 @@ Shared logic is in [`../utils`](../utils) (`Rule`).
 |------|--------|--------|
 | 2026-10-19 | — | Generated from scratch |
 | 2026-10-20 | | A source type change is an error instead of a modify AWS rejects; prefix lists validated against AWS |
+| 2026-10-20 | | `adoptExisting` |

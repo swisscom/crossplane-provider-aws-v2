@@ -121,6 +121,11 @@ To keep the AWS group when the resource is deleted, leave `Delete` out of
 
 ## Adoption: wrapping the generated client
 
+Adoption never replaces the external name with something else: the external
+name is always the AWS ID. Adoption only *looks up* that ID, for a group by
+its name, and writes it into the empty external name; after that the
+resource is managed by ID like any other.
+
 `adoptExistingByName` doesn't fit a hook: it has to run *before* the
 generated `Observe` and change the external name. So `setup.go` wraps the
 generated client (`wrapExternal`) and overrides only `Observe`:
@@ -161,6 +166,7 @@ operations. Differences from `SecurityGroup`:
 | Drift | tags; immutable fields are errors | `svcutils.Rule.Diff`: protocol, ports, source, description, tags; another group, direction or source type is an error |
 | Validation | — | `Rule.Validate` in `preCreate`/`preUpdate`: group and protocol set, exactly one source |
 | References | — | `securityGroupIDRef`, `referencedSecurityGroupIDRef` (custom fields) |
+| Adoption (opt-in) | `adoptExistingByName`: ID looked up by name | `adoptExisting`: ID looked up by content (`svcutils.FindRule`); same wrapper pattern |
 
 Shared code is in `internal/controller/ec2/utils`: `rule.go` (normalizing
 protocols (`6` → `tcp`, case), ports `-1`, building `IpPermission`), `tags.go`,

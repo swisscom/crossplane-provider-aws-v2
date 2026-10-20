@@ -1,6 +1,7 @@
 # One rule per resource, with exactly one source/destination: cidrIPv4,
 # cidrIPv6, prefixListID or referencedSecurityGroupID (or its Ref/Selector).
-# All fields except securityGroupID can be changed in place.
+# Rules change in place, except securityGroupID and the source type (e.g.
+# cidrIPv4 to prefixListID): for those, create a new rule, then delete the old.
 apiVersion: ec2.aws2.crossplane.io/v1alpha1
 kind: SecurityGroupIngressRule
 metadata:
@@ -20,7 +21,9 @@ spec:
     cidrIPv4: 10.0.0.0/8
     description: HTTPS from the internal network
 ---
-# Allows the web servers to reach the databases on PostgreSQL.
+# Allows the web servers to reach the databases on PostgreSQL. With
+# adoptExisting, an existing rule with the same protocol, ports and source
+# (e.g. created by another tool) is taken over instead of created.
 apiVersion: ec2.aws2.crossplane.io/v1alpha1
 kind: SecurityGroupIngressRule
 metadata:
@@ -39,6 +42,7 @@ spec:
     toPort: 5432
     referencedSecurityGroupIDRef:
       name: example-web
+    adoptExisting: true
 ---
 # All egress over IPv4. ipProtocol "-1" means all protocols and ports.
 apiVersion: ec2.aws2.crossplane.io/v1alpha1

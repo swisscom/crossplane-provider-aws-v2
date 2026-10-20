@@ -17,10 +17,14 @@ limitations under the License.
 package utils
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/smithy-go"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 
@@ -209,5 +213,149 @@ func TestDiffTags(t *testing.T) {
 	}
 	if diff := cmp.Diff(wantRemove, remove, opt); diff != "" {
 		t.Errorf("remove -want +got:\n%s", diff)
+	}
+}
+
+// sdkRule is an observed ingress rule: tcp/443 from 10.0.0.0/8 in sg-1.
+func sdkRule(id string, f ...func(*svcsdktypes.SecurityGroupRule)) svcsdktypes.SecurityGroupRule {
+	o := svcsdktypes.SecurityGroupRule{
+		SecurityGroupRuleId: aws.String(id), GroupId: aws.String("sg-1"), IsEgress: aws.Bool(false),
+		IpProtocol: aws.String("tcp"), FromPort: aws.Int32(443), ToPort: aws.Int32(443), CidrIpv4: aws.String("10.0.0.0/8"),
+	}
+	for _, fn := range f {
+		fn(&o)
+	}
+	return o
+}
+
+func TestRuleMatches(t *testing.T) {
+	r := Rule{GroupID: aws.String("sg-1"), IPProtocol: aws.String("tcp"), FromPort: aws.Int64(443), ToPort: aws.Int64(443), CIDRIPv4: aws.String("10.0.0.0/8"), Description: aws.String("https")}
+	cases := map[string]struct {
+		rule     Rule
+		observed svcsdktypes.SecurityGroupRule
+		egress   bool
+		want     bool
+	}{
+		"Same":               {rule: r, observed: sdkRule("sgr-1", func(o *svcsdktypes.SecurityGroupRule) { o.Description = aws.String("https") }), want: true},
+		"OtherDescription":   {rule: r, observed: sdkRule("sgr-1", func(o *svcsdktypes.SecurityGroupRule) { o.Description = aws.String("old") }), want: true},
+		"NoDescriptionInAWS": {rule: r, observed: sdkRule("sgr-1"), want: true},
+		"ProtocolNumber":     {rule: func() Rule { x := r; x.IPProtocol = aws.String("6"); return x }(), observed: sdkRule("sgr-1"), want: true},
+		"OtherPort":          {rule: r, observed: sdkRule("sgr-1", func(o *svcsdktypes.SecurityGroupRule) { o.ToPort = aws.Int32(444) }), want: false},
+		"OtherProtocol":      {rule: r, observed: sdkRule("sgr-1", func(o *svcsdktypes.SecurityGroupRule) { o.IpProtocol = aws.String("udp") }), want: false},
+		"OtherCIDR":          {rule: r, observed: sdkRule("sgr-1", func(o *svcsdktypes.SecurityGroupRule) { o.CidrIpv4 = aws.String("10.0.0.0/16") }), want: false},
+		"OtherSourceType":    {rule: r, observed: sdkRule("sgr-1", func(o *svcsdktypes.SecurityGroupRule) { o.CidrIpv4, o.PrefixListId = nil, aws.String("pl-1") }), want: false},
+		"OtherDirection":     {rule: r, observed: sdkRule("sgr-1"), egress: true, want: false},
+		"OtherGroup":         {rule: r, observed: sdkRule("sgr-1", func(o *svcsdktypes.SecurityGroupRule) { o.GroupId = aws.String("sg-2") }), want: false},
+		"AllTrafficUnsetPorts": {
+			rule: Rule{GroupID: aws.String("sg-1"), IPProtocol: aws.String("-1"), PrefixListID: aws.String("pl-1")},
+			observed: sdkRule("sgr-1", func(o *svcsdktypes.SecurityGroupRule) {
+				o.IpProtocol, o.FromPort, o.ToPort, o.CidrIpv4, o.PrefixListId = aws.String("-1"), aws.Int32(-1), aws.Int32(-1), nil, aws.String("pl-1")
+			}),
+			want: true,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := tc.rule.Matches(tc.observed, tc.egress); got != tc.want {
+				t.Errorf("Matches() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// ruleClient is a fake RuleClient returning one page per call.
+type ruleClient struct {
+	pages  [][]svcsdktypes.SecurityGroupRule
+	err    error
+	inputs []*svcsdk.DescribeSecurityGroupRulesInput
+}
+
+func (c *ruleClient) DescribeSecurityGroupRules(_ context.Context, in *svcsdk.DescribeSecurityGroupRulesInput, _ ...func(*svcsdk.Options)) (*svcsdk.DescribeSecurityGroupRulesOutput, error) {
+	cp := *in
+	c.inputs = append(c.inputs, &cp)
+	if c.err != nil {
+		return nil, c.err
+	}
+	i := len(c.inputs) - 1
+	out := &svcsdk.DescribeSecurityGroupRulesOutput{SecurityGroupRules: c.pages[i]}
+	if i+1 < len(c.pages) {
+		out.NextToken = aws.String(string(rune('a' + i)))
+	}
+	return out, nil
+}
+
+func TestFindRule(t *testing.T) {
+	r := Rule{GroupID: aws.String("sg-1"), IPProtocol: aws.String("tcp"), FromPort: aws.Int64(443), ToPort: aws.Int64(443), CIDRIPv4: aws.String("10.0.0.0/8")}
+	egressTwin := sdkRule("sgr-e", func(o *svcsdktypes.SecurityGroupRule) { o.IsEgress = aws.Bool(true) })
+	otherPort := sdkRule("sgr-p", func(o *svcsdktypes.SecurityGroupRule) { o.FromPort, o.ToPort = aws.Int32(80), aws.Int32(80) })
+	cases := map[string]struct {
+		client  *ruleClient
+		egress  bool
+		wantID  string
+		wantErr string
+		calls   int
+	}{
+		"Match": {
+			client: &ruleClient{pages: [][]svcsdktypes.SecurityGroupRule{{otherPort, egressTwin, sdkRule("sgr-1")}}},
+			wantID: "sgr-1", calls: 1,
+		},
+		"MatchOnLaterPage": {
+			client: &ruleClient{pages: [][]svcsdktypes.SecurityGroupRule{{otherPort}, {egressTwin}, {sdkRule("sgr-1")}}},
+			wantID: "sgr-1", calls: 3,
+		},
+		"OnlyOtherDirection": {
+			client: &ruleClient{pages: [][]svcsdktypes.SecurityGroupRule{{egressTwin, otherPort}}},
+			calls:  1,
+		},
+		"EgressMatch": {
+			client: &ruleClient{pages: [][]svcsdktypes.SecurityGroupRule{{sdkRule("sgr-1"), egressTwin}}},
+			egress: true, wantID: "sgr-e", calls: 1,
+		},
+		"NoRules": {
+			client: &ruleClient{pages: [][]svcsdktypes.SecurityGroupRule{nil}},
+			calls:  1,
+		},
+		"Ambiguous": {
+			client:  &ruleClient{pages: [][]svcsdktypes.SecurityGroupRule{{sdkRule("sgr-1")}, {sdkRule("sgr-2")}}},
+			wantErr: "adoptExisting: 2 ingress rules of sg-1 match", calls: 2,
+		},
+		"Error": {
+			client:  &ruleClient{err: &smithy.GenericAPIError{Code: "UnauthorizedOperation"}},
+			wantErr: errFindRule, calls: 1,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := FindRule(context.Background(), tc.client, r, tc.egress)
+			if tc.wantErr == "" && err != nil {
+				t.Fatalf("FindRule() error = %v", err)
+			}
+			if tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)) {
+				t.Fatalf("FindRule() error = %v, want containing %q", err, tc.wantErr)
+			}
+			gotID := ""
+			if got != nil {
+				gotID = aws.ToString(got.SecurityGroupRuleId)
+			}
+			if gotID != tc.wantID {
+				t.Errorf("FindRule() = %q, want %q", gotID, tc.wantID)
+			}
+			if len(tc.client.inputs) != tc.calls {
+				t.Fatalf("calls = %d, want %d", len(tc.client.inputs), tc.calls)
+			}
+			wantFilters := []svcsdktypes.Filter{{Name: aws.String("group-id"), Values: []string{"sg-1"}}}
+			for i, in := range tc.client.inputs {
+				if diff := cmp.Diff(wantFilters, in.Filters, cmpopts.IgnoreUnexported(svcsdktypes.Filter{})); diff != "" {
+					t.Errorf("call %d filters -want +got:\n%s", i, diff)
+				}
+				wantToken := ""
+				if i > 0 {
+					wantToken = string(rune('a' + i - 1))
+				}
+				if aws.ToString(in.NextToken) != wantToken {
+					t.Errorf("call %d NextToken = %q, want %q", i, aws.ToString(in.NextToken), wantToken)
+				}
+			}
+		})
 	}
 }

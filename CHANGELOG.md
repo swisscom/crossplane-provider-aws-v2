@@ -13,7 +13,8 @@ releases yet; everything is under "Unreleased". Per-kind details are in
   `SecurityGroupEgressRule`, generated from scratch (one resource per rule,
   AWS IDs as external names). New groups have no default egress;
   `adoptExistingByName` (opt-in) adopts an existing group by name
-  and reports it with an event. Rules can change in place, except their
+  and reports it with an event; `adoptExisting` (opt-in) adopts an existing
+  rule with the same content. Rules can change in place, except their
   group and source type (AWS).
 - codegen: `generate --list-kinds` prints the kinds of a service and their
   AWS model names.

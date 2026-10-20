@@ -93,6 +93,16 @@ type CustomSecurityGroupIngressRuleParameters struct {
 	// Tags of the rule.
 	// +optional
 	Tags []*Tag `json:"tags,omitempty"`
+
+	// AdoptExisting adopts the existing rule of the security group with the
+	// same protocol, ports and source instead of creating one, while the
+	// external name is not set (AWS allows only one such rule per group).
+	// Its description and tags are then updated to the spec. An adopted rule
+	// is managed from then on: deleting this resource deletes it unless the
+	// management policies exclude Delete. Prefer setting the external name
+	// to the rule ID to import a known rule.
+	// +optional
+	AdoptExisting *bool `json:"adoptExisting,omitempty"`
 }
 
 // CustomSecurityGroupIngressRuleObservation contains the hand-written fields of
@@ -165,6 +175,16 @@ type CustomSecurityGroupEgressRuleParameters struct {
 	// Tags of the rule.
 	// +optional
 	Tags []*Tag `json:"tags,omitempty"`
+
+	// AdoptExisting adopts the existing rule of the security group with the
+	// same protocol, ports and destination instead of creating one, while the
+	// external name is not set (AWS allows only one such rule per group).
+	// Its description and tags are then updated to the spec. An adopted rule
+	// is managed from then on: deleting this resource deletes it unless the
+	// management policies exclude Delete. Prefer setting the external name
+	// to the rule ID to import a known rule.
+	// +optional
+	AdoptExisting *bool `json:"adoptExisting,omitempty"`
 }
 
 // CustomSecurityGroupEgressRuleObservation contains the hand-written fields of

@@ -17,12 +17,16 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 
+	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
 	pointer "github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
@@ -33,6 +37,8 @@ const (
 	errFmtImmutable  = "%s cannot be changed: it is %q in AWS but %q in the spec; delete and recreate the rule"
 	errFmtWrongKind  = "rule %s is an %s rule, but this kind manages %s rules"
 	errFmtSourceType = "the source type cannot be changed: the rule has %s in AWS but %s in the spec; delete and recreate the rule"
+	errFindRule      = "cannot look up the rules of the security group"
+	errFmtAmbiguous  = "adoptExisting: %d %s rules of %s match; set the crossplane.io/external-name annotation"
 	ruleDirIngress   = "ingress"
 	ruleDirEgress    = "egress"
 	fieldGroupID     = "securityGroupID"
@@ -149,6 +155,51 @@ func (r Rule) Diff(observed svcsdktypes.SecurityGroupRule, egress bool) ([]strin
 	add("referencedSecurityGroupID", pointer.StringValue(r.ReferencedSecurityGroupID) == pointer.StringValue(referenced))
 	add("description", pointer.StringValue(r.Description) == pointer.StringValue(observed.Description))
 	return diff, nil
+}
+
+// Matches reports whether observed is the rule r. Within a group, AWS allows
+// only one rule with the same direction, protocol, ports and source; the
+// description and tags can differ.
+func (r Rule) Matches(observed svcsdktypes.SecurityGroupRule, egress bool) bool {
+	diff, err := r.Diff(observed, egress)
+	return err == nil && len(compare.Without(diff, "description")) == 0
+}
+
+// RuleClient is the part of the EC2 API used to look up rules.
+type RuleClient interface {
+	DescribeSecurityGroupRules(context.Context, *svcsdk.DescribeSecurityGroupRulesInput, ...func(*svcsdk.Options)) (*svcsdk.DescribeSecurityGroupRulesOutput, error)
+}
+
+// FindRule returns the rule of r's group that Matches r, or nil if there is
+// none. r must be valid.
+func FindRule(ctx context.Context, c RuleClient, r Rule, egress bool) (*svcsdktypes.SecurityGroupRule, error) {
+	in := &svcsdk.DescribeSecurityGroupRulesInput{
+		Filters: []svcsdktypes.Filter{{Name: aws.String("group-id"), Values: []string{pointer.StringValue(r.GroupID)}}},
+	}
+	var found []svcsdktypes.SecurityGroupRule
+	for {
+		resp, err := c.DescribeSecurityGroupRules(ctx, in)
+		if err != nil {
+			return nil, awsclient.Wrap(err, errFindRule)
+		}
+		for _, o := range resp.SecurityGroupRules {
+			if r.Matches(o, egress) {
+				found = append(found, o)
+			}
+		}
+		if pointer.StringValue(resp.NextToken) == "" {
+			break
+		}
+		in.NextToken = resp.NextToken
+	}
+	switch len(found) {
+	case 0:
+		return nil, nil
+	case 1:
+		return &found[0], nil
+	default:
+		return nil, errors.Errorf(errFmtAmbiguous, len(found), direction(egress), pointer.StringValue(r.GroupID))
+	}
 }
 
 // NormalizeProtocol returns the form AWS reports a protocol in: lower case,

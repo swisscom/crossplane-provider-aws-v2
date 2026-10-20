@@ -18,11 +18,13 @@ package securitygroupegressrule
 
 import (
 	"context"
+	"fmt"
 
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
 	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
@@ -31,12 +33,20 @@ import (
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 	svcutils "github.com/swisscom/crossplane-provider-aws-v2/internal/controller/ec2/utils"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
+	pointer "github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
 const (
 	errNoRuleCreated = "AWS returned no security group rule"
 	errInvalidRule   = "invalid rule"
+
+	msgFmtAdopted = "Adopted existing security group rule %s of %s with the same protocol, ports and destination"
+
+	// egress is the direction of the rules of this kind.
+	egress = true
 )
+
+const reasonAdopted event.Reason = "AdoptedExistingSecurityGroupRule"
 
 type hooks struct {
 	client Client
@@ -77,7 +87,7 @@ func postObserve(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, res
 
 func isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, resp *svcsdk.DescribeSecurityGroupRulesOutput) (bool, string, error) {
 	r := resp.SecurityGroupRules[0]
-	diff, err := ruleOf(cr).Diff(r, true)
+	diff, err := ruleOf(cr).Diff(r, egress)
 	if err != nil {
 		return false, "", err
 	}
@@ -146,6 +156,41 @@ func postDelete(_ context.Context, _ *svcapitypes.SecurityGroupEgressRule, _ *sv
 	return managed.ExternalDelete{}, err
 }
 
+// adoptingExternal adds spec.forProvider.adoptExisting to the generated
+// client: without an external name, it looks the rule up by its content.
+type adoptingExternal struct {
+	*external
+	record event.Recorder
+}
+
+func (e *adoptingExternal) Observe(ctx context.Context, cr *svcapitypes.SecurityGroupEgressRule) (managed.ExternalObservation, error) {
+	r := ruleOf(cr)
+	// An invalid rule is not looked up; Create reports why it is invalid.
+	if meta.GetExternalName(cr) != "" || !pointer.BoolValue(cr.Spec.ForProvider.AdoptExisting) || r.Validate() != nil {
+		return e.external.Observe(ctx, cr)
+	}
+	found, err := svcutils.FindRule(ctx, e.client, r, egress)
+	if err != nil || found == nil {
+		return managed.ExternalObservation{}, err
+	}
+	id := pointer.StringValue(found.SecurityGroupRuleId)
+	meta.SetExternalName(cr, id)
+	obs, err := e.external.Observe(ctx, cr)
+	if err == nil && obs.ResourceExists {
+		e.record.Event(cr, event.Normal(reasonAdopted, fmt.Sprintf(msgFmtAdopted, id, pointer.StringValue(found.GroupId))))
+	}
+	// Have the runtime save the external name.
+	obs.ResourceLateInitialized = true
+	return obs, err
+}
+
+// adoptingWrapper returns a wrapExternal that emits adoption events to rec.
+func adoptingWrapper(rec event.Recorder) func(*external) managed.TypedExternalClient[*svcapitypes.SecurityGroupEgressRule] {
+	return func(e *external) managed.TypedExternalClient[*svcapitypes.SecurityGroupEgressRule] {
+		return &adoptingExternal{external: e, record: rec}
+	}
+}
+
 func setupExternal(e *external) {
 	h := &hooks{client: e.client}
 	e.preObserve = preObserve
@@ -160,6 +205,8 @@ func setupExternal(e *external) {
 }
 
 func configureSecurityGroupEgressRule(mgr ctrl.Manager, _ controller.Options) ([]option, []managed.ReconcilerOption, error) {
+	// Setup reads wrapExternal only after configure, in Connect.
+	wrapExternal = adoptingWrapper(event.NewAPIRecorder(mgr.GetEventRecorderFor(managed.ControllerName(svcapitypes.SecurityGroupEgressRuleGroupKind)))) //nolint:staticcheck // same recorder as the generated controller
 	return []option{setupExternal}, []managed.ReconcilerOption{
 		managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
 		// AWS assigns the rule ID; the default would use metadata.name.
@@ -169,4 +216,5 @@ func configureSecurityGroupEgressRule(mgr ctrl.Manager, _ controller.Options) ([
 
 func init() {
 	configure = configureSecurityGroupEgressRule
+	wrapExternal = adoptingWrapper(event.NewNopRecorder())
 }

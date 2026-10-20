@@ -62,6 +62,16 @@ spec:
                 description: SecurityGroupIngressRuleParameters defines the desired
                   state of SecurityGroupIngressRule
                 properties:
+                  adoptExisting:
+                    description: |-
+                      AdoptExisting adopts the existing rule of the security group with the
+                      same protocol, ports and source instead of creating one, while the
+                      external name is not set (AWS allows only one such rule per group).
+                      Its description and tags are then updated to the spec. An adopted rule
+                      is managed from then on: deleting this resource deletes it unless the
+                      management policies exclude Delete. Prefer setting the external name
+                      to the rule ID to import a known rule.
+                    type: boolean
                   cidrIPv4:
                     description: CIDRIPv4 is the IPv4 CIDR range of the source.
                     type: string

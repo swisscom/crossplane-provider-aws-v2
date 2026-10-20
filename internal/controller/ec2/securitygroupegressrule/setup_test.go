@@ -18,16 +18,19 @@ package securitygroupegressrule
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/clients/ec2/fake"
@@ -253,5 +256,216 @@ func TestDelete(t *testing.T) {
 				t.Errorf("RevokeSecurityGroupEgressInput = %+v", in)
 			}
 		})
+	}
+}
+
+// recorder records the events it receives.
+type recorder struct{ events []event.Event }
+
+func (r *recorder) Event(_ runtime.Object, e event.Event) { r.events = append(r.events, e) }
+
+func (r *recorder) WithAnnotations(...string) event.Recorder { return r }
+
+// groupRules is a fake DescribeSecurityGroupRules: lookups by group (Filters)
+// return rules, lookups by ID (SecurityGroupRuleIds) return the rule with
+// that ID among rules, or InvalidSecurityGroupRuleId.NotFound.
+type groupRules struct {
+	rules     []svcsdktypes.SecurityGroupRule
+	lookupErr error
+	byIDErr   error
+	filters   [][]svcsdktypes.Filter
+	byID      []string
+}
+
+func (g *groupRules) mock(_ context.Context, in *svcsdk.DescribeSecurityGroupRulesInput) (*svcsdk.DescribeSecurityGroupRulesOutput, error) {
+	if len(in.Filters) > 0 {
+		g.filters = append(g.filters, in.Filters)
+		if g.lookupErr != nil {
+			return nil, g.lookupErr
+		}
+		return &svcsdk.DescribeSecurityGroupRulesOutput{SecurityGroupRules: g.rules}, nil
+	}
+	g.byID = append(g.byID, in.SecurityGroupRuleIds...)
+	if g.byIDErr != nil {
+		return nil, g.byIDErr
+	}
+	for _, r := range g.rules {
+		if len(in.SecurityGroupRuleIds) == 1 && aws.ToString(r.SecurityGroupRuleId) == in.SecurityGroupRuleIds[0] {
+			return &svcsdk.DescribeSecurityGroupRulesOutput{SecurityGroupRules: []svcsdktypes.SecurityGroupRule{r}}, nil
+		}
+	}
+	return nil, apiErr("InvalidSecurityGroupRuleId.NotFound")
+}
+
+// awsRule is a rule of testGroup in AWS with the direction of this kind and
+// the content of rule(): tcp/443, 10.0.0.0/8.
+func awsRule(id string, f ...func(*svcsdktypes.SecurityGroupRule)) svcsdktypes.SecurityGroupRule {
+	r := svcsdktypes.SecurityGroupRule{
+		SecurityGroupRuleId: aws.String(id), GroupId: aws.String(testGroup), IsEgress: aws.Bool(egress),
+		IpProtocol: aws.String("tcp"), FromPort: aws.Int32(443), ToPort: aws.Int32(443), CidrIpv4: aws.String("10.0.0.0/8"),
+	}
+	for _, fn := range f {
+		fn(&r)
+	}
+	return r
+}
+
+func withAdopt(cr *svcapitypes.SecurityGroupEgressRule) {
+	cr.Spec.ForProvider.AdoptExisting = aws.Bool(true)
+}
+
+func TestAdoptExisting(t *testing.T) {
+	groupFilter := []svcsdktypes.Filter{{Name: aws.String("group-id"), Values: []string{testGroup}}}
+	otherDirection := awsRule("sgr-dir", func(r *svcsdktypes.SecurityGroupRule) { r.IsEgress = aws.Bool(!egress) })
+	otherPorts := awsRule("sgr-ports", func(r *svcsdktypes.SecurityGroupRule) { r.FromPort, r.ToPort = aws.Int32(80), aws.Int32(80) })
+	adopted := event.Normal(reasonAdopted, "Adopted existing security group rule sgr-1 of sg-1 with the same protocol, ports and destination")
+
+	type want struct {
+		exists, upToDate, lateInit bool
+		externalName               string
+		err                        string
+		lookups                    int
+		byID                       []string
+		events                     []event.Event
+	}
+	cases := map[string]struct {
+		cr    *svcapitypes.SecurityGroupEgressRule
+		rules groupRules
+		want  want
+	}{
+		"DisabledByDefault": {
+			cr:    rule(),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
+			want:  want{},
+		},
+		"DisabledExplicitly": {
+			cr:    rule(func(cr *svcapitypes.SecurityGroupEgressRule) { cr.Spec.ForProvider.AdoptExisting = aws.Bool(false) }),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
+			want:  want{},
+		},
+		"Adopts": {
+			cr:    rule(withAdopt),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{otherDirection, otherPorts, awsRule(testRule)}},
+			want: want{exists: true, upToDate: false, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
+				events: []event.Event{adopted}},
+		},
+		"AdoptsUpToDateWithCrossplaneTags": {
+			cr: rule(withAdopt),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule, func(r *svcsdktypes.SecurityGroupRule) {
+				r.Tags = []svcsdktypes.Tag{
+					{Key: aws.String("crossplane-kind"), Value: aws.String("securitygroupegressrule.ec2.aws2.crossplane.io")},
+					{Key: aws.String("crossplane-name"), Value: aws.String("https")},
+					{Key: aws.String("crossplane-namespace"), Value: aws.String("ns")},
+				}
+			})}},
+			want: want{exists: true, upToDate: true, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
+				events: []event.Event{adopted}},
+		},
+		"AdoptsWithOtherDescription": {
+			cr:    rule(withAdopt, func(cr *svcapitypes.SecurityGroupEgressRule) { cr.Spec.ForProvider.Description = aws.String("new") }),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule, func(r *svcsdktypes.SecurityGroupRule) { r.Description = aws.String("old") })}},
+			want: want{exists: true, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
+				events: []event.Event{adopted}},
+		},
+		"AdoptsProtocolNumber": {
+			cr:    rule(withAdopt, func(cr *svcapitypes.SecurityGroupEgressRule) { cr.Spec.ForProvider.IPProtocol = aws.String("6") }),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
+			want: want{exists: true, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
+				events: []event.Event{adopted}},
+		},
+		"NoMatchCreates": {
+			cr:    rule(withAdopt),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{otherDirection, otherPorts}},
+			want:  want{lookups: 1},
+		},
+		"InvalidRuleNotLookedUp": {
+			cr:    rule(withAdopt, func(cr *svcapitypes.SecurityGroupEgressRule) { cr.Spec.ForProvider.CIDRIPv6 = aws.String("::/0") }),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
+			want:  want{},
+		},
+		"NoGroupNotLookedUp": {
+			cr:    rule(withAdopt, func(cr *svcapitypes.SecurityGroupEgressRule) { cr.Spec.ForProvider.SecurityGroupID = nil }),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
+			want:  want{},
+		},
+		"Ambiguous": {
+			cr:    rule(withAdopt),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule), awsRule("sgr-2")}},
+			want:  want{err: "2 " + map[bool]string{false: "ingress", true: "egress"}[egress] + " rules of sg-1 match", lookups: 1},
+		},
+		"LookupFails": {
+			cr:    rule(withAdopt),
+			rules: groupRules{lookupErr: apiErr("UnauthorizedOperation")},
+			want:  want{err: "UnauthorizedOperation", lookups: 1},
+		},
+		"ExternalNameWins": {
+			cr:    rule(withAdopt, withExternalName),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
+			want:  want{exists: true, externalName: testRule, byID: []string{testRule}},
+		},
+		"ExternalNameGoneCreatesWithoutLookup": {
+			cr:    rule(withAdopt, func(cr *svcapitypes.SecurityGroupEgressRule) { meta.SetExternalName(cr, "sgr-gone") }),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
+			want:  want{externalName: "sgr-gone", byID: []string{"sgr-gone"}},
+		},
+		"ObserveAfterLookupFails": {
+			cr:    rule(withAdopt),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}, byIDErr: apiErr("RequestLimitExceeded")},
+			want:  want{err: "RequestLimitExceeded", lookups: 1, byID: []string{testRule}},
+		},
+		"GoneAfterLookupNoEvent": {
+			cr:    rule(withAdopt),
+			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}, byIDErr: apiErr("InvalidSecurityGroupRuleId.NotFound")},
+			want:  want{lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule}},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			g := tc.rules
+			rec := &recorder{}
+			e := &adoptingExternal{external: newTestExternal(&fake.MockEC2Client{MockDescribeSecurityGroupRules: g.mock}), record: rec}
+
+			obs, err := e.Observe(context.Background(), tc.cr)
+
+			if tc.want.err == "" && err != nil {
+				t.Fatalf("Observe() error = %v", err)
+			}
+			if tc.want.err != "" && (err == nil || !strings.Contains(err.Error(), tc.want.err)) {
+				t.Fatalf("Observe() error = %v, want containing %q", err, tc.want.err)
+			}
+			if tc.want.err == "" {
+				if obs.ResourceExists != tc.want.exists || obs.ResourceUpToDate != tc.want.upToDate || obs.ResourceLateInitialized != tc.want.lateInit {
+					t.Errorf("Observe() = exists %v, upToDate %v (%s), lateInit %v; want %+v", obs.ResourceExists, obs.ResourceUpToDate, obs.Diff, obs.ResourceLateInitialized, tc.want)
+				}
+				if got := meta.GetExternalName(tc.cr); got != tc.want.externalName {
+					t.Errorf("external name = %q, want %q", got, tc.want.externalName)
+				}
+			}
+			if len(g.filters) != tc.want.lookups {
+				t.Errorf("lookups = %d, want %d", len(g.filters), tc.want.lookups)
+			}
+			for _, f := range g.filters {
+				if diff := cmp.Diff(groupFilter, f, cmpopts.IgnoreUnexported(svcsdktypes.Filter{})); diff != "" {
+					t.Errorf("lookup filters -want +got:\n%s", diff)
+				}
+			}
+			if diff := cmp.Diff(tc.want.byID, g.byID); diff != "" {
+				t.Errorf("describes by ID -want +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.events, rec.events); diff != "" {
+				t.Errorf("events -want +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAdoptingWrapper(t *testing.T) {
+	rec := &recorder{}
+	got, ok := adoptingWrapper(rec)(newTestExternal(&fake.MockEC2Client{})).(*adoptingExternal)
+	if !ok {
+		t.Fatalf("adoptingWrapper() returned %T, want *adoptingExternal", got)
+	}
+	if got.record != rec {
+		t.Errorf("adoptingWrapper() recorder = %v, want %v", got.record, rec)
 	}
 }

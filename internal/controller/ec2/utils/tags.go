@@ -19,8 +19,9 @@ package utils
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"sort"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -30,15 +31,17 @@ import (
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
 	pointer "github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/tags"
 )
 
 const (
 	errCreateTags = "cannot create tags"
 	errDeleteTags = "cannot delete tags"
-
-	// awsTagPrefix marks tags reserved by AWS; they can't be changed.
-	awsTagPrefix = "aws:"
 )
+
+// AnnotationManagedTagKeys records, comma-separated, the spec tag keys the
+// provider manages. Only these keys are ever removed.
+const AnnotationManagedTagKeys = "ec2.aws2.crossplane.io/managed-tag-keys"
 
 // TagClient is the part of the EC2 API used to manage tags.
 type TagClient interface {
@@ -65,16 +68,20 @@ func TagSpecifications(rt svcsdktypes.ResourceType, tags map[string]string) []sv
 	return []svcsdktypes.TagSpecification{{ResourceType: rt, Tags: toSDK(tags)}}
 }
 
-// DiffTags returns the tags to create (new or changed values) and to delete
-// so that current equals desired. Tags reserved by AWS are left alone.
-func DiffTags(desired map[string]string, current []*svcapitypes.Tag) (add []svcsdktypes.Tag, remove []svcsdktypes.Tag) {
+// ObserveTags records the desired keys of mg, see tags.Record, and reports
+// whether current is up to date and whether the record changed.
+func ObserveTags(mg resource.Managed, desired map[string]string, current []*svcapitypes.Tag) (upToDate, recordChanged bool) {
+	recordChanged = tags.Record(mg, AnnotationManagedTagKeys, slices.Collect(maps.Keys(desired)), keys(current))
+	add, remove := DiffTags(desired, current, tags.Removable(mg, AnnotationManagedTagKeys))
+	return len(add)+len(remove) == 0, recordChanged
+}
+
+// DiffTags returns the tags to create (new or changed values) and the
+// managed keys in current to delete. Other tags are left alone.
+func DiffTags(desired map[string]string, current []*svcapitypes.Tag, managed []string) (add []svcsdktypes.Tag, remove []svcsdktypes.Tag) {
 	cur := make(map[string]string, len(current))
 	for _, t := range current {
-		k := pointer.StringValue(t.Key)
-		if strings.HasPrefix(k, awsTagPrefix) {
-			continue
-		}
-		cur[k] = pointer.StringValue(t.Value)
+		cur[pointer.StringValue(t.Key)] = pointer.StringValue(t.Value)
 	}
 	toAdd := map[string]string{}
 	for k, v := range desired {
@@ -82,19 +89,21 @@ func DiffTags(desired map[string]string, current []*svcapitypes.Tag) (add []svcs
 			toAdd[k] = v
 		}
 	}
-	for k := range cur {
-		if _, ok := desired[k]; !ok {
+	for _, k := range managed {
+		_, inAWS := cur[k]
+		_, wanted := desired[k]
+		if inAWS && !wanted && !tags.IsAWS(k) {
 			remove = append(remove, svcsdktypes.Tag{Key: aws.String(k)})
 		}
 	}
-	sort.Slice(remove, func(i, j int) bool { return *remove[i].Key < *remove[j].Key })
 	return toSDK(toAdd), remove
 }
 
-// UpdateTags makes the tags of the resource with the given ID equal desired.
-// CreateTags overwrites the values of existing keys.
-func UpdateTags(ctx context.Context, c TagClient, id string, desired map[string]string, current []*svcapitypes.Tag) error {
-	add, remove := DiffTags(desired, current)
+// UpdateTags creates the desired tags of the resource with the given ID and
+// deletes the recorded keys of mg that are no longer desired. CreateTags
+// overwrites the values of existing keys.
+func UpdateTags(ctx context.Context, c TagClient, mg resource.Managed, id string, desired map[string]string, current []*svcapitypes.Tag) error {
+	add, remove := DiffTags(desired, current, tags.Removable(mg, AnnotationManagedTagKeys))
 	if len(remove) > 0 {
 		if _, err := c.DeleteTags(ctx, &svcsdk.DeleteTagsInput{Resources: []string{id}, Tags: remove}); err != nil {
 			return awsclient.Wrap(err, errDeleteTags)
@@ -118,6 +127,14 @@ func FromSDK(tags []svcsdktypes.Tag) []*svcapitypes.Tag {
 		res = append(res, &svcapitypes.Tag{Key: t.Key, Value: t.Value})
 	}
 	return res
+}
+
+func keys(t []*svcapitypes.Tag) []string {
+	out := make([]string, 0, len(t))
+	for _, tg := range t {
+		out = append(out, pointer.StringValue(tg.Key))
+	}
+	return out
 }
 
 func toSDK(tags map[string]string) []svcsdktypes.Tag {

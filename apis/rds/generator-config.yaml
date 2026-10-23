@@ -55,7 +55,6 @@ ignore:
         - ModifyDBClusterInput.VpcSecurityGroupIds
         - CreateDBClusterInput.EngineVersion
         - ModifyDBClusterInput.EngineVersion
-        - DescribeDBInstancesInput.DBInstanceIndentifier
         - CreateDBInstanceInput.DBInstanceIdentifier
         - ModifyDBInstanceInput.DBInstanceIdentifier
         - DeleteDBInstanceInput.DBInstanceIdentifier
@@ -72,13 +71,11 @@ ignore:
         - CreateDBParameterGroupInput.DBParameterGroupFamily
         - DeleteDBParameterGroupInput.DBParameterGroupName
         - ModifyDBParameterGroupInput.DBParameterGroupName
-        - ModifyDBParameterGroupInput.DBParameterGroupFamily
         - DescribeDBParameterGroupsInput.DBParameterGroupName
         - CreateDBClusterParameterGroupInput.DBClusterParameterGroupName
         - CreateDBClusterParameterGroupInput.DBParameterGroupFamily
         - DeleteDBClusterParameterGroupInput.DBClusterParameterGroupName
         - ModifyDBClusterParameterGroupInput.DBClusterParameterGroupName
-        - ModifyDBClusterParameterGroupInput.DBParameterGroupFamily
         - DescribeDBClusterParameterGroupsInput.DBClusterParameterGroupName
         - DescribeGlobalClustersInput.GlobalClusterIdentifier
         - ModifyGlobalClusterInput.GlobalClusterIdentifier
@@ -91,6 +88,10 @@ ignore:
         - CreateOptionGroupInput.OptionGroupName
         # ignoreFieldPaths of import.yaml
         - ModifyAdditionalStorageVolume.SetForDelete
+        - DescribeDBInstancesInput.DBInstanceIdentifier
+        - CreateDBInstanceInput.TdeCredentialPassword
+        - ModifyDBInstanceInput.TdeCredentialPassword
+        - PendingModifiedValues.MasterUserPassword
     resource_names:
         - CustomAvailabilityZone
         - CustomDBEngineVersion

@@ -1,0 +1,57 @@
+name: Security
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+  pull_request: {}
+  # New advisories and leaked-secret detectors land without code changes.
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch: {}
+
+permissions: {}
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # PRs scan base..head, pushes before..after, schedule the whole history.
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        with:
+          version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
+          extra_args: --results=verified,unknown
+
+  # ci.yml runs govulncheck on PRs and pushes; this catches new advisories.
+  govulncheck:
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          submodules: true
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Run govulncheck
+        run: make vulncheck

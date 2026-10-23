@@ -25,8 +25,8 @@ Generated from scratch: `ec2/SecurityGroup`, `ec2/SecurityGroupIngressRule`,
 
 | Path | Content |
 |------|---------|
-| `apis/<svc>/generator-config.yaml` | ACK generator config of a service (hand-written) |
-| `apis/<svc>/codegen.yaml` | Extra SDK operations per kind for the generated `Client` interface |
+| `apis/<svc>/generator-config.yaml` | ACK generator config of a service (hand-written; for imported services generated from `import.yaml` — put edits under `generatorConfig` there) |
+| `apis/<svc>/codegen.yaml` | Per-kind codegen settings: extra SDK operations, identifier, opt-ins for unsafe defaults (see `docs/components/code-generator.md`) |
 | `apis/<svc>/import.yaml` | Kinds imported from provider-aws and their source revisions (managed by the importer) |
 | `apis/<svc>/v1alpha1/zz_*.go` | Generated API types — never edit |
 | `apis/<svc>/v1alpha1/*.go` | Hand-written custom types, extra methods |
@@ -49,6 +49,7 @@ make generate                  # deepcopy, managed methods, reference resolvers,
 go build ./... && go vet ./... && go test ./...   # root module
 make lint                      # golangci-lint (.golangci.yml) on both modules, as in CI
 make test                      # unit tests of both modules (codegen: make codegen.test)
+make check-import-todo         # no code left to port from codegen/cmd/import
 ```
 
 Order matters: `make services` → `make generate` → build. Hand-written code
@@ -74,6 +75,9 @@ compiles after `make generate`.
   by references ([ADR 0009](docs/adr/0009-ec2-security-group-model.md)).
 - Need another SDK operation in the controller? Add it to
   `apis/<svc>/codegen.yaml` and run `make services`.
+- `make services` fails closed: when it stops, read the message and add the
+  config line it names (`codegen.yaml` `kinds.<Kind>` or
+  `generator-config.yaml`). Don't silence a check you don't understand.
 - API types keep ACK's `*int64`/`[]*string`; the SDK v2 uses `*int32`/`[]string`.
   Convert with `internal/utils/pointer` (`Int32`, `Int64`) and
   `aws.ToStringSlice`/`aws.StringSlice`.

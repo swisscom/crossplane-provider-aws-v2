@@ -21,8 +21,10 @@ package securitygroup
 import (
 	"errors"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 )
@@ -32,6 +34,10 @@ import (
 func GenerateDescribeSecurityGroupsInput(cr *svcapitypes.SecurityGroup) (*svcsdk.DescribeSecurityGroupsInput, error) {
 	res := &svcsdk.DescribeSecurityGroupsInput{}
 
+	// The external name identifies the resource; status may be empty or stale.
+	if name := meta.GetExternalName(cr); name != "" {
+		res.GroupIds = []string{name}
+	}
 	return res, nil
 }
 
@@ -40,7 +46,8 @@ func GenerateSecurityGroup(resp *svcsdk.DescribeSecurityGroupsOutput) *svcapityp
 	cr := &svcapitypes.SecurityGroup{}
 
 	found := false
-	for _, elem := range resp.SecurityGroups {
+	if len(resp.SecurityGroups) > 0 {
+		elem := resp.SecurityGroups[0]
 		if elem.Description != nil {
 			cr.Spec.ForProvider.Description = elem.Description
 		} else {
@@ -272,7 +279,6 @@ func GenerateSecurityGroup(resp *svcsdk.DescribeSecurityGroupsOutput) *svcapityp
 			cr.Spec.ForProvider.VPCID = nil
 		}
 		found = true
-		break
 	}
 	if !found {
 		return cr
@@ -309,6 +315,9 @@ func GenerateDeleteSecurityGroupInput(cr *svcapitypes.SecurityGroup) (*svcsdk.De
 		res.GroupName = cr.Spec.ForProvider.GroupName
 	}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.GroupId = aws.String(name)
+	}
 	return res, nil
 }
 

@@ -236,6 +236,9 @@ spec:
                   region:
                     description: Region is which region the DBInstance will be created.
                     type: string
+                    x-kubernetes-validations:
+                    - message: region is immutable
+                      rule: self == oldSelf
                   tags:
                     description: |-
                       The tags to be assigned to the instance. You can assign up to 10 tags to
@@ -449,8 +452,6 @@ spec:
                         format: int64
                         type: integer
                       licenseModel:
-                        type: string
-                      masterUserPassword:
                         type: string
                       multiAZ:
                         type: boolean

@@ -22,8 +22,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strings"
 	"testing"
+
+	"github.com/swisscom/crossplane-provider-aws-v2/codegen/internal/modeltest"
 )
 
 // TestDiffUpdatableParametersDocDB generates docdb with the repository's
@@ -47,13 +48,11 @@ func TestDiffUpdatableParametersDocDB(t *testing.T) {
 	}
 	// The SDK version and model name come from the provider's go.mod.
 	if err := ResolveServiceModule(&o); err != nil {
-		t.Skipf("aws-sdk-go-v2/service/docdb not available: %v", err)
+		modeltest.Unavailable(t, "aws-sdk-go-v2/service/docdb not available: %v", err)
 	}
 	o.OutputDir = out
 	if err := Run(context.Background(), o); err != nil {
-		if strings.Contains(err.Error(), "fetch") {
-			t.Skipf("AWS API model not available: %v", err)
-		}
+		modeltest.SkipOnFetchError(t, err)
 		t.Fatal(err)
 	}
 

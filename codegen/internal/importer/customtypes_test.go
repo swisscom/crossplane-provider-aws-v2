@@ -26,6 +26,8 @@ import (
 	"testing"
 )
 
+const customTypesFile = "custom_types.go"
+
 func TestAPIUses(t *testing.T) {
 	dir := t.TempDir()
 	src := `package dbinstance
@@ -111,7 +113,7 @@ type CustomFooParameters struct {
 	}
 	r := &Report{}
 	c := &customTypes{
-		src: pkg, svcVer: "svc/v1alpha1", kinds: []string{"Bar", "Foo"},
+		src: pkg, svcVer: "svc/v1alpha1", kinds: []string{"Bar", fooKind},
 		tgt:    &target{root: tgtDir, module: "example.com/p"},
 		rw:     newRewriter("example.com/p", func(string) bool { return true }),
 		report: r, keep: map[string]bool{"CustomFooParameters": true},
@@ -176,5 +178,216 @@ type CustomFooParameters struct {
 	}
 	if strings.Contains(string(b), "Bar") || !strings.Contains(string(b), "func (mg *Foo) ResolveReferences") {
 		t.Errorf("foo.go:\n%s", b)
+	}
+}
+
+// A re-import keeps the declaration order of custom_types.go: stubs are
+// filled in place and only new types go to the end.
+func TestWriteTypesKeepsOrder(t *testing.T) {
+	srcDir, dir := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(srcDir, customTypesFile), `package v1alpha1
+
+// CustomFooObservation of Foo.
+type CustomFooObservation struct{}
+
+// NewType is new.
+type NewType struct {
+	A *string `+"`json:\"a,omitempty\"`"+`
+}
+`)
+	tgt := `/*
+header
+*/
+
+package v1alpha1
+
+// CustomFooParameters of Foo.
+type CustomFooParameters struct {
+	A *string ` + "`json:\"a,omitempty\"`" + `
+}
+
+// CustomFooObservation of Foo.
+type CustomFooObservation struct{}
+
+// Last was declared last by hand.
+type Last struct{}
+`
+	writeFile(t, filepath.Join(dir, customTypesFile), tgt)
+	pkg, err := parseAPIPackage(srcDir, SourceModule+"/apis/svc/v1alpha1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := &customTypes{
+		src: pkg, svcVer: "svc/v1alpha1", kinds: []string{fooKind},
+		tgt: &target{root: dir, module: testModule}, rw: newRewriter(testModule, func(string) bool { return true }),
+		report: &Report{}, keep: map[string]bool{"CustomFooObservation": true, "NewType": true},
+	}
+	if err := c.writeTypes(dir); err != nil {
+		t.Fatal(err)
+	}
+	first := readFile(t, filepath.Join(dir, customTypesFile))
+	order := []string{"type CustomFooParameters", "type CustomFooObservation", "type Last", "type NewType"}
+	last := -1
+	for _, s := range order {
+		i := strings.Index(first, s)
+		if i < last {
+			t.Errorf("%q is out of order:\n%s", s, first)
+		}
+		last = i
+	}
+	if strings.Count(first, "type CustomFooObservation") != 1 {
+		t.Errorf("CustomFooObservation declared %d times:\n%s", strings.Count(first, "type CustomFooObservation"), first)
+	}
+	if err := c.writeTypes(dir); err != nil {
+		t.Fatal(err)
+	}
+	if second := readFile(t, filepath.Join(dir, customTypesFile)); second != first {
+		t.Errorf("second run changed custom_types.go:\n%s\nfirst:\n%s", second, first)
+	}
+}
+
+func TestResolverGaps(t *testing.T) {
+	const zz = `package v1alpha1
+
+type Foo struct {
+	Spec FooSpec ` + "`json:\"spec\"`" + `
+}
+
+type FooSpec struct {
+	ForProvider FooParameters ` + "`json:\"forProvider\"`" + `
+}
+
+type FooParameters struct {
+	CustomFooParameters ` + "`json:\",inline\"`" + `
+	Tags []*Tag ` + "`json:\"tags,omitempty\"`" + `
+}
+
+type Tag struct{ Key *string }
+`
+	const custom = `package v1alpha1
+
+type CustomFooParameters struct {
+	// +crossplane:generate:reference:type=Bar
+	BarID *string ` + "`json:\"barID,omitempty\"`" + `
+
+	Nested *Nested
+}
+
+type Nested struct {
+	// +crossplane:generate:reference:type=Baz
+	BazID *string
+}
+`
+	const resolver = `package v1alpha1
+
+// ResolveReferences of Foo.
+func (mg *Foo) ResolveReferences() error {
+	_ = mg.Spec.ForProvider.Nested.BazID
+	return nil
+}
+`
+	cases := map[string]struct {
+		files map[string]string
+		want  []resolverGap
+	}{
+		"Gap": {
+			files: map[string]string{"zz_foo.go": zz, customTypesFile: custom, "foo.go": resolver},
+			want:  []resolverGap{{Kind: fooKind, Method: "foo.go:4", Field: "BarID", Marker: "custom_types.go:5"}},
+		},
+		"Resolved": {
+			files: map[string]string{"zz_foo.go": zz, customTypesFile: custom, "foo.go": strings.Replace(resolver, "_ = mg", "_ = mg.Spec.ForProvider.BarID\n\t_ = mg", 1)},
+		},
+		"NoHandWrittenResolver": {
+			files: map[string]string{"zz_foo.go": zz, customTypesFile: custom},
+		},
+		"GeneratedResolver": {
+			files: map[string]string{"zz_foo.go": zz, customTypesFile: custom, "zz_generated.resolvers.go": resolver},
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			for n, c := range tc.files {
+				writeFile(t, filepath.Join(dir, n), c)
+			}
+			got, err := resolverGaps(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("resolverGaps() = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReportResolverGaps(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, customTypesFile), "package v1alpha1\n\ntype Foo struct {\n\t// +crossplane:generate:reference:type=Bar\n\tBarID *string\n}\n")
+	written := filepath.Join(dir, "foo.go")
+	writeFile(t, written, "package v1alpha1\n\n// ResolveReferences of Foo.\nfunc (mg *Foo) ResolveReferences() error { return nil }\n")
+
+	r := &Report{}
+	if err := reportResolverGaps(dir, written, r); err != nil {
+		t.Fatal(err)
+	}
+	if !hasFinding(r, topicReferences, "`Foo` has a hand-written `ResolveReferences` (foo.go:4), so angryjet generates no resolver for it: the marker reference of `BarID` (custom_types.go:5) is never resolved") || r.Blocking() != 1 {
+		t.Errorf("findings: %v", findings(r, topicReferences))
+	}
+	want := "// ResolveReferences of Foo.\n// TODO(import): resolve BarID here; angryjet skips kinds with a hand-written ResolveReferences.\nfunc (mg *Foo) ResolveReferences()"
+	if got := readFile(t, written); !strings.Contains(got, want) {
+		t.Errorf("foo.go:\n%s", got)
+	}
+
+	// A file that was not written by this import is left alone.
+	before := readFile(t, written)
+	if err := reportResolverGaps(dir, "", &Report{}); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, written) != before {
+		t.Error("hand-written file changed")
+	}
+}
+
+// A field renamed by hand keeps its json name; adding the source field
+// next to it would make encoding/json drop both.
+func TestMergeFieldsMatchesJSONNames(t *testing.T) {
+	srcDir := t.TempDir()
+	writeFile(t, filepath.Join(srcDir, customTypesFile), `package v1alpha1
+
+type CustomDBSubnetGroupParameters struct {
+	SubnetIDs []*string `+"`json:\"subnetIDs,omitempty\"`"+`
+
+	SUbnetIDsSelector *string `+"`json:\"subnetIDsSelector,omitempty\"`"+`
+
+	New *string `+"`json:\"new,omitempty\"`"+`
+}
+`)
+	tgt := `package v1alpha1
+
+type CustomDBSubnetGroupParameters struct {
+	SubnetIDs []*string ` + "`json:\"subnetIDs,omitempty\"`" + `
+
+	// renamed by hand (typo fix), same JSON name
+	SubnetIDsSelector *string ` + "`json:\"subnetIDsSelector,omitempty\"`" + `
+}
+`
+	pkg, err := parseAPIPackage(srcDir, SourceModule+"/apis/docdb/v1alpha1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &Report{}
+	c := &customTypes{src: pkg, svcVer: "docdb/v1alpha1", kinds: []string{"DBSubnetGroup"},
+		tgt: &target{root: t.TempDir(), module: testModule}, rw: newRewriter(testModule, func(string) bool { return true }),
+		report: r, keep: map[string]bool{}}
+	merged, fields, err := c.mergeFields([]byte(tgt), pkg.decls["CustomDBSubnetGroupParameters"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(fields, []string{"New"}) || strings.Contains(string(merged), "SUbnetIDsSelector") {
+		t.Errorf("mergeFields() added %v:\n%s", fields, merged)
+	}
+	if !hasFinding(r, topicTypes, "`CustomDBSubnetGroupParameters`: source field `SUbnetIDsSelector` not added: its json name `subnetIDsSelector` is already used by `SubnetIDsSelector`") {
+		t.Errorf("findings: %v", findings(r, topicTypes))
 	}
 }

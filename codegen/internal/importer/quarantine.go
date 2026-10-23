@@ -23,7 +23,10 @@ import (
 	"go/ast"
 	"go/format"
 	"go/parser"
+	"go/printer"
 	"go/token"
+	"go/types"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -42,8 +45,12 @@ import (
 const (
 	topicTodo = "Not compiling yet (importtodo)"
 	todoTag   = "importtodo"
-	maxRounds = 40
 )
+
+// maxRounds bounds the type check loop; a var so tests can lower it.
+var maxRounds = 40
+
+var couldNotImportRe = regexp.MustCompile(`could not import (\S+)`)
 
 // importer ports hand-written code of one service.
 type importer struct {
@@ -56,6 +63,8 @@ type importer struct {
 
 	ported  []portedFile
 	newDirs map[string]bool
+	// helpers are the source helper packages ported in this run.
+	helpers []string
 	// todo counts quarantined declarations per target file.
 	todo map[string]int
 }
@@ -68,14 +77,17 @@ func formatFile(fset *token.FileSet, f *ast.File) ([]byte, error) {
 	return format.Source(b.Bytes())
 }
 
-// typecheck type checks the ported packages and moves declarations that do
-// not compile to <file>_importtodo.go files that are excluded from the
-// build. Missing SDK operations of a generated Client interface are added to
-// codegen.yaml instead.
+// typecheck type checks the ported packages and quarantines declarations
+// of files written by this import that do not compile. Missing SDK
+// operations of a generated Client interface are added to codegen.yaml
+// instead. Any error it cannot quarantine fails the import.
 func (im *importer) typecheck() error { //nolint:gocyclo // a fixpoint loop
 	dirs := map[string]bool{}
 	for _, f := range im.ported {
 		dirs[filepath.Dir(f.path)] = true
+	}
+	if len(dirs) == 0 {
+		return nil // nothing was ported, e.g. on a re-import
 	}
 	patterns := make([]string, 0, len(dirs))
 	for d := range dirs {
@@ -89,7 +101,7 @@ func (im *importer) typecheck() error { //nolint:gocyclo // a fixpoint loop
 		}
 	}
 
-	for round := 0; round < maxRounds; round++ {
+	for round := 0; ; round++ {
 		errs, err := im.load(patterns)
 		if err != nil {
 			return err
@@ -103,80 +115,100 @@ func (im *importer) typecheck() error { //nolint:gocyclo // a fixpoint loop
 		if len(errs) == 0 {
 			return nil
 		}
+		if round == maxRounds {
+			return fmt.Errorf("type check did not converge after %d rounds; remaining errors:\n\t%s", maxRounds, im.errorList(errs))
+		}
 		failing := map[string]bool{}
 		for _, e := range errs {
-			failing[filepath.Dir(e.file)] = true
+			failing[e.dir] = true
 		}
-		quarantine := map[string]map[int]string{} // file -> line -> message
+		quarantine := map[string][]loadError{}
 		ops := map[string][]string{}
-		progress := false
-		var stuck []string
+		var left []loadError
 		for _, e := range errs {
-			if m := regexp.MustCompile(`could not import (\S+)`).FindStringSubmatch(e.msg); m != nil {
+			if m := couldNotImportRe.FindStringSubmatch(e.msg); m != nil {
 				if rel, ok := strings.CutPrefix(m[1], im.tgt.module+"/"); ok && failing[filepath.Join(im.tgt.root, rel)] {
 					continue // fixed once the imported package compiles
 				}
 			}
-			if op := im.missingClientOp(e.msg); op != "" && kindOf[filepath.Dir(e.file)] != "" {
-				k := kindOf[filepath.Dir(e.file)]
+			if op := im.missingClientOp(e.msg); op != "" && kindOf[e.dir] != "" {
+				k := kindOf[e.dir]
 				if !slices.Contains(ops[k], op) {
 					ops[k] = append(ops[k], op)
 				}
 				continue
 			}
-			if strings.HasPrefix(filepath.Base(e.file), "zz_") || !im.isPorted(e.file) {
-				stuck = append(stuck, e.String(im))
+			left = append(left, e)
+			if e.file == "" || strings.HasPrefix(filepath.Base(e.file), "zz_") || !im.isPorted(e.file) {
 				continue
 			}
-			if quarantine[e.file] == nil {
-				quarantine[e.file] = map[int]string{}
-			}
-			if _, ok := quarantine[e.file][e.line]; !ok {
-				quarantine[e.file][e.line] = e.msg
-			}
+			quarantine[e.file] = append(quarantine[e.file], e)
 		}
+		progress := false
 		if len(ops) > 0 {
 			if err := im.addClientOps(ops); err != nil {
 				return err
 			}
 			progress = true
 		}
-		for file, lines := range quarantine {
-			n, err := im.quarantine(file, lines)
+		for _, file := range slices.Sorted(maps.Keys(quarantine)) {
+			n, err := im.quarantine(file, quarantine[file])
 			if err != nil {
 				return err
 			}
 			progress = progress || n > 0
 		}
 		if !progress {
-			for _, s := range stuck {
-				im.report.Add(topicTodo, "unresolved: %s", s)
+			if len(left) == 0 {
+				left = errs
 			}
-			return nil
+			return fmt.Errorf("%d error(s) the importer cannot quarantine:\n\t%s", len(left), im.errorList(left))
 		}
 	}
-	im.report.Add(topicTodo, "type check did not converge after %d rounds", maxRounds)
-	return nil
 }
 
+// errorList renders errors sorted, one per line.
+func (im *importer) errorList(errs []loadError) string {
+	out := make([]string, 0, len(errs))
+	for _, e := range errs {
+		out = append(out, e.String(im))
+	}
+	sort.Strings(out)
+	return strings.Join(slices.Compact(out), "\n\t")
+}
+
+// isPorted reports whether this import wrote file. Only those files may be
+// quarantined; everything else was written or reviewed by a human.
 func (im *importer) isPorted(file string) bool {
 	for _, f := range im.ported {
-		if filepath.Dir(f.path) == filepath.Dir(file) {
+		if f.path == file {
 			return true
 		}
 	}
 	return false
 }
 
+// loadError is a type check error. file is empty for errors without a
+// position, e.g. a package name clash.
 type loadError struct {
-	file string
-	line int
-	msg  string
+	dir       string
+	file      string
+	line, col int
+	msg       string
 }
 
 func (e loadError) String(im *importer) string {
-	return fmt.Sprintf("%s:%d: %s", im.rel(e.file), e.line, e.msg)
+	if e.file == "" {
+		return fmt.Sprintf("%s: %s", im.rel(e.dir), e.msg)
+	}
+	s := fmt.Sprintf("%s:%d:%d: %s", im.rel(e.file), e.line, e.col, e.msg)
+	if !strings.HasPrefix(filepath.Base(e.file), "zz_") && !im.isPorted(e.file) {
+		s += " (not written by this import)"
+	}
+	return s
 }
+
+var errPosRe = regexp.MustCompile(`^(.+?):(\d+)(?::(\d+))?$`)
 
 func (im *importer) load(patterns []string) ([]loadError, error) {
 	cfg := &packages.Config{
@@ -192,29 +224,63 @@ func (im *importer) load(patterns []string) ([]loadError, error) {
 	seen := map[string]bool{}
 	var out []loadError
 	for _, p := range pkgs {
+		dir := p.Dir
+		if dir == "" && len(p.GoFiles) > 0 {
+			dir = filepath.Dir(p.GoFiles[0])
+		}
 		for _, e := range p.Errors {
-			pos := e.Pos
-			if pos == "" || pos == "-" {
-				// e.g. a package that cannot be listed
-				for _, f := range p.GoFiles {
-					pos = f + ":1:1"
-					break
+			for _, le := range im.loadErrors(dir, e) {
+				k := fmt.Sprintf("%s|%s:%d:%d:%s", le.dir, le.file, le.line, le.col, le.msg)
+				if !seen[k] {
+					seen[k] = true
+					out = append(out, le)
 				}
-			}
-			parts := strings.Split(pos, ":")
-			if len(parts) < 2 {
-				continue
-			}
-			line, _ := strconv.Atoi(parts[1])
-			le := loadError{file: parts[0], line: line, msg: e.Msg}
-			k := fmt.Sprintf("%s:%d:%s", le.file, le.line, le.msg)
-			if !seen[k] {
-				seen[k] = true
-				out = append(out, le)
 			}
 		}
 	}
 	return out, nil
+}
+
+var compilerLineRe = regexp.MustCompile(`^(\S+\.go):(\d+)(?::(\d+))?: (.*)$`)
+
+// loadErrors converts a package error. The go command reports compiler
+// output as one error without a position ("# pkg\nfile:line:col: msg"); its
+// lines are split into positioned errors so they can be quarantined.
+func (im *importer) loadErrors(dir string, e packages.Error) []loadError {
+	if strings.HasPrefix(e.Msg, "\t") {
+		return nil // a note of the previous error, e.g. "other declaration of"
+	}
+	if m := errPosRe.FindStringSubmatch(e.Pos); m != nil {
+		le := loadError{dir: filepath.Dir(m[1]), file: m[1], msg: e.Msg}
+		le.line, _ = strconv.Atoi(m[2])
+		le.col, _ = strconv.Atoi(m[3])
+		return []loadError{le}
+	}
+	if strings.HasPrefix(e.Msg, "# ") {
+		var out []loadError
+		for _, l := range strings.Split(e.Msg, "\n")[1:] {
+			if strings.HasPrefix(l, "\t") {
+				continue
+			}
+			m := compilerLineRe.FindStringSubmatch(l)
+			if m == nil {
+				out = nil
+				break
+			}
+			f := m[1]
+			if !filepath.IsAbs(f) {
+				f = filepath.Join(im.tgt.root, f)
+			}
+			le := loadError{dir: filepath.Dir(f), file: f, msg: m[4]}
+			le.line, _ = strconv.Atoi(m[2])
+			le.col, _ = strconv.Atoi(m[3])
+			out = append(out, le)
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return []loadError{{dir: dir, msg: e.Msg}}
 }
 
 var missingMethodRe = regexp.MustCompile(`\(type Client has no field or method (\w+)\)`)
@@ -239,8 +305,8 @@ func (im *importer) addClientOps(ops map[string][]string) error {
 	if sc.ClientOperations == nil {
 		sc.ClientOperations = map[string][]string{}
 	}
-	for k, os := range ops {
-		for _, op := range os {
+	for _, k := range slices.Sorted(maps.Keys(ops)) {
+		for _, op := range ops[k] {
 			if !slices.Contains(sc.ClientOperations[k], op) {
 				sc.ClientOperations[k] = append(sc.ClientOperations[k], op)
 				im.report.Add(topicController, "%s: added `%s` to the Client interface (codegen.yaml)", k, op)
@@ -259,10 +325,13 @@ func (im *importer) addClientOps(ops map[string][]string) error {
 	return generator.Run(im.ctx, im.o.Options)
 }
 
-// quarantine moves the declarations of file at the given lines to the
-// importtodo file. It returns the number of moved declarations.
-func (im *importer) quarantine(file string, lines map[int]string) (int, error) { //nolint:gocyclo // AST bookkeeping
-	src, err := os.ReadFile(file)
+// quarantine handles the declarations of file that have errors. A function
+// or method whose errors are all inside its body keeps its signature and
+// gets a body that panics, so callers and overrides stay in place and fail
+// loudly. Everything else is moved. The originals go to the importtodo file.
+// It returns the number of changes.
+func (im *importer) quarantine(file string, errs []loadError) (int, error) { //nolint:gocyclo // AST bookkeeping
+	src, err := os.ReadFile(file) //nolint:gosec // a file this import wrote
 	if err != nil {
 		return 0, err
 	}
@@ -271,84 +340,114 @@ func (im *importer) quarantine(file string, lines map[int]string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	type cut struct {
-		start, end int
-		msg        string
-	}
-	var cuts []cut
+	off := func(p token.Pos) int { return fset.Position(p).Offset }
+	todo := filepath.Base(todoPath(file))
+	test := strings.HasSuffix(file, "_test.go")
+
+	problems := map[ast.Decl][]loadError{}
 	var badImports []string
 	for _, d := range f.Decls {
-		start, end := fset.Position(d.Pos()).Line, fset.Position(d.End()).Line
-		var msg string
-		for l, m := range lines {
-			if l >= start && l <= end && (msg == "" || l < start) {
-				msg = m
-			}
-		}
-		if msg == "" {
-			continue
-		}
 		if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.IMPORT {
 			for _, s := range g.Specs {
 				is := s.(*ast.ImportSpec)
-				if l := fset.Position(is.Pos()).Line; lines[l] != "" {
+				l := fset.Position(is.Pos()).Line
+				if slices.ContainsFunc(errs, func(e loadError) bool { return e.line == l }) {
 					badImports = append(badImports, is.Path.Value)
 				}
 			}
 			continue
 		}
-		p := d.Pos()
-		if doc := docOf(d); doc != nil {
-			p = doc.Pos()
-		}
-		cuts = append(cuts, cut{start: fset.Position(p).Offset, end: fset.Position(d.End()).Offset, msg: msg})
-	}
-	// Declarations that use an import that cannot be resolved.
-	for _, ip := range badImports {
-		name := ""
-		for _, is := range f.Imports {
-			if is.Path.Value == ip {
-				p, _ := strconv.Unquote(ip)
-				name = filepath.Base(p)
-				if is.Name != nil {
-					name = is.Name.Name
-				}
+		from, to := fset.Position(d.Pos()), fset.Position(d.End())
+		for _, e := range errs {
+			if e.within(from, to) {
+				problems[d] = append(problems[d], e)
 			}
 		}
+	}
+	// Uses of an import that cannot be resolved don't compile either.
+	for _, ip := range badImports {
+		names := importNamesOf(f, ip)
 		for _, d := range f.Decls {
 			if g, ok := d.(*ast.GenDecl); ok && g.Tok == token.IMPORT {
 				continue
 			}
-			if usesPkg(d, name) {
-				p := d.Pos()
-				if doc := docOf(d); doc != nil {
-					p = doc.Pos()
-				}
-				cuts = append(cuts, cut{start: fset.Position(p).Offset, end: fset.Position(d.End()).Offset, msg: "cannot import " + ip})
+			if p := firstUse(d, names...); p.IsValid() {
+				pos := fset.Position(p)
+				problems[d] = append(problems[d], loadError{file: file, line: pos.Line, col: pos.Column, msg: "cannot import " + ip})
 			}
 		}
 	}
-	sort.Slice(cuts, func(i, j int) bool { return cuts[i].start < cuts[j].start })
-	// Deduplicate overlapping cuts.
-	var uniq []cut
-	for _, c := range cuts {
-		if len(uniq) > 0 && c.start < uniq[len(uniq)-1].end {
+
+	stubbable := func(d ast.Decl) bool {
+		fd, ok := d.(*ast.FuncDecl)
+		return ok && !test && fd.Body != nil && inBody(fset, fd.Body, problems[d])
+	}
+	// A moved method of a type that embeds another would let the embedded
+	// method run in its place, so the type and its methods move with it.
+	withRecv := map[ast.Decl]string{}
+	var elsewhere [][2]string // receiver type, method
+	for _, d := range f.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Recv == nil || len(problems[d]) == 0 || stubbable(d) {
 			continue
 		}
-		uniq = append(uniq, c)
-	}
-	if len(uniq) == 0 && len(badImports) == 0 {
-		return 0, nil
+		t := recvType(fd)
+		td, emb := embeddingType(f, t)
+		if td == nil {
+			elsewhere = append(elsewhere, [2]string{t, fd.Name.Name})
+			continue
+		}
+		why := fmt.Sprintf("its method `%s` does not compile and `%s` embeds `%s`, so the embedded `%s` would run instead: %s", fd.Name.Name, t, emb, fd.Name.Name, oneLine(earliest(problems[d]).msg))
+		if _, done := withRecv[td]; !done {
+			im.report.Block(topicTodo, "`%s`: type `%s` and its methods moved to `%s`: %s", im.rel(file), t, todo, why)
+		}
+		withRecv[td] = why
+		for _, m := range f.Decls {
+			if md, ok := m.(*ast.FuncDecl); ok && m != d && recvType(md) == t {
+				withRecv[m] = why
+			}
+		}
 	}
 
+	type edit struct {
+		start, end int
+		repl       string
+	}
+	var edits []edit
 	var moved bytes.Buffer
-	for _, c := range uniq {
-		fmt.Fprintf(&moved, "\n// TODO(import): %s\n%s\n", oneLine(c.msg), src[c.start:c.end])
-		im.report.Add(topicTodo, "%s: `%s`: %s", im.rel(file), declSummary(src[c.start:c.end]), oneLine(c.msg))
+	for _, d := range f.Decls {
+		ps := problems[d]
+		why, forced := withRecv[d]
+		if len(ps) == 0 && !forced {
+			continue
+		}
+		start := d.Pos()
+		if doc := docOf(d); doc != nil {
+			start = doc.Pos()
+		}
+		if len(ps) == 0 {
+			fmt.Fprintf(&moved, "\n// TODO(import): moved with its type: %s\n%s\n", why, src[off(start):off(d.End())])
+			edits = append(edits, edit{start: off(start), end: off(d.End())})
+			continue
+		}
+		e := earliest(ps)
+		fmt.Fprintf(&moved, "\n// TODO(import): %s\n%s\n", oneLine(e.msg), src[off(start):off(d.End())])
+		sum := declSummaryOf(fset, d, src[off(d.Pos()):off(d.End())])
+		if fd, ok := d.(*ast.FuncDecl); ok && !forced && stubbable(d) {
+			msg := fmt.Sprintf("TODO(import): %s does not compile yet; port it from %s", declKey(fd), todo)
+			edits = append(edits, edit{start: off(fd.Body.Lbrace), end: off(fd.Body.Rbrace) + 1, repl: fmt.Sprintf("{\n\tpanic(%q)\n}", msg)})
+			im.report.Block(topicTodo, "`%s`: `%s`: body moved to `%s`; the stub panics until it is ported: %s", im.rel(file), sum, todo, oneLine(e.msg))
+			continue
+		}
+		edits = append(edits, edit{start: off(start), end: off(d.End())})
+		im.report.Block(topicTodo, "`%s`: `%s` moved to `%s`: %s", im.rel(file), sum, todo, oneLine(e.msg))
+	}
+	if len(edits) == 0 && len(badImports) == 0 {
+		return 0, nil
 	}
 	out := src
-	for i := len(uniq) - 1; i >= 0; i-- {
-		out = append(append([]byte{}, out[:uniq[i].start]...), out[uniq[i].end:]...)
+	for i := len(edits) - 1; i >= 0; i-- {
+		out = slices.Concat(out[:edits[i].start], []byte(edits[i].repl), out[edits[i].end:])
 	}
 	out, err = pruneImports(file, out, badImports)
 	if err != nil {
@@ -357,8 +456,141 @@ func (im *importer) quarantine(file string, lines map[int]string) (int, error) {
 	if err := os.WriteFile(file, out, 0o600); err != nil {
 		return 0, err
 	}
-	im.todo[file] += len(uniq)
-	return len(uniq) + len(badImports), im.appendTodo(file, src, f, fset, moved.Bytes())
+	im.todo[file] += len(edits)
+	if err := im.appendTodo(file, src, f, fset, moved.Bytes()); err != nil {
+		return 0, err
+	}
+	n := len(edits) + len(badImports)
+	for _, rm := range elsewhere {
+		m, err := im.moveEmbeddingType(file, rm[0], rm[1])
+		if err != nil {
+			return 0, err
+		}
+		n += m
+	}
+	return n, nil
+}
+
+// moveEmbeddingType moves type t from another file of this import in the
+// same package, if it embeds a type, so its embedded method can't be
+// promoted in place of the moved method.
+func (im *importer) moveEmbeddingType(from, t, method string) (int, error) {
+	for _, pf := range im.ported {
+		if pf.path == from || filepath.Dir(pf.path) != filepath.Dir(from) {
+			continue
+		}
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, pf.path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			return 0, err
+		}
+		td, emb := embeddingType(f, t)
+		if td == nil {
+			continue
+		}
+		why := fmt.Sprintf("its method `%s` (in `%s`) does not compile and `%s` embeds `%s`, so the embedded `%s` would run instead", method, filepath.Base(from), t, emb, method)
+		return im.quarantine(pf.path, []loadError{{file: pf.path, line: fset.Position(td.Pos()).Line, msg: why}})
+	}
+	return 0, nil
+}
+
+// embeddingType returns the declaration of struct type name in f and the
+// first type it embeds, or nil if f does not declare such a type.
+func embeddingType(f *ast.File, name string) (ast.Decl, string) {
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok || g.Tok != token.TYPE {
+			continue
+		}
+		for _, s := range g.Specs {
+			ts := s.(*ast.TypeSpec)
+			st, ok := ts.Type.(*ast.StructType)
+			if !ok || ts.Name.Name != name {
+				continue
+			}
+			for _, fl := range st.Fields.List {
+				if len(fl.Names) == 0 {
+					return d, types.ExprString(fl.Type)
+				}
+			}
+		}
+	}
+	return nil, ""
+}
+
+// within reports whether e lies between from and to. Without a column,
+// the line decides.
+func (e loadError) within(from, to token.Position) bool {
+	if e.line < from.Line || e.line > to.Line {
+		return false
+	}
+	if e.col == 0 {
+		return true
+	}
+	return (e.line > from.Line || e.col >= from.Column) && (e.line < to.Line || e.col <= to.Column)
+}
+
+// inBody reports whether every error lies inside body. An error without a
+// column counts as outside, so its declaration is moved, not stubbed.
+func inBody(fset *token.FileSet, body *ast.BlockStmt, errs []loadError) bool {
+	l, r := fset.Position(body.Lbrace), fset.Position(body.Rbrace)
+	for _, e := range errs {
+		if e.col == 0 || !e.within(l, r) || (e.line == l.Line && e.col == l.Column) || (e.line == r.Line && e.col == r.Column) {
+			return false
+		}
+	}
+	return true
+}
+
+// earliest returns the error with the smallest position, so the message of
+// a declaration does not depend on map order.
+func earliest(errs []loadError) loadError {
+	return slices.MinFunc(errs, func(a, b loadError) int {
+		if a.line != b.line {
+			return a.line - b.line
+		}
+		if a.col != b.col {
+			return a.col - b.col
+		}
+		return strings.Compare(a.msg, b.msg)
+	})
+}
+
+func importNamesOf(f *ast.File, quoted string) []string {
+	for _, is := range f.Imports {
+		if is.Path.Value == quoted {
+			return importNames(is)
+		}
+	}
+	return nil
+}
+
+// firstUse returns the position of the first pkg.X selector in n.
+func firstUse(n ast.Node, pkgs ...string) token.Pos {
+	var pos token.Pos
+	ast.Inspect(n, func(n ast.Node) bool {
+		if s, ok := n.(*ast.SelectorExpr); ok && !pos.IsValid() {
+			if id, ok := s.X.(*ast.Ident); ok && slices.Contains(pkgs, id.Name) {
+				pos = s.Pos()
+			}
+		}
+		return !pos.IsValid()
+	})
+	return pos
+}
+
+// declSummaryOf returns the signature of a function, or the first line of
+// another declaration.
+func declSummaryOf(fset *token.FileSet, d ast.Decl, b []byte) string {
+	if fd, ok := d.(*ast.FuncDecl); ok {
+		c := *fd
+		c.Doc, c.Body = nil, nil
+		var s strings.Builder
+		if err := printer.Fprint(&s, fset, &c); err == nil {
+			return oneLine(s.String())
+		}
+	}
+	return declSummary(b)
 }
 
 func usesPkg(n ast.Node, name string) bool {
@@ -397,14 +629,11 @@ func pruneImports(name string, src []byte, bad []string) ([]byte, error) {
 	}
 	for _, is := range slices.Clone(f.Imports) {
 		p, _ := strconv.Unquote(is.Path.Value)
-		local := filepath.Base(p)
-		if is.Name != nil {
-			local = is.Name.Name
-		}
-		if local == "_" || local == "." {
+		names := importNames(is)
+		if names[0] == "_" || names[0] == "." {
 			continue
 		}
-		if slices.Contains(bad, is.Path.Value) || !usesPkg(f, local) {
+		if slices.Contains(bad, is.Path.Value) || !slices.ContainsFunc(names, func(n string) bool { return usesPkg(f, n) }) {
 			n := ""
 			if is.Name != nil {
 				n = is.Name.Name
@@ -415,15 +644,21 @@ func pruneImports(name string, src []byte, bad []string) ([]byte, error) {
 	return formatFile(fset, f)
 }
 
-// appendTodo appends moved declarations to the importtodo file of file.
-func (im *importer) appendTodo(file string, src []byte, f *ast.File, fset *token.FileSet, moved []byte) error {
+// todoPath returns the importtodo file of file: x.go -> x_importtodo.go,
+// x_test.go -> x_importtodo_test.go.
+func todoPath(file string) string {
 	base := strings.TrimSuffix(filepath.Base(file), ".go")
 	test := strings.HasSuffix(base, "_test")
 	base = strings.TrimSuffix(base, "_test") + "_" + todoTag
 	if test {
 		base += "_test"
 	}
-	todo := filepath.Join(filepath.Dir(file), base+".go")
+	return filepath.Join(filepath.Dir(file), base+".go")
+}
+
+// appendTodo appends moved declarations to the importtodo file of file.
+func (im *importer) appendTodo(file string, src []byte, f *ast.File, fset *token.FileSet, moved []byte) error {
+	todo := todoPath(file)
 	existing, err := os.ReadFile(todo)
 	if os.IsNotExist(err) {
 		var b bytes.Buffer

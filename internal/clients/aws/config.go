@@ -20,6 +20,7 @@ package aws
 import (
 	"context"
 	"os"
+	"regexp"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -54,12 +55,25 @@ const (
 	errNoSecretRef         = "credentials.secretRef is required when credentials.source is Secret"
 	errSecretOtherNS       = "a ProviderConfig can only reference a Secret in its own namespace"
 	errGetSecret           = "cannot get credentials secret"
-	errParseCreds          = "cannot parse credentials secret"
+	errParseCreds          = "cannot parse key %q of the credentials secret"
+	errParseCredsFile      = "cannot parse shared credentials file"
+	errProfileNotFound     = "profile %q not found in shared credentials file"
+	errEndpointURL         = "endpoint.url must be an http or https URL with a host and without user info, query or fragment"
 	errNoWebIdentity       = "assumeRoleWithWebIdentity is required when credentials.source is WebIdentity"
 	errUnknownSource       = "unsupported credentials source"
 	errLoadDefault         = "cannot load default AWS config"
 	errMissingAccessKeyIDs = "aws_access_key_id and aws_secret_access_key are required"
 )
+
+const (
+	// maxEndpointURL matches the CRD validation of endpoint.url.
+	maxEndpointURL = 2048
+)
+
+// endpointURL matches the CRD pattern of endpoint.url: a hostname that starts
+// and ends with a letter or digit, or a bracketed IPv6 address, then an
+// optional numeric port and path.
+var endpointURL = regexp.MustCompile(`^https?://([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?(/[^?#@\s]*)?$`)
 
 // A Tracker tracks the usage of a ProviderConfig by a managed resource.
 type Tracker interface {
@@ -121,6 +135,11 @@ func GetProviderConfigSpec(ctx context.Context, kube client.Client, ref Provider
 // NewConfig builds an AWS config from a ProviderConfigSpec. If secretNamespace
 // is not empty, the credentials Secret must be in that namespace.
 func NewConfig(ctx context.Context, kube client.Client, spec *v1alpha1.ProviderConfigSpec, secretNamespace, region string) (aws.Config, error) {
+	// Check before any Secret, token file or STS access.
+	if err := validateEndpoint(spec.Endpoint); err != nil {
+		return aws.Config{}, err
+	}
+
 	var cfg aws.Config
 	var err error
 
@@ -141,10 +160,22 @@ func NewConfig(ctx context.Context, kube client.Client, spec *v1alpha1.ProviderC
 	if spec.AssumeRole != nil {
 		cfg.Credentials = aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(sts.NewFromConfig(cfg), spec.AssumeRole.RoleARN, assumeRoleOptions(spec.AssumeRole)))
 	}
+	// Set only after the STS clients exist, so STS never uses endpoint.url.
 	if spec.Endpoint != nil && spec.Endpoint.URL != "" {
 		cfg.BaseEndpoint = aws.String(spec.Endpoint.URL)
 	}
 	return cfg, nil
+}
+
+// validateEndpoint also guards objects stored before the CRD had the check.
+func validateEndpoint(e *v1alpha1.EndpointConfig) error {
+	if e == nil || e.URL == "" {
+		return nil
+	}
+	if len(e.URL) > maxEndpointURL || !endpointURL.MatchString(e.URL) {
+		return errors.New(errEndpointURL)
+	}
+	return nil
 }
 
 func secretConfig(ctx context.Context, kube client.Client, ref *xpv2.SecretKeySelector, namespace, region string) (aws.Config, error) {
@@ -160,7 +191,7 @@ func secretConfig(ctx context.Context, kube client.Client, ref *xpv2.SecretKeySe
 	}
 	creds, err := ParseCredentials(s.Data[ref.Key], DefaultProfile)
 	if err != nil {
-		return aws.Config{}, errors.Wrap(err, errParseCreds)
+		return aws.Config{}, errors.Wrapf(err, errParseCreds, ref.Key)
 	}
 	return config.LoadDefaultConfig(ctx,
 		config.WithRegion(region),
@@ -236,13 +267,15 @@ func defaultConfig(ctx context.Context, region string) (aws.Config, error) {
 //	aws_secret_access_key = <secret>
 //	aws_session_token = <optional token>
 func ParseCredentials(data []byte, profile string) (aws.Credentials, error) {
+	// ini errors quote the offending line, which may hold the secret key, and
+	// the error ends up in the managed resource's status.
 	f, err := ini.InsensitiveLoad(data)
 	if err != nil {
-		return aws.Credentials{}, err
+		return aws.Credentials{}, errors.New(errParseCredsFile)
 	}
 	sec, err := f.GetSection(profile)
 	if err != nil {
-		return aws.Credentials{}, err
+		return aws.Credentials{}, errors.Errorf(errProfileNotFound, profile)
 	}
 	c := aws.Credentials{
 		AccessKeyID:     sec.Key("aws_access_key_id").String(),

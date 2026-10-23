@@ -2874,11 +2874,6 @@ func (in *PendingModifiedValues) DeepCopyInto(out *PendingModifiedValues) {
 		*out = new(string)
 		**out = **in
 	}
-	if in.MasterUserPassword != nil {
-		in, out := &in.MasterUserPassword, &out.MasterUserPassword
-		*out = new(string)
-		**out = **in
-	}
 	if in.MultiAZ != nil {
 		in, out := &in.MultiAZ, &out.MultiAZ
 		*out = new(bool)

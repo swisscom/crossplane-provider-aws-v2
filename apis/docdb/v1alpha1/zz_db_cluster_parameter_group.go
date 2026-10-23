@@ -28,6 +28,7 @@ import (
 type DBClusterParameterGroupParameters struct {
 	// Region is which region the DBClusterParameterGroup will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 	// The cluster parameter group family name.
 	// +kubebuilder:validation:Required

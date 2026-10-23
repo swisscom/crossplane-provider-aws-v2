@@ -28,6 +28,7 @@ import (
 type SecurityGroupIngressRuleParameters struct {
 	// Region is which region the SecurityGroupIngressRule will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 	// If the protocol is TCP or UDP, this is the start of the port range. If the
 	// protocol is ICMP, this is the ICMP type or -1 (all ICMP types).

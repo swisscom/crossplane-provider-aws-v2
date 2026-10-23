@@ -26,3 +26,12 @@ cluster-scoped `ClusterProviderConfig`.
 - Ported code must never read secrets from other namespaces or from the
   provider namespace ([porting-notes.md](../porting-notes.md)).
 - No cluster-scoped MRs and no external secret stores may be added.
+
+## Clarification (2026-10-23)
+
+"Tenants are isolated by namespace" holds for managed resources, their
+Secrets and Secret-based `ProviderConfig`s. It does not hold for AWS
+identity: a namespaced `ProviderConfig` with `IRSA`, `PodIdentity` or
+`WebIdentity` acts as the provider pod's identity and can assume any role
+that trusts it, and any MR can use any `ClusterProviderConfig`. See
+[README: Trust model](../../README.md#trust-model).

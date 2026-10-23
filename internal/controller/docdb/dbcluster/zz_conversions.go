@@ -27,6 +27,7 @@ import (
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/docdb"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/docdb/types"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
@@ -38,6 +39,10 @@ import (
 func GenerateDescribeDBClustersInput(cr *svcapitypes.DBCluster) (*svcsdk.DescribeDBClustersInput, error) {
 	res := &svcsdk.DescribeDBClustersInput{}
 
+	// The external name identifies the resource; status may be empty or stale.
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBClusterIdentifier = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -46,7 +51,8 @@ func GenerateDBCluster(resp *svcsdk.DescribeDBClustersOutput) *svcapitypes.DBClu
 	cr := &svcapitypes.DBCluster{}
 
 	found := false
-	for _, elem := range resp.DBClusters {
+	if len(resp.DBClusters) > 0 {
+		elem := resp.DBClusters[0]
 		if elem.AssociatedRoles != nil {
 			f0 := []*svcapitypes.DBClusterRole{}
 			for _, f0iter := range elem.AssociatedRoles {
@@ -297,7 +303,6 @@ func GenerateDBCluster(resp *svcsdk.DescribeDBClustersOutput) *svcapitypes.DBClu
 			cr.Status.AtProvider.VPCSecurityGroups = nil
 		}
 		found = true
-		break
 	}
 	if !found {
 		return cr
@@ -484,6 +489,9 @@ func GenerateModifyDBClusterInput(cr *svcapitypes.DBCluster) (*svcsdk.ModifyDBCl
 		res.VpcSecurityGroupIds = aws.ToStringSlice(cr.Spec.ForProvider.VPCSecurityGroupIDs)
 	}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBClusterIdentifier = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -531,6 +539,9 @@ func DiffUpdatableParameters(desired, observed *svcapitypes.DBClusterParameters)
 func GenerateDeleteDBClusterInput(cr *svcapitypes.DBCluster) (*svcsdk.DeleteDBClusterInput, error) {
 	res := &svcsdk.DeleteDBClusterInput{}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBClusterIdentifier = aws.String(name)
+	}
 	return res, nil
 }
 

@@ -484,6 +484,9 @@ spec:
                   region:
                     description: Region is which region the DBCluster will be created.
                     type: string
+                    x-kubernetes-validations:
+                    - message: region is immutable
+                      rule: self == oldSelf
                   restoreFrom:
                     description: RestoreFrom specifies the details of the backup to
                       restore when creating a new DBCluster.

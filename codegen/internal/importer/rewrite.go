@@ -19,9 +19,12 @@ package importer
 import (
 	"go/ast"
 	"go/token"
+	"maps"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"golang.org/x/tools/go/ast/astutil"
 )
@@ -138,10 +141,28 @@ func (rw *rewriter) mapImport(p string) (string, string) {
 		return "", "API group not imported yet"
 	case strings.HasPrefix(p, SourceModule+"/pkg/"):
 		rel := strings.TrimPrefix(p, SourceModule+"/")
+		if !cleanHelperPath(rel) {
+			// It would be read and written outside the source and target.
+			return "", "import path is not clean (it has . or .. elements)"
+		}
 		rw.helperPkgs[rel] = true
 		return rw.dstModule + "/" + helperDst(rel), ""
 	}
 	return p, ""
+}
+
+// cleanHelperPath reports whether rel is pkg/<elem>/... without empty, .
+// or .. elements.
+func cleanHelperPath(rel string) bool {
+	if path.Clean(rel) != rel || !strings.HasPrefix(rel, "pkg/") {
+		return false
+	}
+	for _, e := range strings.Split(rel, "/") {
+		if e == "" || e == "." || e == ".." {
+			return false
+		}
+	}
+	return true
 }
 
 // helperDst maps a source helper package to its target directory:
@@ -154,15 +175,7 @@ func helperDst(rel string) string {
 // returns findings for the report.
 func (rw *rewriter) rewriteFile(fset *token.FileSet, f *ast.File, ctx fileContext) []string { //nolint:gocyclo // one switch per rule
 	var findings []string
-	imports := map[string]string{} // local name -> source path
-	for _, is := range f.Imports {
-		p, _ := strconv.Unquote(is.Path.Value)
-		name := path.Base(p)
-		if is.Name != nil {
-			name = is.Name.Name
-		}
-		imports[name] = p
-	}
+	imports := fileImports(f)     // local name -> source path
 	needed := map[string]string{} // target path -> local name
 	reported := map[string]bool{}
 
@@ -174,14 +187,14 @@ func (rw *rewriter) rewriteFile(fset *token.FileSet, f *ast.File, ctx fileContex
 			x, ok := n.X.(*ast.Ident)
 			if !ok || x.Obj != nil {
 				// method or field selector, e.g. client.FooWithContext
-				if strings.HasSuffix(n.Sel.Name, "WithContext") && ctx.code() {
+				if ctx.code() && rw.isSDKOperation(n.Sel.Name) {
 					n.Sel.Name = strings.TrimSuffix(n.Sel.Name, "WithContext")
 				}
 				return true
 			}
 			src, ok := imports[x.Name]
 			if !ok {
-				if strings.HasSuffix(n.Sel.Name, "WithContext") && ctx.code() {
+				if ctx.code() && rw.isSDKOperation(n.Sel.Name) {
 					n.Sel.Name = strings.TrimSuffix(n.Sel.Name, "WithContext")
 				}
 				return true
@@ -223,15 +236,63 @@ func (rw *rewriter) rewriteFile(fset *token.FileSet, f *ast.File, ctx fileContex
 	for _, is := range ctx.keepImports(imports) {
 		needed[is.path] = is.name
 	}
-	for p, name := range needed {
+	for _, p := range slices.Sorted(maps.Keys(needed)) {
+		name := needed[p]
 		// Packages of the target module may be named differently than their
 		// directory, e.g. internal/clients/rds is package dbinstance.
-		if name == path.Base(p) && !strings.HasPrefix(p, rw.dstModule+"/") {
+		if (name == path.Base(p) || name == assumedName(p)) && !strings.HasPrefix(p, rw.dstModule+"/") {
 			name = ""
 		}
 		astutil.AddNamedImport(fset, f, name, p)
 	}
 	return findings
+}
+
+// isSDKOperation reports whether name is <Op>WithContext or
+// Mock<Op>WithContext of an operation of a loaded SDK service. Other
+// methods keep their name: a Get may not do what GetWithContext does.
+func (rw *rewriter) isSDKOperation(name string) bool {
+	op, ok := strings.CutSuffix(name, "WithContext")
+	if !ok {
+		return false
+	}
+	op = strings.TrimPrefix(op, "Mock")
+	for _, n := range rw.sdk {
+		if n != nil && n.client[op+"Input"] {
+			return true
+		}
+	}
+	return false
+}
+
+// assumedName is the package name goimports assumes for an import path:
+// the last element without a /vN, .vN, go- or -go part.
+func assumedName(p string) string {
+	base := path.Base(p)
+	if len(base) > 1 && base[0] == 'v' && strings.Trim(base[1:], "0123456789") == "" && path.Dir(p) != "." {
+		base = path.Base(path.Dir(p))
+	}
+	if i := strings.Index(base, ".v"); i > 0 && strings.Trim(base[i+2:], "0123456789") == "" {
+		base = base[:i]
+	}
+	base = strings.TrimSuffix(strings.TrimPrefix(base, "go-"), "-go")
+	if i := strings.IndexFunc(base, func(r rune) bool {
+		return r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}); i >= 0 {
+		base = base[:i]
+	}
+	return base
+}
+
+// importNames returns the names an import may be used by: its alias, or
+// else the assumed name and the last path element (e.g. k8s.io/api/core/v1
+// is package v1).
+func importNames(is *ast.ImportSpec) []string {
+	if is.Name != nil {
+		return []string{is.Name.Name}
+	}
+	p, _ := strconv.Unquote(is.Path.Value)
+	return slices.Compact([]string{assumedName(p), path.Base(p)})
 }
 
 type namedImport struct{ path, name string }
@@ -252,7 +313,8 @@ func (c fileContext) code() bool { return c.controller || c.ported }
 // and dot imports.
 func (fileContext) keepImports(imports map[string]string) []namedImport {
 	var out []namedImport
-	for name, p := range imports {
+	for _, name := range slices.Sorted(maps.Keys(imports)) {
+		p := imports[name]
 		if name == "_" || name == "." {
 			out = append(out, namedImport{p, name})
 		}

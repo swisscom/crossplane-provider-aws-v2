@@ -21,6 +21,7 @@ package securitygroup
 import (
 	"context"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
@@ -41,11 +42,13 @@ import (
 )
 
 const (
-	errCreateConfig = "cannot create AWS config"
-	errCreate       = "cannot create SecurityGroup in AWS"
-	errUpdate       = "cannot update SecurityGroup in AWS"
-	errDescribe     = "failed to describe SecurityGroup"
-	errDelete       = "failed to delete SecurityGroup"
+	errCreateConfig  = "cannot create AWS config"
+	errCreate        = "cannot create SecurityGroup in AWS"
+	errUpdate        = "cannot update SecurityGroup in AWS"
+	errDescribe      = "failed to describe SecurityGroup"
+	errDelete        = "failed to delete SecurityGroup"
+	errEmptyDescribe = "AWS returned an empty SecurityGroup description"
+	errMultipleFound = "found %d SecurityGroup resources with external name %q, expected one"
 
 	// Used by hand-written code imported from provider-aws.
 	errUnexpectedObject = "managed resource is not an SecurityGroup resource"
@@ -86,6 +89,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
+		//lint:ignore SA1019 crossplane-runtime's event recorder still needs the old events API
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	}
 	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
@@ -168,15 +172,26 @@ func (e *external) Observe(ctx context.Context, cr *svcapitypes.SecurityGroup) (
 	if err != nil {
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDescribe)
 	}
+	if resp == nil {
+		// Not "doesn't exist": that would create a duplicate.
+		return managed.ExternalObservation{}, errors.New(errEmptyDescribe)
+	}
 	resp = e.filterList(cr, resp)
-	if len(resp.SecurityGroups) == 0 {
+	switch n := len(resp.SecurityGroups); {
+	case n == 0:
 		return managed.ExternalObservation{ResourceExists: false}, nil
+	case n > 1:
+		// Never pick one of several: it may belong to someone else.
+		return managed.ExternalObservation{}, errors.Errorf(errMultipleFound, n, meta.GetExternalName(cr))
 	}
 	currentSpec := cr.Spec.ForProvider.DeepCopy()
 	if err := e.lateInitialize(&cr.Spec.ForProvider, resp); err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "late-init failed")
 	}
-	GenerateSecurityGroup(resp).Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	observed := GenerateSecurityGroup(resp).Status.AtProvider
+	// Hooks own the custom fields; postObserve refreshes them.
+	observed.CustomSecurityGroupObservation = cr.Status.AtProvider.CustomSecurityGroupObservation
+	observed.DeepCopyInto(&cr.Status.AtProvider)
 	upToDate := true
 	diff := ""
 	if !meta.WasDeleted(cr) { // There is no need to run isUpToDate if the resource is deleted
@@ -206,34 +221,40 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.SecurityGroup) (m
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// A nil response leaves status to the next observe.
+	if resp != nil {
+		// Only status: spec is the user's desired state and is never rewritten.
+		ko := cr.DeepCopy()
 
-	if resp.GroupId != nil {
-		cr.Status.AtProvider.GroupID = resp.GroupId
-	} else {
-		cr.Status.AtProvider.GroupID = nil
-	}
-	if resp.SecurityGroupArn != nil {
-		cr.Status.AtProvider.SecurityGroupARN = resp.SecurityGroupArn
-	} else {
-		cr.Status.AtProvider.SecurityGroupARN = nil
-	}
-	if resp.Tags != nil {
-		f2 := []*svcapitypes.Tag{}
-		for _, f2iter := range resp.Tags {
-			f2elem := &svcapitypes.Tag{}
-			if f2iter.Key != nil {
-				f2elem.Key = f2iter.Key
-			}
-			if f2iter.Value != nil {
-				f2elem.Value = f2iter.Value
-			}
-			f2 = append(f2, f2elem)
+		if resp.GroupId != nil {
+			ko.Status.AtProvider.GroupID = resp.GroupId
+		} else {
+			ko.Status.AtProvider.GroupID = nil
 		}
-		cr.Status.AtProvider.Tags = f2
-	} else {
-		cr.Status.AtProvider.Tags = nil
-	}
+		if resp.SecurityGroupArn != nil {
+			ko.Status.AtProvider.SecurityGroupARN = resp.SecurityGroupArn
+		} else {
+			ko.Status.AtProvider.SecurityGroupARN = nil
+		}
+		if resp.Tags != nil {
+			f2 := []*svcapitypes.Tag{}
+			for _, f2iter := range resp.Tags {
+				f2elem := &svcapitypes.Tag{}
+				if f2iter.Key != nil {
+					f2elem.Key = f2iter.Key
+				}
+				if f2iter.Value != nil {
+					f2elem.Value = f2iter.Value
+				}
+				f2 = append(f2, f2elem)
+			}
+			ko.Status.AtProvider.Tags = f2
+		} else {
+			ko.Status.AtProvider.Tags = nil
+		}
 
+		ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	}
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 
@@ -273,7 +294,7 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		postObserve:    nopPostObserve,
 		lateInitialize: nopLateInitialize,
 		isUpToDate:     alwaysUpToDate,
-		filterList:     nopFilterList,
+		filterList:     filterByExternalName,
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
 		preDelete:      nopPreDelete,
@@ -316,7 +337,20 @@ func alwaysUpToDate(context.Context, *svcapitypes.SecurityGroup, *svcsdk.Describ
 	return true, "", nil
 }
 
-func nopFilterList(_ *svcapitypes.SecurityGroup, list *svcsdk.DescribeSecurityGroupsOutput) *svcsdk.DescribeSecurityGroupsOutput {
+// filterByExternalName keeps only the resources whose identifier is the
+// external name, because a describe call may return other resources too.
+func filterByExternalName(cr *svcapitypes.SecurityGroup, list *svcsdk.DescribeSecurityGroupsOutput) *svcsdk.DescribeSecurityGroupsOutput {
+	if list == nil {
+		return list
+	}
+	name := meta.GetExternalName(cr)
+	kept := list.SecurityGroups[:0]
+	for _, elem := range list.SecurityGroups {
+		if aws.ToString(elem.GroupId) == name {
+			kept = append(kept, elem)
+		}
+	}
+	list.SecurityGroups = kept
 	return list
 }
 

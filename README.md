@@ -50,7 +50,38 @@ tests against real AWS.
 
 Optional `spec.assumeRole` assumes a role on top of any source.
 Optional `spec.endpoint.url` overrides the AWS endpoint (e.g. LocalStack).
+It must be an `http`/`https` URL with a host; STS calls never use it.
+Credential-file parse errors never echo the Secret's contents.
 See [examples/provider/config.yaml](examples/provider/config.yaml).
+
+### Trust model
+
+A namespaced `ProviderConfig` applies only to managed resources in its own
+namespace, but it does not isolate AWS credentials on its own. This is the
+same model as `provider-upjet-aws` (`aws.m.upbound.io`):
+
+- A namespaced `ProviderConfig` can use every credential source, the same
+  as a `ClusterProviderConfig`.
+- With `IRSA`, `PodIdentity` or `WebIdentity` it acts as the **provider
+  pod's** AWS identity, whatever its namespace. `spec.assumeRole` (and
+  `spec.assumeRoleWithWebIdentity.roleARN`) can name any role that trusts
+  that identity.
+- Only `Secret` references are confined to the `ProviderConfig`'s namespace.
+- A managed resource can use any `ClusterProviderConfig` by name, and
+  without `spec.providerConfigRef` it uses `ClusterProviderConfig/default`.
+
+So whoever can create or update a `ProviderConfig` can use the provider's
+identity and every role it can assume. In a shared cluster:
+
+- Grant `ProviderConfig` create only to trusted teams. Crossplane's
+  `crossplane-edit` role includes it, so give other tenants a Role for the
+  managed resource kinds only.
+- Or let tenants create them, and restrict them with an admission policy
+  (ValidatingAdmissionPolicy, Kyverno), e.g. `source: Secret` only or one
+  allowed `roleARN` per namespace. Restrict `spec.providerConfigRef` the
+  same way if tenants must not use a `ClusterProviderConfig`.
+- For hard isolation, run one provider per tenant, each with its own
+  ServiceAccount and IAM role (DeploymentRuntimeConfig).
 
 ## Developing
 

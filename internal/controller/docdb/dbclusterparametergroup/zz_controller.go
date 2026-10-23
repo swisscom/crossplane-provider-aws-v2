@@ -21,6 +21,7 @@ package dbclusterparametergroup
 import (
 	"context"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/docdb"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
@@ -42,11 +43,13 @@ import (
 )
 
 const (
-	errCreateConfig = "cannot create AWS config"
-	errCreate       = "cannot create DBClusterParameterGroup in AWS"
-	errUpdate       = "cannot update DBClusterParameterGroup in AWS"
-	errDescribe     = "failed to describe DBClusterParameterGroup"
-	errDelete       = "failed to delete DBClusterParameterGroup"
+	errCreateConfig  = "cannot create AWS config"
+	errCreate        = "cannot create DBClusterParameterGroup in AWS"
+	errUpdate        = "cannot update DBClusterParameterGroup in AWS"
+	errDescribe      = "failed to describe DBClusterParameterGroup"
+	errDelete        = "failed to delete DBClusterParameterGroup"
+	errEmptyDescribe = "AWS returned an empty DBClusterParameterGroup description"
+	errMultipleFound = "found %d DBClusterParameterGroup resources with external name %q, expected one"
 
 	// Used by hand-written code imported from provider-aws.
 	errUnexpectedObject = "managed resource is not an DBClusterParameterGroup resource"
@@ -87,6 +90,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
+		//lint:ignore SA1019 crossplane-runtime's event recorder still needs the old events API
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	}
 	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
@@ -171,15 +175,26 @@ func (e *external) Observe(ctx context.Context, cr *svcapitypes.DBClusterParamet
 	if err != nil {
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDescribe)
 	}
+	if resp == nil {
+		// Not "doesn't exist": that would create a duplicate.
+		return managed.ExternalObservation{}, errors.New(errEmptyDescribe)
+	}
 	resp = e.filterList(cr, resp)
-	if len(resp.DBClusterParameterGroups) == 0 {
+	switch n := len(resp.DBClusterParameterGroups); {
+	case n == 0:
 		return managed.ExternalObservation{ResourceExists: false}, nil
+	case n > 1:
+		// Never pick one of several: it may belong to someone else.
+		return managed.ExternalObservation{}, errors.Errorf(errMultipleFound, n, meta.GetExternalName(cr))
 	}
 	currentSpec := cr.Spec.ForProvider.DeepCopy()
 	if err := e.lateInitialize(&cr.Spec.ForProvider, resp); err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "late-init failed")
 	}
-	GenerateDBClusterParameterGroup(resp).Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	observed := GenerateDBClusterParameterGroup(resp).Status.AtProvider
+	// Hooks own the custom fields; postObserve refreshes them.
+	observed.CustomDBClusterParameterGroupObservation = cr.Status.AtProvider.CustomDBClusterParameterGroupObservation
+	observed.DeepCopyInto(&cr.Status.AtProvider)
 	upToDate := true
 	diff := ""
 	if !meta.WasDeleted(cr) { // There is no need to run isUpToDate if the resource is deleted
@@ -209,28 +224,34 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBClusterParamete
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// A nil response leaves status to the next observe.
+	if resp != nil && resp.DBClusterParameterGroup != nil {
+		// Only status: spec is the user's desired state and is never rewritten.
+		ko := cr.DeepCopy()
 
-	if resp.DBClusterParameterGroup.DBClusterParameterGroupArn != nil {
-		cr.Status.AtProvider.DBClusterParameterGroupARN = resp.DBClusterParameterGroup.DBClusterParameterGroupArn
-	} else {
-		cr.Status.AtProvider.DBClusterParameterGroupARN = nil
-	}
-	if resp.DBClusterParameterGroup.DBClusterParameterGroupName != nil {
-		cr.Status.AtProvider.DBClusterParameterGroupName = resp.DBClusterParameterGroup.DBClusterParameterGroupName
-	} else {
-		cr.Status.AtProvider.DBClusterParameterGroupName = nil
-	}
-	if resp.DBClusterParameterGroup.DBParameterGroupFamily != nil {
-		cr.Spec.ForProvider.DBParameterGroupFamily = resp.DBClusterParameterGroup.DBParameterGroupFamily
-	} else {
-		cr.Spec.ForProvider.DBParameterGroupFamily = nil
-	}
-	if resp.DBClusterParameterGroup.Description != nil {
-		cr.Spec.ForProvider.Description = resp.DBClusterParameterGroup.Description
-	} else {
-		cr.Spec.ForProvider.Description = nil
-	}
+		if resp.DBClusterParameterGroup.DBClusterParameterGroupArn != nil {
+			ko.Status.AtProvider.DBClusterParameterGroupARN = resp.DBClusterParameterGroup.DBClusterParameterGroupArn
+		} else {
+			ko.Status.AtProvider.DBClusterParameterGroupARN = nil
+		}
+		if resp.DBClusterParameterGroup.DBClusterParameterGroupName != nil {
+			ko.Status.AtProvider.DBClusterParameterGroupName = resp.DBClusterParameterGroup.DBClusterParameterGroupName
+		} else {
+			ko.Status.AtProvider.DBClusterParameterGroupName = nil
+		}
+		if resp.DBClusterParameterGroup.DBParameterGroupFamily != nil {
+			ko.Spec.ForProvider.DBParameterGroupFamily = resp.DBClusterParameterGroup.DBParameterGroupFamily
+		} else {
+			ko.Spec.ForProvider.DBParameterGroupFamily = nil
+		}
+		if resp.DBClusterParameterGroup.Description != nil {
+			ko.Spec.ForProvider.Description = resp.DBClusterParameterGroup.Description
+		} else {
+			ko.Spec.ForProvider.Description = nil
+		}
 
+		ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	}
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 
@@ -278,7 +299,7 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		postObserve:    nopPostObserve,
 		lateInitialize: nopLateInitialize,
 		isUpToDate:     isUpToDateUpdatable,
-		filterList:     nopFilterList,
+		filterList:     filterByExternalName,
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
 		preDelete:      nopPreDelete,
@@ -328,7 +349,20 @@ func isUpToDateUpdatable(_ context.Context, cr *svcapitypes.DBClusterParameterGr
 	return len(diff) == 0, compare.Message(diff), nil
 }
 
-func nopFilterList(_ *svcapitypes.DBClusterParameterGroup, list *svcsdk.DescribeDBClusterParameterGroupsOutput) *svcsdk.DescribeDBClusterParameterGroupsOutput {
+// filterByExternalName keeps only the resources whose identifier is the
+// external name, because a describe call may return other resources too.
+func filterByExternalName(cr *svcapitypes.DBClusterParameterGroup, list *svcsdk.DescribeDBClusterParameterGroupsOutput) *svcsdk.DescribeDBClusterParameterGroupsOutput {
+	if list == nil {
+		return list
+	}
+	name := meta.GetExternalName(cr)
+	kept := list.DBClusterParameterGroups[:0]
+	for _, elem := range list.DBClusterParameterGroups {
+		if aws.ToString(elem.DBClusterParameterGroupName) == name {
+			kept = append(kept, elem)
+		}
+	}
+	list.DBClusterParameterGroups = kept
 	return list
 }
 

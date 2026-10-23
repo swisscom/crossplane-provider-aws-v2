@@ -81,3 +81,27 @@ func sign(x int) int {
 	}
 	return 0
 }
+
+// Only upgrades are sent, so the sign decides whether an update is needed.
+func TestCompareEngineVersions(t *testing.T) {
+	const v500 = "5.0.0"
+	cases := map[string]struct {
+		a, b string
+		want int
+	}{
+		"Equal":           {a: v500, b: v500, want: 0},
+		"MajorHigher":     {a: v500, b: "4.0.0", want: 1},
+		"MinorLower":      {a: "4.0.0", b: "4.1.0", want: -1},
+		"LongerIsHigher":  {a: "5.0.1", b: "5.0", want: 1},
+		"NumberBeatsText": {a: "5.1", b: "5.x", want: 1},
+		"TextBelowNumber": {a: "5.x", b: "5.1", want: -1},
+		"BothText":        {a: "5.x", b: "5.y", want: 0},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := sign(CompareEngineVersions(tc.a, tc.b)); got != tc.want {
+				t.Errorf("CompareEngineVersions(%q, %q) = %d, want %d", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}

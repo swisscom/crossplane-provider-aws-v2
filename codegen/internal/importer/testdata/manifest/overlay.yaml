@@ -1,0 +1,23 @@
+# Kinds imported from crossplane-contrib/provider-aws.
+# Managed by codegen/cmd/import; generator-config.yaml ignores all other kinds.
+source: github.com/crossplane-contrib/provider-aws
+apiVersion: v1alpha1
+kinds:
+    - DBInstance
+ignoreFieldPaths:
+    - ModifyAdditionalStorageVolume.SetForDelete
+generatorConfig:
+    resources:
+        DBInstance:
+            compare:
+                ignore:
+                    - Spec.ForProvider.Tags
+generatorConfigSHA256: 3f2a
+lastImport:
+    repository: ssh://git@github.com/swisscom/provider-aws.git
+    commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
+revisions:
+    DBInstance:
+        repository: ssh://git@github.com/swisscom/provider-aws.git
+        commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
+        backfilled: true

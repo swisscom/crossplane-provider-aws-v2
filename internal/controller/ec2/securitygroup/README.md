@@ -36,7 +36,9 @@ a separate resource with its AWS rule ID.
   `groupName`, `description` or `vpcID` is an error: AWS can't change them.
 - **Update**: `CreateTags` / `DeleteTags`. An existing group (external
   name or adopted) gets Crossplane's `crossplane-*` tags on the first
-  reconcile; other tags not in the spec are removed.
+  reconcile. Only keys the provider recorded in the annotation
+  `ec2.aws2.crossplane.io/managed-tag-keys` and no longer wants are
+  deleted; other tags are kept ([ADR 0015](../../../../docs/adr/0015-docdb-tag-ownership.md)).
 - **Delete**: `DeleteSecurityGroup` by ID. While the group is in use
   (network interfaces, rules of other groups referencing it), AWS returns
   `DependencyViolation`; the error is reported and the delete retried.
@@ -48,7 +50,8 @@ a separate resource with its AWS rule ID.
 |------|-----|
 | `preObserve`, `preDelete` | describe/delete by the external name (group ID) |
 | `lateInitialize` | `groupName`, `vpcID` |
-| `isUpToDate` | immutable fields, tags |
+| `isUpToDate` | immutable fields, tags, managed tag keys |
+| `postObserve` | condition; late-init when the managed tag keys changed |
 | `update` | tags; there is no update operation |
 | `preCreate` | default name, tags |
 | `postCreate` | external name, revoke the default egress rules |
@@ -66,7 +69,7 @@ declared to Crossplane:
 - Without `vpcID`, groups of all VPCs of the account and region match; with
   more than one match the resource fails instead of guessing.
 - An adopted group keeps its rules, including rules not managed by
-  Crossplane, and its tags are changed to the spec's.
+  Crossplane, and its tags; spec tags are added or overwritten.
 
 Use it where one team owns the account and VPC (e.g. one VPC per account).
 Otherwise set the external name.
@@ -86,5 +89,7 @@ Otherwise set the external name.
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-10-23 | — | Removes only the tags it recorded (`ec2.aws2.crossplane.io/managed-tag-keys`, BREAKING) |
+| 2026-10-23 | — | Generator (ADR 0011): Create writes `status.atProvider` only; Observe keeps only the resource whose ID is the external name and fails on more than one; `region` is immutable |
 | 2026-10-19 | — | Generated from scratch |
 | 2026-10-19 | 0d67c8b | Adoption reports an event |

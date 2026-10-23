@@ -1,0 +1,18 @@
+# Reduced docdb config for generator tests: DBInstance (ReadMany) and
+# DBSubnetGroup, with the identifier and secret ignores of apis/docdb.
+ignore:
+  resource_names:
+    - DBCluster
+    - DBClusterParameterGroup
+    - DBClusterSnapshot
+    - EventSubscription
+    - GlobalCluster
+  field_paths:
+    - DescribeDBSubnetGroupsInput.DBSubnetGroupName
+    - CreateDBSubnetGroupInput.DBSubnetGroupName
+    - ModifyDBSubnetGroupInput.DBSubnetGroupName
+    - DeleteDBSubnetGroupInput.DBSubnetGroupName
+    - CreateDBInstanceInput.DBInstanceIdentifier
+    - ModifyDBInstanceInput.DBInstanceIdentifier
+    - DeleteDBInstanceInput.DBInstanceIdentifier
+    - PendingModifiedValues.MasterUserPassword

@@ -57,17 +57,17 @@ spec:
     # --- Credentials ---
     masterUsername: dbadmin
     # The password is read from this Secret in the namespace of the DBInstance.
-    # Changing the Secret value changes the password in AWS.
+    # Changing the Secret value changes the password in AWS; the connection
+    # Secret switches to it once ModifyDBInstance succeeded.
     masterUserPasswordSecretRef:
       name: example-dbinstance-master
       key: password
     # Generate a password instead if no masterUserPasswordSecretRef is given.
     # It is published in the connection Secret.
     autogeneratePassword: false
-    # Alternative: let RDS manage the password in Secrets Manager. Mutually
-    # exclusive with masterUserPasswordSecretRef/autogeneratePassword.
-    # manageMasterUserPassword: true
-    # masterUserSecretKMSKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    # Alternative: let RDS manage the password in Secrets Manager, see
+    # dbinstance-managed-password.yaml. Can't be combined with
+    # masterUserPasswordSecretRef/autogeneratePassword at create.
     enableIAMDatabaseAuthentication: true
 
     # --- Storage ---

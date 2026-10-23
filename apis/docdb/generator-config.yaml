@@ -22,7 +22,6 @@ ignore:
         - CreateDBSubnetGroupInput.DBSubnetGroupName
         - CreateDBSubnetGroupInput.SubnetIds
         - DeleteDBSubnetGroupInput.DBSubnetGroupName
-        - DescribeDBInstancesOutput.DBInstanceIdentifier
         - ModifyDBInstanceInput.DBInstanceIdentifier
         - CreateDBInstanceInput.DBInstanceIdentifier
         - CreateDBInstanceInput.DBClusterIdentifier
@@ -31,14 +30,10 @@ ignore:
         - ModifyDBClusterInput.DBClusterIdentifier
         - CreateDBClusterInput.DBClusterIdentifier
         - DeleteDBClusterInput.DBClusterIdentifier
-        - DescribeDBClustersInput.MasterUserPassword
         - ModifyDBClusterInput.MasterUserPassword
         - CreateDBClusterInput.MasterUserPassword
-        - DeleteDBClusterInput.MasterUserPassword
-        - DescribeDBClustersOutput.MasterUserPassword
-        - ModifyDBClusterOutput.MasterUserPassword
-        - CreateDBClusterOutput.MasterUserPassword
-        - DeleteDBClusterOutput.MasterUserPassword
+        # ignoreFieldPaths of import.yaml
+        - PendingModifiedValues.MasterUserPassword
     resource_names:
         - DBClusterSnapshot
         - GlobalCluster

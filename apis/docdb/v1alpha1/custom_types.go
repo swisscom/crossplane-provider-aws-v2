@@ -21,6 +21,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// EngineDocDB is the engine of every DocumentDB cluster and instance.
+const EngineDocDB = "docdb"
+
 // DocumentDB instance and cluster states.
 const (
 	// The instance is healthy and available
@@ -35,6 +38,18 @@ const (
 	DocDBInstanceStateUpgrading = "upgrading"
 	// The instance has failed and Amazon RDS can't recover it. Perform a point-in-time restore to the latest restorable time of the instance to recover the data.
 	DocDBInstanceStateFailed = "failed"
+)
+
+// More DocumentDB cluster states in which AWS rejects a ModifyDBCluster.
+const (
+	DocDBClusterStateBackingUp                  = "backing-up"
+	DocDBClusterStateResettingMasterCredentials = "resetting-master-credentials"
+	DocDBClusterStateRebooting                  = "rebooting"
+	DocDBClusterStateRenaming                   = "renaming"
+	DocDBClusterStateStarting                   = "starting"
+	DocDBClusterStateStopping                   = "stopping"
+	DocDBClusterStateMigrating                  = "migrating"
+	DocDBClusterStateMaintenance                = "maintenance"
 )
 
 // CustomDBInstanceParameters for DBInstance

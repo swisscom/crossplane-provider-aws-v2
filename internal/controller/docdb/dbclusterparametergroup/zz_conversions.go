@@ -21,9 +21,11 @@ package dbclusterparametergroup
 import (
 	"errors"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/docdb"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/docdb/types"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
 )
@@ -33,6 +35,10 @@ import (
 func GenerateDescribeDBClusterParameterGroupsInput(cr *svcapitypes.DBClusterParameterGroup) (*svcsdk.DescribeDBClusterParameterGroupsInput, error) {
 	res := &svcsdk.DescribeDBClusterParameterGroupsInput{}
 
+	// The external name identifies the resource; status may be empty or stale.
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBClusterParameterGroupName = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -41,7 +47,8 @@ func GenerateDBClusterParameterGroup(resp *svcsdk.DescribeDBClusterParameterGrou
 	cr := &svcapitypes.DBClusterParameterGroup{}
 
 	found := false
-	for _, elem := range resp.DBClusterParameterGroups {
+	if len(resp.DBClusterParameterGroups) > 0 {
+		elem := resp.DBClusterParameterGroups[0]
 		if elem.DBClusterParameterGroupArn != nil {
 			cr.Status.AtProvider.DBClusterParameterGroupARN = elem.DBClusterParameterGroupArn
 		} else {
@@ -63,7 +70,6 @@ func GenerateDBClusterParameterGroup(resp *svcsdk.DescribeDBClusterParameterGrou
 			cr.Spec.ForProvider.Description = nil
 		}
 		found = true
-		break
 	}
 	if !found {
 		return cr
@@ -104,6 +110,9 @@ func GenerateCreateDBClusterParameterGroupInput(cr *svcapitypes.DBClusterParamet
 func GenerateModifyDBClusterParameterGroupInput(cr *svcapitypes.DBClusterParameterGroup) (*svcsdk.ModifyDBClusterParameterGroupInput, error) {
 	res := &svcsdk.ModifyDBClusterParameterGroupInput{}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBClusterParameterGroupName = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -121,6 +130,9 @@ func DiffUpdatableParameters(desired, observed *svcapitypes.DBClusterParameterGr
 func GenerateDeleteDBClusterParameterGroupInput(cr *svcapitypes.DBClusterParameterGroup) (*svcsdk.DeleteDBClusterParameterGroupInput, error) {
 	res := &svcsdk.DeleteDBClusterParameterGroupInput{}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBClusterParameterGroupName = aws.String(name)
+	}
 	return res, nil
 }
 

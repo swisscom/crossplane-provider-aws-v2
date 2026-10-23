@@ -28,6 +28,7 @@ import (
 type DBInstanceParameters struct {
 	// Region is which region the DBInstance will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 	// A list of additional storage volumes to create for the DB instance. You can
 	// create up to three additional storage volumes using the names rdsdbdata2,
@@ -1009,11 +1010,6 @@ type DBInstanceParameters struct {
 	//
 	// This setting doesn't apply to Amazon Aurora or RDS Custom DB instances.
 	TDECredentialARN *string `json:"tdeCredentialARN,omitempty"`
-	// The password for the given ARN from the key store in order to access the
-	// device.
-	//
-	// This setting doesn't apply to RDS Custom DB instances.
-	TDECredentialPassword *string `json:"tdeCredentialPassword,omitempty"`
 	// The time zone of the DB instance. The time zone parameter is currently supported
 	// only by RDS for Db2 (https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/db2-time-zone)
 	// and RDS for SQL Server (https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/CHAP_SQLServer.html#SQLServer.Concepts.General.TimeZone).

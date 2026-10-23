@@ -177,8 +177,6 @@ type ClusterPendingModifiedValues struct {
 	IAMDatabaseAuthenticationEnabled *bool `json:"iamDatabaseAuthenticationEnabled,omitempty"`
 
 	IOPS *int64 `json:"iops,omitempty"`
-
-	MasterUserPassword *string `json:"masterUserPassword,omitempty"`
 	// A list of the log types whose configuration is still pending. In other words,
 	// these log types are in the process of being activated or deactivated.
 	PendingCloudwatchLogsExports *PendingCloudwatchLogsExports `json:"pendingCloudwatchLogsExports,omitempty"`
@@ -1848,8 +1846,6 @@ type PendingModifiedValues struct {
 
 	LicenseModel *string `json:"licenseModel,omitempty"`
 
-	MasterUserPassword *string `json:"masterUserPassword,omitempty"`
-
 	MultiAZ *bool `json:"multiAZ,omitempty"`
 
 	MultiTenant *bool `json:"multiTenant,omitempty"`
@@ -2165,8 +2161,6 @@ type TenantDatabase struct {
 
 // +kubebuilder:skipversion
 type TenantDatabasePendingModifiedValues struct {
-	MasterUserPassword *string `json:"masterUserPassword,omitempty"`
-
 	TenantDBName *string `json:"tenantDBName,omitempty"`
 }
 

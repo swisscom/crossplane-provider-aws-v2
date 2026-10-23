@@ -19,12 +19,15 @@ package dbinstance
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
+	"k8s.io/utils/ptr"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/rds/utils"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
@@ -116,4 +119,57 @@ func diffInt(volume, field string, desired *int64, observed *int32) string {
 		return ""
 	}
 	return fmt.Sprintf("\nadditionalStorageVolume %q: desired %s: %d, observed: %d", volume, field, *desired, pointer.Int32Value(observed))
+}
+
+// normalizeObserved counts AWS's form of a value as the user's: AWS returns
+// some names in lowercase and KMS keys as key ARNs. Create no longer copies
+// AWS's form into the spec, so without this every poll would send a modify.
+func normalizeObserved(current, target *svcapitypes.DBInstanceParameters) {
+	for _, f := range []struct{ observed, desired **string }{
+		{&current.Engine, &target.Engine},
+		{&current.DBInstanceClass, &target.DBInstanceClass},
+		{&current.StorageType, &target.StorageType},
+		{&current.LicenseModel, &target.LicenseModel},
+		{&current.CACertificateIdentifier, &target.CACertificateIdentifier},
+	} {
+		if *f.desired != nil && compare.EqualIgnoreCase(*f.desired, *f.observed) {
+			*f.observed = ptr.To(**f.desired)
+		}
+	}
+	if kmsKeyMatches(target.KMSKeyID, current.KMSKeyID) {
+		current.KMSKeyID = ptr.To(*target.KMSKeyID)
+	}
+	if kmsKeyMatches(target.PerformanceInsightsKMSKeyID, current.PerformanceInsightsKMSKeyID) {
+		current.PerformanceInsightsKMSKeyID = ptr.To(*target.PerformanceInsightsKMSKeyID)
+	}
+}
+
+// kmsKeyMatches reports whether the desired KMS key can be the observed one.
+// An alias can't be resolved without a KMS call, so it matches any key; an
+// alias ARN at least has to be in the key's partition, region and account.
+func kmsKeyMatches(desired, observed *string) bool {
+	if desired == nil || observed == nil {
+		return false
+	}
+	d, o := *desired, *observed
+	switch {
+	case compare.KMSKeyIDEqual(d, o):
+		return true
+	case strings.HasPrefix(d, "alias/"):
+		return true
+	case strings.Contains(d, ":alias/"):
+		return !isARN(o) || arnScope(d) == arnScope(o)
+	}
+	return false
+}
+
+func isARN(s string) bool { return strings.HasPrefix(s, "arn:") }
+
+// arnScope is the "arn:partition:service:region:account" part of an ARN.
+func arnScope(arn string) string {
+	parts := strings.SplitN(arn, ":", 6)
+	if len(parts) < 6 {
+		return arn
+	}
+	return strings.Join(parts[:5], ":")
 }

@@ -1,6 +1,6 @@
 module github.com/swisscom/crossplane-provider-aws-v2/codegen
 
-go 1.26.0
+go 1.27.3
 
 require (
 	github.com/aws-controllers-k8s/code-generator v0.64.0

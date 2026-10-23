@@ -1,6 +1,6 @@
 module github.com/swisscom/crossplane-provider-aws-v2
 
-go 1.26.0
+go 1.27.3
 
 tool sigs.k8s.io/controller-tools/cmd/controller-gen
 

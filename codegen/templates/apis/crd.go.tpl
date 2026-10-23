@@ -17,16 +17,23 @@ import (
 )
 
 // {{ .CRD.Kind }}Parameters defines the desired state of {{ .CRD.Kind }}
+{{- range .Plan.OptionalImmutable }}
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.{{ . }}) || has(self.{{ . }})",message="{{ . }} cannot be removed once set"
+{{- end }}
 type {{ .CRD.Kind }}Parameters struct {
 {{- if not (IsGlobalService .APIGroup) }}
 	// Region is which region the {{ .CRD.Kind }} will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 {{- end }}
 {{- range $fieldName := .CRD.SpecFieldNames }}
 {{- $field := (index $.CRD.SpecFields $fieldName) }}
 {{- if $field.ShapeRef }}
 	{{ $field.ShapeRef.Documentation }}
+{{- end }}
+{{- if index $.Plan.ImmutableFields $fieldName }}
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="{{ $field.Names.CamelLower }} is immutable"
 {{- end }}
 {{- if $field.IsRequired }}
 	// +kubebuilder:validation:Required

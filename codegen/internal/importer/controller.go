@@ -20,10 +20,12 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
+	"maps"
 	"os"
-	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/ast/astutil"
@@ -45,11 +47,21 @@ var standardReconcilerOptions = map[string]bool{
 // or that crossplane-runtime v2 removed.
 var droppedFeatures = []string{"EnableAlphaExternalSecretStores", "EnableAlphaManagementPolicies"}
 
+// droppedSetupCode is Setup code that the generated Setup does not do.
+type droppedSetupCode struct {
+	line   int
+	code   string
+	reason string
+}
+
 // convertSetup converts the Setup<Kind> function of a provider-aws
 // controller into a configure<Kind> function that returns the external
 // client options and the non-standard reconciler options, and registers it
-// in an init function. It reports whether f had a Setup function.
-func convertSetup(f *ast.File, kind string, r *Report) bool { //nolint:gocyclo // a sequence of AST checks
+// in an init function. Code the generated Setup does not reproduce is kept
+// as a TODO(import) note on configure<Kind> and blocks the import. srcRel
+// and dstRel name the source and target file in notes. It reports whether
+// f had a Setup function.
+func convertSetup(fset *token.FileSet, f *ast.File, srcRel, dstRel, kind string, r *Report) bool { //nolint:gocyclo // a sequence of AST checks
 	var fn *ast.FuncDecl
 	for _, d := range f.Decls {
 		if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil && fd.Name.Name == "Setup"+kind {
@@ -58,6 +70,10 @@ func convertSetup(f *ast.File, kind string, r *Report) bool { //nolint:gocyclo /
 	}
 	if fn == nil {
 		return false
+	}
+	var dropped []droppedSetupCode
+	drop := func(n ast.Node, code, reason string) {
+		dropped = append(dropped, droppedSetupCode{line: fset.Position(n.Pos()).Line, code: code, reason: reason})
 	}
 	var extOpts ast.Expr = ast.NewIdent("nil")
 	var recOpts ast.Expr = ast.NewIdent("nil")
@@ -78,6 +94,17 @@ func convertSetup(f *ast.File, kind string, r *Report) bool { //nolint:gocyclo /
 			}
 		case *ast.IfStmt:
 			if mentionsAny(s.Cond, droppedFeatures) {
+				// The generated Setup handles the plain feature check; an
+				// else branch or another condition would be lost.
+				switch {
+				case s.Else != nil && isDroppedFeatureCheck(s.Cond):
+					// Only the else branch is lost; show it in full.
+					drop(s, "if "+nodeString(fset, s.Cond)+" {…} else "+nodeString(fset, s.Else), "has an else branch")
+				case s.Else != nil:
+					drop(s, nodeString(fset, s), "has an else branch")
+				case !isDroppedFeatureCheck(s.Cond):
+					drop(s, nodeString(fset, s), "has a condition besides the feature flag")
+				}
 				continue
 			}
 		case *ast.ReturnStmt:
@@ -94,13 +121,17 @@ func convertSetup(f *ast.File, kind string, r *Report) bool { //nolint:gocyclo /
 				continue
 			}
 			if len(s.Results) == 1 && containsSel(s.Results[0], "ctrl", "NewControllerManagedBy") {
+				for _, c := range nonStandardBuilderCalls(s.Results[0]) {
+					drop(c.Fun.(*ast.SelectorExpr).Sel, nodeString(fset, &ast.CallExpr{Fun: c.Fun.(*ast.SelectorExpr).Sel, Args: c.Args, Ellipsis: c.Ellipsis}), "a controller builder call")
+				}
 				continue
 			}
 		}
 		body = append(body, s)
 	}
 	body = append(body, &ast.ReturnStmt{Results: []ast.Expr{extOpts, recOpts, ast.NewIdent("nil")}})
-	// Other returns return an error.
+	// Other returns return an error. "return nil" used to skip the
+	// controller, but the generated Setup sets it up anyway.
 	for _, s := range body[:len(body)-1] {
 		ast.Inspect(s, func(n ast.Node) bool {
 			switch n := n.(type) {
@@ -108,6 +139,9 @@ func convertSetup(f *ast.File, kind string, r *Report) bool { //nolint:gocyclo /
 				return false
 			case *ast.ReturnStmt:
 				if len(n.Results) == 1 {
+					if id, ok := n.Results[0].(*ast.Ident); ok && id.Name == "nil" {
+						drop(n, "return nil", "returned early without setting up the controller")
+					}
 					n.Results = []ast.Expr{ast.NewIdent("nil"), ast.NewIdent("nil"), n.Results[0]}
 				}
 			}
@@ -119,7 +153,18 @@ func convertSetup(f *ast.File, kind string, r *Report) bool { //nolint:gocyclo /
 		body = body[1:]
 	}
 	fn.Name.Name = "configure" + kind
-	fn.Doc = &ast.CommentGroup{List: []*ast.Comment{{Slash: fn.Pos() - 1, Text: fmt.Sprintf("// configure%s returns options for the generated Setup function.", kind)}}}
+	doc := []string{fmt.Sprintf("// configure%s returns options for the generated Setup function.", kind)}
+	if len(dropped) > 0 {
+		doc = append(doc, "//", fmt.Sprintf("// TODO(import): Setup%s did things the generated Setup does not. Port them by hand, then remove this comment:", kind))
+	}
+	for _, d := range dropped {
+		doc = append(doc, fmt.Sprintf("//   - %s:%d: %s (%s)", srcRel, d.line, d.code, d.reason))
+		r.Block(topicController, "`%s`: `Setup%s` (%s:%d): dropped `%s`: %s; the generated Setup does not do this", dstRel, kind, srcRel, d.line, d.code, d.reason)
+	}
+	fn.Doc = &ast.CommentGroup{}
+	for _, l := range doc {
+		fn.Doc.List = append(fn.Doc.List, &ast.Comment{Slash: fn.Pos() - 1, Text: l})
+	}
 	fn.Type.Results = &ast.FieldList{List: []*ast.Field{
 		{Type: &ast.ArrayType{Elt: ast.NewIdent("option")}},
 		{Type: &ast.ArrayType{Elt: &ast.SelectorExpr{X: ast.NewIdent("managed"), Sel: ast.NewIdent("ReconcilerOption")}}},
@@ -137,6 +182,84 @@ func convertSetup(f *ast.File, kind string, r *Report) bool { //nolint:gocyclo /
 	})
 	r.Add(topicController, "%s: converted `Setup%s` to `configure%s`; the generated Setup sets logger, poll interval, recorder, management policies and the connector", kind, kind, kind)
 	return true
+}
+
+// isDroppedFeatureCheck reports whether cond is exactly
+// <x>.Features.Enabled(<pkg>.<F>) with F in droppedFeatures.
+func isDroppedFeatureCheck(cond ast.Expr) bool {
+	call, ok := cond.(*ast.CallExpr)
+	if !ok || len(call.Args) != 1 {
+		return false
+	}
+	fun, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok || fun.Sel.Name != "Enabled" {
+		return false
+	}
+	if x, ok := fun.X.(*ast.SelectorExpr); !ok || x.Sel.Name != "Features" {
+		return false
+	}
+	arg, ok := call.Args[0].(*ast.SelectorExpr)
+	return ok && slices.Contains(droppedFeatures, arg.Sel.Name)
+}
+
+// nonStandardBuilderCalls returns the calls of a ctrl.NewControllerManagedBy
+// chain that the generated Setup does not make, in source order.
+func nonStandardBuilderCalls(e ast.Expr) []*ast.CallExpr {
+	var out []*ast.CallExpr
+	for {
+		call, ok := e.(*ast.CallExpr)
+		if !ok {
+			break
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || isSel(sel, "ctrl", "NewControllerManagedBy") {
+			break
+		}
+		if !standardBuilderCall(sel.Sel.Name, call.Args) {
+			out = append(out, call)
+		}
+		e = sel.X
+	}
+	slices.Reverse(out)
+	return out
+}
+
+// standardBuilderCall reports whether the generated Setup makes the call.
+func standardBuilderCall(name string, args []ast.Expr) bool {
+	switch name {
+	case "Named", "For", "Complete":
+		return true
+	case "WithOptions":
+		if len(args) != 1 {
+			return false
+		}
+		c, ok := args[0].(*ast.CallExpr)
+		if !ok {
+			return false
+		}
+		s, ok := c.Fun.(*ast.SelectorExpr)
+		return ok && s.Sel.Name == "ForControllerRuntime" && len(c.Args) == 0
+	case "WithEventFilter":
+		if len(args) != 1 {
+			return false
+		}
+		c, ok := args[0].(*ast.CallExpr)
+		return ok && isSel(c.Fun, "resource", "DesiredStateChanged") && len(c.Args) == 0
+	}
+	return false
+}
+
+// nodeString prints n on one line, cut to 200 characters.
+func nodeString(fset *token.FileSet, n ast.Node) string {
+	var b strings.Builder
+	if err := printer.Fprint(&b, fset, n); err != nil {
+		return fmt.Sprintf("<%T>", n)
+	}
+	s := oneLine(b.String())
+	if r := []rune(s); len(r) > 200 {
+		s = string(r[:200]) + "…"
+	}
+	return s
 }
 
 func assignedName(s ast.Stmt) string {
@@ -304,6 +427,7 @@ func (im *importer) portPackage(srcDir, dstDir, dstPkg, kind string) error {
 	if err != nil {
 		return err
 	}
+	handPorted := kind != "" && controllerPorted(dstDir)
 	if err := os.MkdirAll(dstDir, 0o750); err != nil {
 		return err
 	}
@@ -318,13 +442,18 @@ func (im *importer) portPackage(srcDir, dstDir, dstPkg, kind string) error {
 			im.report.Add(topicController, "%s exists; not overwritten", rel)
 			continue
 		}
+		if handPorted {
+			// New code next to reviewed code could shadow or break it.
+			im.report.Add(topicController, "`%s` has no counterpart in `%s`, which was ported before; not ported. Compare it with the hand-written code", im.srcRel(filepath.Join(srcDir, n)), im.rel(dstDir))
+			continue
+		}
 		fset := token.NewFileSet()
 		f, err := parser.ParseFile(fset, filepath.Join(srcDir, n), nil, parser.ParseComments)
 		if err != nil {
 			return err
 		}
 		if kind != "" {
-			convertSetup(f, kind, im.report)
+			convertSetup(fset, f, im.srcRel(filepath.Join(srcDir, n)), rel, kind, im.report)
 		}
 		rewriteConnect(f)
 		for _, msg := range im.rw.rewriteFile(fset, f, fileContext{pkgPath: dstPkg, controller: kind != "", ported: true}) {
@@ -343,6 +472,21 @@ func (im *importer) portPackage(srcDir, dstDir, dstPkg, kind string) error {
 	return nil
 }
 
+// controllerPorted reports whether the controller in dir was ported before;
+// from then on it is maintained by hand.
+func controllerPorted(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, "setup.go"))
+	return err == nil
+}
+
+// srcRel returns p relative to the source checkout.
+func (im *importer) srcRel(p string) string {
+	if r, err := filepath.Rel(im.src, p); err == nil {
+		return filepath.ToSlash(r)
+	}
+	return p
+}
+
 func (im *importer) rel(p string) string {
 	if r, err := filepath.Rel(im.tgt.root, p); err == nil {
 		return r
@@ -351,12 +495,12 @@ func (im *importer) rel(p string) string {
 }
 
 // portHelpers ports the source helper packages that ported code imports,
-// transitively.
+// transitively, in sorted order.
 func (im *importer) portHelpers() error {
 	done := map[string]bool{}
 	for {
 		var next string
-		for p := range im.rw.helperPkgs {
+		for _, p := range slices.Sorted(maps.Keys(im.rw.helperPkgs)) {
 			if !done[p] {
 				next = p
 				break
@@ -367,12 +511,15 @@ func (im *importer) portHelpers() error {
 		}
 		done[next] = true
 		dstDir := filepath.Join(im.tgt.root, helperDst(next))
+		srcDir := filepath.Join(im.src, next)
+		if !within(im.tgt.root, dstDir) || !within(im.src, srcDir) {
+			return fmt.Errorf("helper package %q resolves to %s, outside %s", next, dstDir, im.tgt.root)
+		}
 		if hasGoFiles(dstDir) && !im.newDirs[dstDir] {
 			im.report.Add("Helper packages", "`%s` exists in the target; not updated", helperDst(next))
 			continue
 		}
 		im.newDirs[dstDir] = true
-		srcDir := filepath.Join(im.src, next)
 		if _, err := os.Stat(srcDir); err != nil {
 			im.report.Add("Helper packages", "`%s` not found in the source", next)
 			continue
@@ -380,8 +527,15 @@ func (im *importer) portHelpers() error {
 		if err := im.portPackage(srcDir, dstDir, im.tgt.module+"/"+helperDst(next), ""); err != nil {
 			return err
 		}
+		im.helpers = append(im.helpers, next)
 		im.report.Add("Helper packages", "ported `%s` to `%s`", next, helperDst(next))
 	}
+}
+
+// within reports whether p is root or below it.
+func within(root, p string) bool {
+	r, err := filepath.Rel(root, p)
+	return err == nil && r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
 }
 
 func hasGoFiles(dir string) bool {
@@ -398,11 +552,9 @@ func rewriteNewClient(f *ast.File) {
 		if !strings.HasPrefix(p, sdkV2Prefix+"service/") || strings.Count(p, "/") != strings.Count(sdkV2Prefix+"service/x", "/") {
 			continue
 		}
-		name := path.Base(p)
-		if is.Name != nil {
-			name = is.Name.Name
+		for _, name := range importNames(is) {
+			svcs[name] = true
 		}
-		svcs[name] = true
 	}
 	astutil.Apply(f, func(c *astutil.Cursor) bool {
 		call, ok := c.Node().(*ast.CallExpr)

@@ -24,9 +24,11 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -128,15 +130,21 @@ func parseAPIPackage(dir, importPath string) (*apiPackage, error) {
 	return p, nil
 }
 
+// fileImports maps the local names of f's imports to their paths. An
+// alias or assumed name wins over a last path element.
 func fileImports(f *ast.File) map[string]string {
 	m := map[string]string{}
-	for _, is := range f.Imports {
-		p, _ := strconv.Unquote(is.Path.Value)
-		name := path.Base(p)
-		if is.Name != nil {
-			name = is.Name.Name
+	for pass := range 2 {
+		for _, is := range f.Imports {
+			p, _ := strconv.Unquote(is.Path.Value)
+			names := importNames(is)
+			if pass >= len(names) {
+				continue
+			}
+			if _, taken := m[names[pass]]; !taken {
+				m[names[pass]] = p
+			}
 		}
-		m[name] = p
 	}
 	return m
 }
@@ -337,6 +345,8 @@ type customTypes struct {
 	// other are kept declarations other than types; header is the file header.
 	other  []*decl
 	header []byte
+	// written is the file writeOther wrote, if any.
+	written string
 }
 
 func (c *customTypes) run() error {
@@ -401,8 +411,8 @@ func (c *customTypes) run() error {
 			c.closure(n, available)
 		}
 	}
-	for k, d := range c.resolvers {
-		c.portResolver(k, d)
+	for _, k := range slices.Sorted(maps.Keys(c.resolvers)) {
+		c.portResolver(k, c.resolvers[k])
 	}
 	c.rewriteMarkers()
 	c.dropRefFields()
@@ -558,7 +568,7 @@ func (c *customTypes) portResolver(kind string, d *decl) { //nolint:gocyclo // a
 	body = append(body, epilogue...)
 	f.Body.List = body
 	c.keep[d.key] = true
-	c.report.Add(topicReferences, "%s: ported hand-written `ResolveReferences` to namespaced references. angryjet does not generate resolvers for kinds with a hand-written one, so `%s` markers of %s are ignored", kind, markerPrefix, kind)
+	c.report.Add(topicReferences, "%s: ported hand-written `ResolveReferences` to namespaced references", kind)
 }
 
 func recvName(f *ast.FuncDecl) string {
@@ -790,10 +800,11 @@ func (c *customTypes) writeTypes(dir string) error {
 		return err
 	}
 	header := orig[:bytes.Index(orig, []byte("\npackage "))+1]
-	ct, existing, err := removeStubs(bytes.Clone(orig), c.src.path)
+	_, existing, err := removeStubs(bytes.Clone(orig), c.src.path)
 	if err != nil {
 		return err
 	}
+	var ct []byte
 	merged := orig
 	var types, other []*decl
 	for _, d := range c.src.order {
@@ -826,16 +837,71 @@ func (c *customTypes) writeTypes(dir string) error {
 		}
 		return os.WriteFile(ctPath, merged, 0o600)
 	}
-	if !bytes.Equal(merged, orig) {
-		if ct, _, err = removeStubs(bytes.Clone(merged), c.src.path); err != nil {
-			return err
-		}
-	}
-	out, err := c.render(header, types, ct)
+	// Stubs are filled where they are, so a re-import keeps the order of
+	// the file; only new types are appended.
+	stubs, err := stubRanges(merged)
 	if err != nil {
 		return err
 	}
+	type repl struct {
+		at   [2]int
+		text []byte
+	}
+	var repls []repl
+	var appended []*decl
+	imports := map[string]string{}
+	for _, d := range types {
+		at, ok := stubs[d.key]
+		if !ok {
+			appended = append(appended, d)
+			continue
+		}
+		text, imps, err := c.renderDecls(d.file, []*decl{d})
+		if err != nil {
+			return err
+		}
+		repls = append(repls, repl{at: at, text: bytes.TrimSpace(text)})
+		maps.Copy(imports, imps)
+	}
+	slices.SortFunc(repls, func(a, b repl) int { return a.at[0] - b.at[0] })
+	ct = merged
+	for i := len(repls) - 1; i >= 0; i-- {
+		ct = slices.Concat(ct[:repls[i].at[0]], repls[i].text, ct[repls[i].at[1]:])
+	}
+	out, err := c.render(header, appended, ct, imports)
+	if err != nil {
+		return err
+	}
+	if bytes.Equal(out, orig) {
+		return nil
+	}
 	return os.WriteFile(ctPath, out, 0o600)
+}
+
+// stubRanges returns the byte ranges, doc comment included, of the empty
+// Custom* structs of a target custom_types.go.
+func stubRanges(src []byte) (map[string][2]int, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "custom_types.go", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][2]int{}
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok || g.Tok != token.TYPE || len(g.Specs) != 1 {
+			continue
+		}
+		ts := g.Specs[0].(*ast.TypeSpec)
+		if st, ok := ts.Type.(*ast.StructType); ok && len(st.Fields.List) == 0 && strings.HasPrefix(ts.Name.Name, "Custom") {
+			start := g.Pos()
+			if g.Doc != nil {
+				start = g.Doc.Pos()
+			}
+			out[ts.Name.Name] = [2]int{fset.Position(start).Offset, fset.Position(g.End()).Offset}
+		}
+	}
+	return out, nil
 }
 
 // mergeFields adds the fields of the source struct type d that the struct of
@@ -860,6 +926,9 @@ func (c *customTypes) mergeFields(src []byte, d *decl) ([]byte, []string, error)
 		return src, nil, nil
 	}
 	have := map[string]token.Pos{}
+	// Two fields with one json name make encoding/json drop both, so a
+	// field renamed by hand must not get the source field next to it.
+	jsonOwner := map[string]string{}
 	for _, f := range tst.Fields.List {
 		end := f.End()
 		if f.Comment != nil {
@@ -867,6 +936,9 @@ func (c *customTypes) mergeFields(src []byte, d *decl) ([]byte, []string, error)
 		}
 		for _, n := range f.Names {
 			have[n.Name] = end
+			if j := jsonName(f); j != "" {
+				jsonOwner[j] = n.Name
+			}
 		}
 	}
 
@@ -902,6 +974,11 @@ func (c *customTypes) mergeFields(src []byte, d *decl) ([]byte, []string, error)
 		name := f.Names[0].Name
 		if end, ok := have[name]; ok {
 			anchor, cur = tfset.Position(end).Offset, nil
+			continue
+		}
+		if owner, ok := jsonOwner[jsonName(f)]; ok {
+			c.report.Add(topicTypes, "`%s`: source field `%s` not added: its json name `%s` is already used by `%s`", d.key, name, jsonName(f), owner)
+			cur = nil
 			continue
 		}
 		start := f.Pos()
@@ -943,9 +1020,10 @@ func (c *customTypes) mergeFields(src []byte, d *decl) ([]byte, []string, error)
 		}
 		return all
 	}(), "\n")
-	for p, n := range imps {
+	for _, p := range slices.Sorted(maps.Keys(imps)) {
+		n := imps[p]
 		if strings.Contains(joined, n+".") {
-			if n == path.Base(p) {
+			if n == path.Base(p) || n == assumedName(p) {
 				n = ""
 			}
 			astutil.AddNamedImport(fset, f, n, p)
@@ -960,6 +1038,22 @@ func (c *customTypes) mergeFields(src []byte, d *decl) ([]byte, []string, error)
 }
 
 // structOf returns the struct type declared as name in f.
+// jsonName returns the json name of a struct field, or "" if it has none.
+func jsonName(f *ast.Field) string {
+	if f.Tag == nil {
+		return ""
+	}
+	tag, err := strconv.Unquote(f.Tag.Value)
+	if err != nil {
+		return ""
+	}
+	name, _, _ := strings.Cut(reflect.StructTag(tag).Get("json"), ",")
+	if name == "-" {
+		return ""
+	}
+	return name
+}
+
 func structOf(f *ast.File, name string) *ast.StructType {
 	for _, d := range f.Decls {
 		g, ok := d.(*ast.GenDecl)
@@ -1019,10 +1113,11 @@ func (c *customTypes) writeOther() error {
 		c.report.Add(topicTypes, "%s exists; not overwritten. Compare it with the source by hand", p)
 		return nil
 	}
-	out, err := c.render(c.header, other, nil)
+	out, err := c.render(c.header, other, nil, nil)
 	if err != nil {
 		return err
 	}
+	c.written = p
 	return os.WriteFile(p, out, 0o600)
 }
 
@@ -1102,7 +1197,7 @@ func removeStubs(src []byte, _ string) ([]byte, map[string]bool, error) {
 // render prints decls as a file of the target package. If base is set, the
 // declarations are appended to it, otherwise a new file with header is
 // created.
-func (c *customTypes) render(header []byte, decls []*decl, base []byte) ([]byte, error) {
+func (c *customTypes) render(header []byte, decls []*decl, base []byte, extraImports map[string]string) ([]byte, error) {
 	var b bytes.Buffer
 	if base != nil {
 		b.Write(bytes.TrimRight(base, "\n"))
@@ -1111,7 +1206,10 @@ func (c *customTypes) render(header []byte, decls []*decl, base []byte) ([]byte,
 		b.Write(header)
 		fmt.Fprintf(&b, "package %s\n", path.Base(c.svcVer))
 	}
-	imports := map[string]string{}
+	imports := maps.Clone(extraImports)
+	if imports == nil {
+		imports = map[string]string{}
+	}
 	for _, sf := range c.src.files {
 		var ds []*decl
 		for _, d := range decls {
@@ -1137,8 +1235,9 @@ func (c *customTypes) render(header []byte, decls []*decl, base []byte) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse rendered code: %w\n%s", err, b.String())
 	}
-	for p, n := range imports {
-		if n == path.Base(p) {
+	for _, p := range slices.Sorted(maps.Keys(imports)) {
+		n := imports[p]
+		if n == path.Base(p) || n == assumedName(p) {
 			n = ""
 		}
 		astutil.AddNamedImport(fset, f, n, p)
@@ -1193,11 +1292,7 @@ func (c *customTypes) renderDecls(sf *srcFile, ds []*decl) ([]byte, map[string]s
 	imports := map[string]string{}
 	for _, is := range f.Imports {
 		p, _ := strconv.Unquote(is.Path.Value)
-		n := path.Base(p)
-		if is.Name != nil {
-			n = is.Name.Name
-		}
-		imports[p] = n
+		imports[p] = importNames(is)[0]
 	}
 	var b bytes.Buffer
 	cfg := &printerConfig

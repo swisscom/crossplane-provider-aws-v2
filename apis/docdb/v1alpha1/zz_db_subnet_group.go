@@ -28,6 +28,7 @@ import (
 type DBSubnetGroupParameters struct {
 	// Region is which region the DBSubnetGroup will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 	// The description for the subnet group.
 	// +kubebuilder:validation:Required

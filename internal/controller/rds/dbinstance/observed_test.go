@@ -94,7 +94,6 @@ func desiredParams() svcapitypes.DBInstanceParameters {
 		NcharCharacterSetName:        aws.String("AL16UTF16"),
 		TagSpecifications:            []*svcapitypes.TagSpecification{{ResourceType: aws.String("auto-backup")}},
 		MasterUserAuthenticationType: aws.String("password"),
-		TDECredentialPassword:        aws.String("secret"),
 	}
 }
 
@@ -208,10 +207,7 @@ func TestPreUpdateManageMasterUserPassword(t *testing.T) {
 			manage: aws.Bool(true),
 			want:   &svcsdk.ModifyDBInstanceInput{ManageMasterUserPassword: aws.Bool(true), MasterUserSecretKmsKeyId: aws.String("key")},
 		},
-		"TurnOffSendsPassword": {
-			manage: aws.Bool(false), managed: true,
-			want: &svcsdk.ModifyDBInstanceInput{ManageMasterUserPassword: aws.Bool(false), MasterUserPassword: aws.String("pw")},
-		},
+		// Turning it off is covered through Update in TestManagedPasswordToggle.
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

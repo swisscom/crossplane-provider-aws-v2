@@ -16,12 +16,15 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
 	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
 	rds "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/rds"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/clients/rds/fake"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/rds/utils"
 )
 
 type objectFnCustom func(obj client.Object, diff bool) error
@@ -617,6 +620,8 @@ func TestIsUpToDate(t *testing.T) {
 		"Ignores Tags with TagsIgnore exact": {
 			args: args{
 				cr: &svcapitypes.DBInstance{
+					// c7n:other was set by the provider.
+					ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{utils.AnnotationManagedTagKeys: "c7n:other,env"}},
 					Spec: svcapitypes.DBInstanceSpec{
 						ForProvider: svcapitypes.DBInstanceParameters{
 							CustomDBInstanceParameters: svcapitypes.CustomDBInstanceParameters{
@@ -645,13 +650,15 @@ func TestIsUpToDate(t *testing.T) {
 				kube: test.NewMockClient(),
 			},
 			want: want{
-				upToDate: false, // c7n:other should be removed since not ignored and not in spec
+				upToDate: false, // recorded c7n:other should be removed since not ignored and not in spec
 				err:      nil,
 			},
 		},
 		"DoesNotIgnoreAllWithStarOnlyRule": {
 			args: args{
 				cr: &svcapitypes.DBInstance{
+					// env was set by the provider.
+					ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{utils.AnnotationManagedTagKeys: "env"}},
 					Spec: svcapitypes.DBInstanceSpec{
 						ForProvider: svcapitypes.DBInstanceParameters{
 							CustomDBInstanceParameters: svcapitypes.CustomDBInstanceParameters{
@@ -677,7 +684,7 @@ func TestIsUpToDate(t *testing.T) {
 				kube: test.NewMockClient(),
 			},
 			want: want{
-				upToDate: false, // env tag should be scheduled for removal
+				upToDate: false, // recorded env tag should be scheduled for removal
 				err:      nil,
 			},
 		},
@@ -789,7 +796,7 @@ func TestPostObserve(t *testing.T) {
 				},
 				kube: &test.MockClient{
 					MockGet: func(ctx context.Context, key client.ObjectKey, obj client.Object) error {
-						return errors.New("not found")
+						return kerrors.NewNotFound(corev1.Resource("secrets"), key.Name)
 					},
 				},
 			},

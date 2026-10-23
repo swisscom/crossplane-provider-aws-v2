@@ -40,14 +40,55 @@ flowchart LR
 | `controller/conversions.go.tpl` | `Generate<Op>Input`, `Generate<Kind>`, `DiffUpdatableParameters`, `IsNotFound` |
 | `controller/setup.go.tpl` | `SetupGated` of the service |
 
-`apis/<svc>/codegen.yaml` holds what ACK's config can't express:
+`apis/<svc>/codegen.yaml` holds what ACK's config can't express. It is
+parsed strictly: an unknown key is an error, and every key under `kinds`
+must be a generated kind.
 
 ```yaml
 clientOperations:          # extra SDK operations in the Client interface
   DBCluster:
     - RestoreDBClusterFromSnapshot
     - ListTagsForResource
+kinds:                     # per-kind settings, all optional
+  Widget:
+    identifier: WidgetName          # read output member that equals the external name
+    identifierInput: WidgetNames    # read input member, if not identifier or identifier+"s"
+    customObserve: true             # no read operation: a hand-written observe hook is required
+    customDelete: true              # no delete operation: a hand-written delete hook is required
+    orphanOnDelete: true            # no delete operation: deleting the MR leaves the AWS resource
+    customIsUpToDate: true          # GetAttributes kind with an update operation: hand-written isUpToDate
+    immutableFields: [kmsKeyID]     # JSON names of spec.forProvider fields CEL keeps unchanged
+    allowSensitiveFields:           # secret-looking fields that are knowingly plain
+      - path: spec.forProvider.clientToken
+        reason: idempotency token, not a secret
 ```
+
+## Safety checks (fail closed)
+
+`make services` stops, and writes nothing, when the generator can't emit a
+safe default. It reports every problem of every kind at once, and each
+message names the config line to write
+([ADR 0011](../adr/0011-fail-closed-generator-defaults.md)).
+
+| Check | Fix |
+|-------|-----|
+| An `ignore.field_paths` entry matches nothing in the API model (typo, renamed member, or a member below a list, which ACK can't ignore) | fix or remove the entry |
+| A ReadMany kind has no member that holds the external name (`<Kind>Identifier`, `<Kind>Id`, `<Kind>Name` in both the read output element and the read input), or several match | `kinds.<Kind>.identifier` (and `identifierInput`) |
+| A secret-looking string or binary field (password, secret, token, credential, passphrase, private/API/access key; not `…Arn`, `…KmsKeyId`, `…Status`, `…Id`) would be a plain spec or status field | ignore it in `ignore.field_paths` and add a `LocalSecretKeySelector` in `custom_types.go`, or `allowSensitiveFields` with a reason |
+| No read operation | add one, or `customObserve` + an observe hook |
+| No delete operation | `customDelete` + a delete hook, or `orphanOnDelete` |
+| No "not found" (404) error code in the model or config | `resources.<Kind>.exceptions.errors.404.code` |
+| A ReadMany output has several lists | `operations.<Op>.output_wrapper_field_path` |
+| A GetAttributes kind can be updated (no generated drift check) | `customIsUpToDate` + an isUpToDate hook |
+| An `immutableFields` entry is not a spec field | fix the entry |
+
+Opt-ins on a kind they don't apply to are errors too, so stale settings
+don't hide.
+
+**Imported services.** `generator-config.yaml` of an imported service is
+derived from `apis/<svc>/import.yaml`. Put `ignore.field_paths` additions
+into `import.yaml` `ignoreFieldPaths` and other keys under `generatorConfig`;
+a hand edit of the derived file is lost on the next import.
 
 ## The generated controller
 
@@ -85,11 +126,12 @@ sequenceDiagram
     participant H as hooks (setup.go)
     participant A as AWS
     R->>E: Observe(cr)
+    E->>E: Generate<Read>Input: identifier = external name
     E->>H: preObserve(input)
     E->>A: Describe…
-    E->>H: filterList(resp)  [ReadMany only]
+    E->>H: filterList(resp)  [ReadMany only; >1 match is an error]
     E->>H: lateInitialize(spec, resp)
-    E->>E: Generate<Kind>(resp) → status.atProvider
+    E->>E: Generate<Kind>(resp) → status.atProvider (Custom<Kind>Observation kept)
     E->>H: isUpToDate(cr, resp) → upToDate, diff
     E->>H: postObserve(obs)
     E-->>R: ExternalObservation
@@ -99,12 +141,34 @@ Create, Update and Delete follow the same pattern
 (`pre<Verb>` → SDK call → `post<Verb>`). `preDelete` can return `true` to
 skip the delete call (e.g. already deleting).
 
+What the generated code guarantees:
+
+- **Identity.** The read, update and delete inputs take the resource's
+  identifier from the external name (`crossplane.io/external-name`), never
+  from `status`, which is empty before the first observe. The create input
+  does not: a kind whose create input needs the name sets it in `preCreate`
+  (`obj.<Name> = pointer.ToOrNilIfZeroValue(meta.GetExternalName(cr))`).
+  A ReadMany observe keeps only exact matches (`filterByExternalName`) and
+  fails if more than one is left instead of adopting one of them. APIs that normalise
+  identifiers (RDS lowercases them) need a hand-written `filterList`.
+- **Spec is the user's.** Create maps the AWS response into
+  `status.atProvider` only, through a scratch copy. Values AWS fills in or
+  normalises reach `spec` only through `lateInitialize` on the next observe.
+- **Nil responses.** A nil create response or output wrapper skips the
+  mapping (AWS reported success); a nil describe response is an error, not
+  "doesn't exist", because that would create a duplicate.
+- **Hand-written status.** `Custom<Kind>Observation` keeps last poll's value
+  until the hooks run; `postObserve` refreshes it.
+
 ### Hook defaults
 
 | Hook | Default |
 |------|---------|
-| `preObserve`, `postObserve`, `filterList`, `lateInitialize` | no-op |
-| `isUpToDate` | `isUpToDateUpdatable`, or always up to date if the kind has no update or read operation |
+| `preObserve`, `postObserve`, `lateInitialize` | no-op |
+| `filterList` (ReadMany) | `filterByExternalName`: keep elements whose identifier equals the external name |
+| `isUpToDate` | `isUpToDateUpdatable`; an error for a GetAttributes kind with `customIsUpToDate`; always up to date if the kind has no update operation |
+| `observe` (no read operation, `customObserve`) | error "Observe is not implemented" |
+| `delete` (no delete operation) | error "Delete is not implemented" (`customDelete`), or success without an AWS call (`orphanOnDelete`) |
 | `preCreate`/`postCreate`, `preUpdate`/`postUpdate`, `preDelete`/`postDelete` | no-op |
 
 **Kinds without an update operation** (e.g. ec2 `SecurityGroup`: AWS has
@@ -149,6 +213,17 @@ the generated `Setup`.
 If a hook you need doesn't exist, change `controller.go.tpl` and regenerate;
 never edit `zz_` files.
 
+### Immutable fields (CEL)
+
+Every regional kind's `spec.forProvider.region` carries
+`x-kubernetes-validations: self == oldSelf` ("region is immutable"):
+changing it would create a new, empty resource in the other region. Fields
+in `kinds.<Kind>.immutableFields`, and the identifier when it is a spec
+field, get the same rule; optional ones also get a rule on the parameters
+type that stops removing them once set. Unset → set stays allowed, so late
+initialization still works. CEL can't see `metadata.annotations`, so the
+external name itself isn't protected (that would need a webhook).
+
 ### Drift detection: `DiffUpdatableParameters`
 
 `zz_conversions.go` contains, for kinds with an update and a read operation:
@@ -166,7 +241,15 @@ It returns the JSON names of fields that differ. A field is compared if
 The field list is computed at generation time
 (`codegen/internal/generator/compare.go`). Comparison uses
 `internal/utils/compare.IsSubset`: unset desired fields are unmanaged,
-slices are order-insensitive, structs compare only set fields.
+slices are order-insensitive, structs compare only set fields. In detail
+([ADR 0010](../adr/0010-compare-semantics-and-pending-overlay.md)):
+
+- a desired struct against an observed nil compares with the zero struct,
+  so `&T{}` vs nil is equal and `&T{X: 1}` vs nil differs (R5);
+- slices of structs are equal when every desired element can be matched
+  one-to-one to an observed element it is a subset of, in any order (R11);
+- maps: every desired key must be present in observed, then values are
+  compared; a nil desired value accepts any observed value (R14).
 
 Not covered, by design, so hand-written `isUpToDate` hooks add them:
 
@@ -198,6 +281,17 @@ flowchart LR
 Hand-written code that needs generated methods (e.g.
 `var _ resource.Managed = (*DBCluster)(nil)`) compiles only after
 `make generate`.
+
+## Writing files
+
+The generator renders and formats every file in memory first. If a
+template produces code that doesn't format, it writes the source to
+`<path>.broken` and leaves all outputs untouched. Otherwise it writes the
+files in a fixed order, each atomically (temp file + rename), and removes
+`zz_` files of kinds that are no longer generated (and their empty
+directories). A removed kind whose controller directory still has
+hand-written files is an error: delete the directory or stop ignoring the
+kind. `zz_generated.*` files belong to `make generate`.
 
 ## Commands
 

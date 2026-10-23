@@ -27,6 +27,7 @@ import (
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/rds"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
@@ -38,10 +39,10 @@ import (
 func GenerateDescribeDBInstancesInput(cr *svcapitypes.DBInstance) (*svcsdk.DescribeDBInstancesInput, error) {
 	res := &svcsdk.DescribeDBInstancesInput{}
 
-	if cr.Status.AtProvider.DBInstanceIdentifier != nil {
-		res.DBInstanceIdentifier = cr.Status.AtProvider.DBInstanceIdentifier
+	// The external name identifies the resource; status may be empty or stale.
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBInstanceIdentifier = aws.String(name)
 	}
-
 	return res, nil
 }
 
@@ -50,7 +51,8 @@ func GenerateDBInstance(resp *svcsdk.DescribeDBInstancesOutput) *svcapitypes.DBI
 	cr := &svcapitypes.DBInstance{}
 
 	found := false
-	for _, elem := range resp.DBInstances {
+	if len(resp.DBInstances) > 0 {
+		elem := resp.DBInstances[0]
 		if elem.ActivityStreamEngineNativeAuditFieldsIncluded != nil {
 			cr.Status.AtProvider.ActivityStreamEngineNativeAuditFieldsIncluded = elem.ActivityStreamEngineNativeAuditFieldsIncluded
 		} else {
@@ -640,9 +642,6 @@ func GenerateDBInstance(resp *svcsdk.DescribeDBInstancesOutput) *svcapitypes.DBI
 			if elem.PendingModifiedValues.LicenseModel != nil {
 				f63.LicenseModel = elem.PendingModifiedValues.LicenseModel
 			}
-			if elem.PendingModifiedValues.MasterUserPassword != nil {
-				f63.MasterUserPassword = elem.PendingModifiedValues.MasterUserPassword
-			}
 			if elem.PendingModifiedValues.MultiAZ != nil {
 				f63.MultiAZ = elem.PendingModifiedValues.MultiAZ
 			}
@@ -650,32 +649,32 @@ func GenerateDBInstance(resp *svcsdk.DescribeDBInstancesOutput) *svcapitypes.DBI
 				f63.MultiTenant = elem.PendingModifiedValues.MultiTenant
 			}
 			if elem.PendingModifiedValues.PendingCloudwatchLogsExports != nil {
-				f63f17 := &svcapitypes.PendingCloudwatchLogsExports{}
+				f63f16 := &svcapitypes.PendingCloudwatchLogsExports{}
 				if elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToDisable != nil {
-					f63f17.LogTypesToDisable = aws.StringSlice(elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToDisable)
+					f63f16.LogTypesToDisable = aws.StringSlice(elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToDisable)
 				}
 				if elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToEnable != nil {
-					f63f17.LogTypesToEnable = aws.StringSlice(elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToEnable)
+					f63f16.LogTypesToEnable = aws.StringSlice(elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToEnable)
 				}
-				f63.PendingCloudwatchLogsExports = f63f17
+				f63.PendingCloudwatchLogsExports = f63f16
 			}
 			if elem.PendingModifiedValues.Port != nil {
 				portCopy := int64(*elem.PendingModifiedValues.Port)
 				f63.Port = &portCopy
 			}
 			if elem.PendingModifiedValues.ProcessorFeatures != nil {
-				f63f19 := []*svcapitypes.ProcessorFeature{}
-				for _, f63f19iter := range elem.PendingModifiedValues.ProcessorFeatures {
-					f63f19elem := &svcapitypes.ProcessorFeature{}
-					if f63f19iter.Name != nil {
-						f63f19elem.Name = f63f19iter.Name
+				f63f18 := []*svcapitypes.ProcessorFeature{}
+				for _, f63f18iter := range elem.PendingModifiedValues.ProcessorFeatures {
+					f63f18elem := &svcapitypes.ProcessorFeature{}
+					if f63f18iter.Name != nil {
+						f63f18elem.Name = f63f18iter.Name
 					}
-					if f63f19iter.Value != nil {
-						f63f19elem.Value = f63f19iter.Value
+					if f63f18iter.Value != nil {
+						f63f18elem.Value = f63f18iter.Value
 					}
-					f63f19 = append(f63f19, f63f19elem)
+					f63f18 = append(f63f18, f63f18elem)
 				}
-				f63.ProcessorFeatures = f63f19
+				f63.ProcessorFeatures = f63f18
 			}
 			if elem.PendingModifiedValues.ResumeFullAutomationModeTime != nil {
 				f63.ResumeFullAutomationModeTime = &metav1.Time{Time: *elem.PendingModifiedValues.ResumeFullAutomationModeTime}
@@ -891,7 +890,6 @@ func GenerateDBInstance(resp *svcsdk.DescribeDBInstancesOutput) *svcapitypes.DBI
 			cr.Status.AtProvider.VPCSecurityGroups = nil
 		}
 		found = true
-		break
 	}
 	if !found {
 		return cr
@@ -1216,9 +1214,6 @@ func GenerateCreateDBInstanceInput(cr *svcapitypes.DBInstance) (*svcsdk.CreateDB
 	if cr.Spec.ForProvider.TDECredentialARN != nil {
 		res.TdeCredentialArn = cr.Spec.ForProvider.TDECredentialARN
 	}
-	if cr.Spec.ForProvider.TDECredentialPassword != nil {
-		res.TdeCredentialPassword = cr.Spec.ForProvider.TDECredentialPassword
-	}
 	if cr.Spec.ForProvider.Timezone != nil {
 		res.Timezone = cr.Spec.ForProvider.Timezone
 	}
@@ -1493,10 +1488,10 @@ func GenerateModifyDBInstanceInput(cr *svcapitypes.DBInstance) (*svcsdk.ModifyDB
 	if cr.Spec.ForProvider.TDECredentialARN != nil {
 		res.TdeCredentialArn = cr.Spec.ForProvider.TDECredentialARN
 	}
-	if cr.Spec.ForProvider.TDECredentialPassword != nil {
-		res.TdeCredentialPassword = cr.Spec.ForProvider.TDECredentialPassword
-	}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBInstanceIdentifier = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -1604,6 +1599,9 @@ func DiffUpdatableParameters(desired, observed *svcapitypes.DBInstanceParameters
 func GenerateDeleteDBInstanceInput(cr *svcapitypes.DBInstance) (*svcsdk.DeleteDBInstanceInput, error) {
 	res := &svcsdk.DeleteDBInstanceInput{}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBInstanceIdentifier = aws.String(name)
+	}
 	return res, nil
 }
 

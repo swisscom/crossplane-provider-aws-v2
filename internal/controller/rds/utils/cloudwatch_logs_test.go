@@ -19,6 +19,7 @@ package utils
 import (
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -97,6 +98,27 @@ func TestGenerateCloudWatchExportConfiguration(t *testing.T) {
 			got := GenerateCloudWatchExportConfiguration(tc.spec, tc.current)
 			if diff := cmp.Diff(tc.want, got, cmpopts.EquateEmpty(), cmpopts.IgnoreUnexported(svcsdktypes.CloudwatchLogsExportConfiguration{})); diff != "" {
 				t.Errorf("GenerateCloudWatchExportConfiguration(...): -want, +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestAreSameElementsIsSetEquality(t *testing.T) {
+	cases := map[string]struct {
+		desired  []*string
+		observed []string
+		want     bool
+	}{
+		"DuplicateHidesMissing": {desired: aws.StringSlice([]string{"a", "a"}), observed: []string{"a", "b"}, want: false},
+		"OrderIgnored":          {desired: aws.StringSlice([]string{"a", "b"}), observed: []string{"b", "a"}, want: true},
+		"NilEqualsEmpty":        {desired: nil, observed: []string{}, want: true},
+		"DuplicatesIgnored":     {desired: aws.StringSlice([]string{"a", "a"}), observed: []string{"a"}, want: true},
+		"Different":             {desired: aws.StringSlice([]string{"a"}), observed: []string{"b"}, want: false},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := AreSameElements(tc.desired, tc.observed); got != tc.want {
+				t.Errorf("AreSameElements() = %v, want %v", got, tc.want)
 			}
 		})
 	}

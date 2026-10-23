@@ -6,7 +6,7 @@ description: Import a managed resource kind (e.g. rds/DBInstance) from crossplan
 # Import a kind from provider-aws
 
 The importer does the mechanical part; you port what it could not. Reference
-port: docdb `DBCluster`/`DBInstance` (commits `2362ae0`, `1a8d835`).
+port: docdb `DBCluster`/`DBInstance` (commits `c501153`, `b74da45`).
 Pitfalls: `docs/porting-notes.md`. Background: `docs/components/importer.md`.
 
 ## 1. Prerequisites
@@ -29,24 +29,34 @@ cd codegen
 go run ./cmd/import --source ../../provider-aws --service <svc> --kinds <Kind>[,<Kind>] --output .. > /tmp/<svc>-report.md
 ```
 
-`<svc>` is the aws-sdk-go-v2 service package name (e.g. `rds`, `ec2`). The
-importer:
+`<svc>` is the aws-sdk-go-v2 service package name (e.g. `rds`, `ec2`).
+`--source` must be the root of a git checkout. Exit codes: 0 done, 1 error
+(read stderr), 2 invalid flags (nothing written), 3 written with blocking
+findings to port. `go run` prints `exit status 3` but returns 1; the last
+stderr line says which case it is. The importer:
 
-1. Writes `apis/<svc>/import.yaml` (kinds, and the source `revisions`:
-   repository, commit, `dirty` if the kind's source files had uncommitted
-   changes) and a filtered `generator-config.yaml`, runs the generator.
-   Prefer importing from a clean checkout.
+1. Derives `apis/<svc>/generator-config.yaml` (never edit it; put repo-local
+   settings under `generatorConfig` in `import.yaml`, see
+   [importer.md](../../../docs/components/importer.md#derived-generator-configyaml)),
+   writes `apis/<svc>/import.yaml` and runs the generator. If
+   `generator-config.yaml` was edited by hand, it stops: move the edit,
+   delete the file and run again. Prefer importing from a clean checkout.
 2. Copies custom types (xpv1 → namespaced xpv2 types) and the declarations
    the source controllers use (e.g. state constants), rewrites reference
    markers, drops refs to kinds that are not imported.
 3. Copies controller `setup.go` (Setup → `configure` hook) and the closure of
    helper packages, rewrites imports/symbols to runtime v2 and SDK v2.
-4. Type-checks in a loop: missing SDK operations go to `apis/<svc>/codegen.yaml`;
-   every declaration that still does not compile is moved to
+4. Type-checks in a loop: missing SDK operations go to `apis/<svc>/codegen.yaml`.
+   A function or method whose body does not compile keeps its signature and
+   gets `panic("TODO(import): …")`; the original goes to
    `<file>_importtodo.go` with a `// TODO(import): <compiler error>` comment.
+   Other declarations that don't compile are moved there whole.
+5. Records the source revisions (`revisions` for fresh kinds, `lastImport`).
 
-Read the report. The repo builds at this point; the `*_importtodo.go` files
-are excluded by the `importtodo` build tag.
+Read the report: it starts with the number of blocking findings. The repo
+builds at this point, but **stubs panic at run time**, including a stubbed
+`init` (every test of that package panics). The `*_importtodo.go` files are
+excluded by the `importtodo` build tag.
 
 The AWS API model is the one of the current aws-sdk-go-v2 service module, so
 it may have fields that provider-aws never had. They come for free, but the
@@ -87,14 +97,23 @@ between services; only remove the ones `git status` shows as new.
 ## 3. Port the quarantined code
 
 ```sh
-find . -name '*_importtodo*.go' -not -path './codegen/*'
-grep -rn 'TODO(import)' --include='*_importtodo*.go' .
+make check-import-todo   # lists every *_importtodo*.go file and TODO(import) marker
 ```
 
 Work bottom-up: `internal/utils/*` → `internal/clients/<svc>` →
 `internal/controller/<svc>/utils` → controller `setup.go` → tests. For each
-file, move the declarations back into the non-todo file, drop the
+file, replace each stub's body with the ported body from the
+`_importtodo` file (and move the other declarations back), drop the
 `TODO(import)` comments, fix, then delete the `_importtodo` file.
+
+Also port the blocking findings that are notes, not stubs:
+
+- `configure<Kind>` doc: Setup code the generated Setup doesn't do (an
+  `else` branch, `Watches`/`Owns`/predicates, an early `return nil`). Port
+  it into `configure<Kind>` or decide it's not needed, then remove the note.
+- `ResolveReferences` doc: marker references the hand-written method
+  doesn't resolve. Resolve them there, or drop the method so angryjet
+  generates it.
 
 Mechanical fixes (follow the compiler, `go build ./... ` / `go vet ./...`):
 
@@ -152,8 +171,7 @@ Tests:
 ## 4. Verify
 
 ```sh
-find . -name '*_importtodo*' -not -path './codegen/*'   # must be empty
-grep -rn 'TODO(import)' --include=*.go apis internal    # must be empty
+make check-import-todo    # must pass
 go mod tidy && go build ./... && go vet ./... && go test ./...
 ```
 

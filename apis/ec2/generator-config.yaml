@@ -86,7 +86,6 @@ ignore:
         - AuthorizeSecurityGroupIngressInput.TagSpecifications
         - AuthorizeSecurityGroupEgressInput.CidrIp
         - AuthorizeSecurityGroupEgressInput.GroupId
-        - AuthorizeSecurityGroupEgressInput.GroupName
         - AuthorizeSecurityGroupEgressInput.IpPermissions
         - AuthorizeSecurityGroupEgressInput.SourceSecurityGroupName
         - AuthorizeSecurityGroupEgressInput.SourceSecurityGroupOwnerId
@@ -110,7 +109,6 @@ ignore:
         - RevokeSecurityGroupEgressInput.CidrIp
         - RevokeSecurityGroupEgressInput.FromPort
         - RevokeSecurityGroupEgressInput.GroupId
-        - RevokeSecurityGroupEgressInput.GroupName
         - RevokeSecurityGroupEgressInput.IpPermissions
         - RevokeSecurityGroupEgressInput.IpProtocol
         - RevokeSecurityGroupEgressInput.SecurityGroupRuleIds

@@ -25,6 +25,7 @@ import (
 
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 )
@@ -34,6 +35,10 @@ import (
 func GenerateDescribeSecurityGroupRulesInput(cr *svcapitypes.SecurityGroupEgressRule) (*svcsdk.DescribeSecurityGroupRulesInput, error) {
 	res := &svcsdk.DescribeSecurityGroupRulesInput{}
 
+	// The external name identifies the resource; status may be empty or stale.
+	if name := meta.GetExternalName(cr); name != "" {
+		res.SecurityGroupRuleIds = []string{name}
+	}
 	return res, nil
 }
 
@@ -42,7 +47,8 @@ func GenerateSecurityGroupEgressRule(resp *svcsdk.DescribeSecurityGroupRulesOutp
 	cr := &svcapitypes.SecurityGroupEgressRule{}
 
 	found := false
-	for _, elem := range resp.SecurityGroupRules {
+	if len(resp.SecurityGroupRules) > 0 {
+		elem := resp.SecurityGroupRules[0]
 		if elem.FromPort != nil {
 			fromPortCopy := int64(*elem.FromPort)
 			cr.Spec.ForProvider.FromPort = &fromPortCopy
@@ -61,7 +67,6 @@ func GenerateSecurityGroupEgressRule(resp *svcsdk.DescribeSecurityGroupRulesOutp
 			cr.Spec.ForProvider.ToPort = nil
 		}
 		found = true
-		break
 	}
 	if !found {
 		return cr

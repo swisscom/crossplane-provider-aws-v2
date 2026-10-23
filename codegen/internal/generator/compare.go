@@ -98,28 +98,11 @@ func UpdatableFields(r *ackmodel.CRD) ([]UpdatableField, error) {
 
 // readOutputShape returns the shape Generate<Kind> reads fields from: the
 // (unwrapped) output of a ReadOne operation, or the list element of a
-// ReadMany operation, found like ACK's SetResource does.
+// ReadMany operation.
 func readOutputShape(r *ackmodel.CRD, op *awssdkmodel.Operation, readMany bool) (*awssdkmodel.Shape, error) {
 	if !readMany {
 		return r.GetOutputShape(op)
 	}
-	if r.GetOutputWrapperFieldPath(op) != nil {
-		s, err := r.GetOutputShape(op)
-		if err != nil {
-			return nil, err
-		}
-		if s.Type == "list" {
-			return s.MemberRef.Shape, nil
-		}
-		return s, nil
-	}
-	if op.OutputRef.Shape == nil {
-		return nil, nil
-	}
-	for _, m := range op.OutputRef.Shape.MemberNames() {
-		if ref := op.OutputRef.Shape.MemberRefs[m]; ref.Shape.Type == "list" {
-			return ref.Shape.MemberRef.Shape, nil
-		}
-	}
-	return nil, nil
+	_, elem, err := readManyList(op, r.GetOutputWrapperFieldPath(op))
+	return elem, err
 }

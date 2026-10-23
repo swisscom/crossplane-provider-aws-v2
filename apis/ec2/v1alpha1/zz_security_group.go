@@ -28,6 +28,7 @@ import (
 type SecurityGroupParameters struct {
 	// Region is which region the SecurityGroup will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 	// A description for the security group.
 	//

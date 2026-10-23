@@ -34,6 +34,7 @@ import (
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/clients/ec2/fake"
+	svcutils "github.com/swisscom/crossplane-provider-aws-v2/internal/controller/ec2/utils"
 )
 
 const (
@@ -81,6 +82,20 @@ func observedRule(f ...func(*svcsdktypes.SecurityGroupRule)) func(context.Contex
 	}
 }
 
+// returnedRules makes AWS answer with copies of the observed rule, one per ID.
+func returnedRules(observed func(context.Context, *svcsdk.DescribeSecurityGroupRulesInput) (*svcsdk.DescribeSecurityGroupRulesOutput, error), ids ...string) func(context.Context, *svcsdk.DescribeSecurityGroupRulesInput) (*svcsdk.DescribeSecurityGroupRulesOutput, error) {
+	return func(ctx context.Context, _ *svcsdk.DescribeSecurityGroupRulesInput) (*svcsdk.DescribeSecurityGroupRulesOutput, error) {
+		out, _ := observed(ctx, &svcsdk.DescribeSecurityGroupRulesInput{SecurityGroupRuleIds: []string{testRule}})
+		rules := make([]svcsdktypes.SecurityGroupRule, 0, len(ids))
+		for _, id := range ids {
+			r := out.SecurityGroupRules[0]
+			r.SecurityGroupRuleId = aws.String(id)
+			rules = append(rules, r)
+		}
+		return &svcsdk.DescribeSecurityGroupRulesOutput{SecurityGroupRules: rules}, nil
+	}
+}
+
 func newTestExternal(m *fake.MockEC2Client) *external {
 	return newExternal(nil, m, []option{setupExternal})
 }
@@ -121,6 +136,9 @@ func TestObserve(t *testing.T) {
 			}),
 			describe: observedRule(), isErr: true,
 		},
+		// Only the rule whose ID is the external name counts.
+		"OtherRuleReturned": {cr: rule(withExternalName), describe: returnedRules(observedRule(), "sgr-other")},
+		"TwoRulesReturned":  {cr: rule(withExternalName), describe: returnedRules(observedRule(), testRule, testRule), isErr: true},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -205,6 +223,21 @@ func TestCreate(t *testing.T) {
 				t.Errorf("AuthorizeSecurityGroupIngressInput -want +got:\n%s", diff)
 			}
 		})
+	}
+}
+
+// A nil response carries no rule ID, so Create must fail rather than panic.
+func TestCreateNilResponse(t *testing.T) {
+	m := &fake.MockEC2Client{MockAuthorizeSecurityGroupIngress: func(context.Context, *svcsdk.AuthorizeSecurityGroupIngressInput) (*svcsdk.AuthorizeSecurityGroupIngressOutput, error) {
+		return nil, nil
+	}}
+	cr := rule()
+	_, err := newTestExternal(m).Create(context.Background(), cr)
+	if err == nil || !strings.Contains(err.Error(), errNoRuleCreated) {
+		t.Fatalf("Create() error = %v, want %q", err, errNoRuleCreated)
+	}
+	if got := meta.GetExternalName(cr); got != "" {
+		t.Errorf("external name = %q, want none", got)
 	}
 }
 
@@ -399,7 +432,10 @@ func TestAdoptExisting(t *testing.T) {
 			want:  want{err: "UnauthorizedOperation", lookups: 1},
 		},
 		"ExternalNameWins": {
-			cr:    rule(withAdopt, withExternalName),
+			// Recorded already, so a late-init here would mean an adoption.
+			cr: rule(withAdopt, withExternalName, func(cr *svcapitypes.SecurityGroupIngressRule) {
+				meta.AddAnnotations(cr, map[string]string{svcutils.AnnotationManagedTagKeys: record()})
+			}),
 			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
 			want:  want{exists: true, externalName: testRule, byID: []string{testRule}},
 		},

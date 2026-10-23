@@ -203,8 +203,10 @@ func TestDiffTags(t *testing.T) {
 		{Key: aws.String("change"), Value: aws.String("old")},
 		{Key: aws.String("drop"), Value: aws.String("v")},
 		{Key: aws.String("aws:reserved"), Value: aws.String("v")},
+		{Key: aws.String("foreign"), Value: aws.String("v")},
 	}
-	add, remove := DiffTags(map[string]string{"keep": "v", "change": "new", "new": "v"}, current)
+	managed := []string{"aws:reserved", "change", "drop", "gone", "keep"}
+	add, remove := DiffTags(map[string]string{"keep": "v", "change": "new", "new": "v"}, current, managed)
 	wantAdd := []svcsdktypes.Tag{{Key: aws.String("change"), Value: aws.String("new")}, {Key: aws.String("new"), Value: aws.String("v")}}
 	wantRemove := []svcsdktypes.Tag{{Key: aws.String("drop")}}
 	opt := cmpopts.IgnoreUnexported(svcsdktypes.Tag{})

@@ -1,6 +1,8 @@
 # DBInstances created from backups: from a snapshot, to a point in time, and
-# from a backup in S3 (MySQL). After the restore, the provider sets the master
-# password from masterUserPasswordSecretRef (or a generated one).
+# from a backup in S3 (MySQL). A snapshot or point-in-time restore keeps the
+# source's master password at first; once the instance is available, the
+# provider sets the password from masterUserPasswordSecretRef (or a generated
+# one). The connection Secret has no password key until then.
 apiVersion: v1
 kind: Secret
 metadata:

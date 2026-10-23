@@ -43,11 +43,13 @@ import (
 )
 
 const (
-	errCreateConfig = "cannot create AWS config"
-	errCreate       = "cannot create DBSubnetGroup in AWS"
-	errUpdate       = "cannot update DBSubnetGroup in AWS"
-	errDescribe     = "failed to describe DBSubnetGroup"
-	errDelete       = "failed to delete DBSubnetGroup"
+	errCreateConfig  = "cannot create AWS config"
+	errCreate        = "cannot create DBSubnetGroup in AWS"
+	errUpdate        = "cannot update DBSubnetGroup in AWS"
+	errDescribe      = "failed to describe DBSubnetGroup"
+	errDelete        = "failed to delete DBSubnetGroup"
+	errEmptyDescribe = "AWS returned an empty DBSubnetGroup description"
+	errMultipleFound = "found %d DBSubnetGroup resources with external name %q, expected one"
 
 	// Used by hand-written code imported from provider-aws.
 	errUnexpectedObject = "managed resource is not an DBSubnetGroup resource"
@@ -88,6 +90,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
+		//lint:ignore SA1019 crossplane-runtime's event recorder still needs the old events API
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	}
 	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
@@ -171,15 +174,26 @@ func (e *external) Observe(ctx context.Context, cr *svcapitypes.DBSubnetGroup) (
 	if err != nil {
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDescribe)
 	}
+	if resp == nil {
+		// Not "doesn't exist": that would create a duplicate.
+		return managed.ExternalObservation{}, errors.New(errEmptyDescribe)
+	}
 	resp = e.filterList(cr, resp)
-	if len(resp.DBSubnetGroups) == 0 {
+	switch n := len(resp.DBSubnetGroups); {
+	case n == 0:
 		return managed.ExternalObservation{ResourceExists: false}, nil
+	case n > 1:
+		// Never pick one of several: it may belong to someone else.
+		return managed.ExternalObservation{}, errors.Errorf(errMultipleFound, n, meta.GetExternalName(cr))
 	}
 	currentSpec := cr.Spec.ForProvider.DeepCopy()
 	if err := e.lateInitialize(&cr.Spec.ForProvider, resp); err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "late-init failed")
 	}
-	GenerateDBSubnetGroup(resp).Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	observed := GenerateDBSubnetGroup(resp).Status.AtProvider
+	// Hooks own the custom fields; postObserve refreshes them.
+	observed.CustomDBSubnetGroupObservation = cr.Status.AtProvider.CustomDBSubnetGroupObservation
+	observed.DeepCopyInto(&cr.Status.AtProvider)
 	upToDate := true
 	diff := ""
 	if !meta.WasDeleted(cr) { // There is no need to run isUpToDate if the resource is deleted
@@ -209,61 +223,67 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBSubnetGroup) (m
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// A nil response leaves status to the next observe.
+	if resp != nil && resp.DBSubnetGroup != nil {
+		// Only status: spec is the user's desired state and is never rewritten.
+		ko := cr.DeepCopy()
 
-	if resp.DBSubnetGroup.DBSubnetGroupArn != nil {
-		cr.Status.AtProvider.DBSubnetGroupARN = resp.DBSubnetGroup.DBSubnetGroupArn
-	} else {
-		cr.Status.AtProvider.DBSubnetGroupARN = nil
-	}
-	if resp.DBSubnetGroup.DBSubnetGroupDescription != nil {
-		cr.Spec.ForProvider.DBSubnetGroupDescription = resp.DBSubnetGroup.DBSubnetGroupDescription
-	} else {
-		cr.Spec.ForProvider.DBSubnetGroupDescription = nil
-	}
-	if resp.DBSubnetGroup.DBSubnetGroupName != nil {
-		cr.Status.AtProvider.DBSubnetGroupName = resp.DBSubnetGroup.DBSubnetGroupName
-	} else {
-		cr.Status.AtProvider.DBSubnetGroupName = nil
-	}
-	if resp.DBSubnetGroup.SubnetGroupStatus != nil {
-		cr.Status.AtProvider.SubnetGroupStatus = resp.DBSubnetGroup.SubnetGroupStatus
-	} else {
-		cr.Status.AtProvider.SubnetGroupStatus = nil
-	}
-	if resp.DBSubnetGroup.Subnets != nil {
-		f4 := []*svcapitypes.Subnet{}
-		for _, f4iter := range resp.DBSubnetGroup.Subnets {
-			f4elem := &svcapitypes.Subnet{}
-			if f4iter.SubnetAvailabilityZone != nil {
-				f4elemf0 := &svcapitypes.AvailabilityZone{}
-				if f4iter.SubnetAvailabilityZone.Name != nil {
-					f4elemf0.Name = f4iter.SubnetAvailabilityZone.Name
-				}
-				f4elem.SubnetAvailabilityZone = f4elemf0
-			}
-			if f4iter.SubnetIdentifier != nil {
-				f4elem.SubnetIdentifier = f4iter.SubnetIdentifier
-			}
-			if f4iter.SubnetStatus != nil {
-				f4elem.SubnetStatus = f4iter.SubnetStatus
-			}
-			f4 = append(f4, f4elem)
+		if resp.DBSubnetGroup.DBSubnetGroupArn != nil {
+			ko.Status.AtProvider.DBSubnetGroupARN = resp.DBSubnetGroup.DBSubnetGroupArn
+		} else {
+			ko.Status.AtProvider.DBSubnetGroupARN = nil
 		}
-		cr.Status.AtProvider.Subnets = f4
-	} else {
-		cr.Status.AtProvider.Subnets = nil
-	}
-	if resp.DBSubnetGroup.SupportedNetworkTypes != nil {
-		cr.Status.AtProvider.SupportedNetworkTypes = aws.StringSlice(resp.DBSubnetGroup.SupportedNetworkTypes)
-	} else {
-		cr.Status.AtProvider.SupportedNetworkTypes = nil
-	}
-	if resp.DBSubnetGroup.VpcId != nil {
-		cr.Status.AtProvider.VPCID = resp.DBSubnetGroup.VpcId
-	} else {
-		cr.Status.AtProvider.VPCID = nil
-	}
+		if resp.DBSubnetGroup.DBSubnetGroupDescription != nil {
+			ko.Spec.ForProvider.DBSubnetGroupDescription = resp.DBSubnetGroup.DBSubnetGroupDescription
+		} else {
+			ko.Spec.ForProvider.DBSubnetGroupDescription = nil
+		}
+		if resp.DBSubnetGroup.DBSubnetGroupName != nil {
+			ko.Status.AtProvider.DBSubnetGroupName = resp.DBSubnetGroup.DBSubnetGroupName
+		} else {
+			ko.Status.AtProvider.DBSubnetGroupName = nil
+		}
+		if resp.DBSubnetGroup.SubnetGroupStatus != nil {
+			ko.Status.AtProvider.SubnetGroupStatus = resp.DBSubnetGroup.SubnetGroupStatus
+		} else {
+			ko.Status.AtProvider.SubnetGroupStatus = nil
+		}
+		if resp.DBSubnetGroup.Subnets != nil {
+			f4 := []*svcapitypes.Subnet{}
+			for _, f4iter := range resp.DBSubnetGroup.Subnets {
+				f4elem := &svcapitypes.Subnet{}
+				if f4iter.SubnetAvailabilityZone != nil {
+					f4elemf0 := &svcapitypes.AvailabilityZone{}
+					if f4iter.SubnetAvailabilityZone.Name != nil {
+						f4elemf0.Name = f4iter.SubnetAvailabilityZone.Name
+					}
+					f4elem.SubnetAvailabilityZone = f4elemf0
+				}
+				if f4iter.SubnetIdentifier != nil {
+					f4elem.SubnetIdentifier = f4iter.SubnetIdentifier
+				}
+				if f4iter.SubnetStatus != nil {
+					f4elem.SubnetStatus = f4iter.SubnetStatus
+				}
+				f4 = append(f4, f4elem)
+			}
+			ko.Status.AtProvider.Subnets = f4
+		} else {
+			ko.Status.AtProvider.Subnets = nil
+		}
+		if resp.DBSubnetGroup.SupportedNetworkTypes != nil {
+			ko.Status.AtProvider.SupportedNetworkTypes = aws.StringSlice(resp.DBSubnetGroup.SupportedNetworkTypes)
+		} else {
+			ko.Status.AtProvider.SupportedNetworkTypes = nil
+		}
+		if resp.DBSubnetGroup.VpcId != nil {
+			ko.Status.AtProvider.VPCID = resp.DBSubnetGroup.VpcId
+		} else {
+			ko.Status.AtProvider.VPCID = nil
+		}
 
+		ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	}
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 
@@ -311,7 +331,7 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		postObserve:    nopPostObserve,
 		lateInitialize: nopLateInitialize,
 		isUpToDate:     isUpToDateUpdatable,
-		filterList:     nopFilterList,
+		filterList:     filterByExternalName,
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
 		preDelete:      nopPreDelete,
@@ -361,7 +381,20 @@ func isUpToDateUpdatable(_ context.Context, cr *svcapitypes.DBSubnetGroup, resp 
 	return len(diff) == 0, compare.Message(diff), nil
 }
 
-func nopFilterList(_ *svcapitypes.DBSubnetGroup, list *svcsdk.DescribeDBSubnetGroupsOutput) *svcsdk.DescribeDBSubnetGroupsOutput {
+// filterByExternalName keeps only the resources whose identifier is the
+// external name, because a describe call may return other resources too.
+func filterByExternalName(cr *svcapitypes.DBSubnetGroup, list *svcsdk.DescribeDBSubnetGroupsOutput) *svcsdk.DescribeDBSubnetGroupsOutput {
+	if list == nil {
+		return list
+	}
+	name := meta.GetExternalName(cr)
+	kept := list.DBSubnetGroups[:0]
+	for _, elem := range list.DBSubnetGroups {
+		if aws.ToString(elem.DBSubnetGroupName) == name {
+			kept = append(kept, elem)
+		}
+	}
+	list.DBSubnetGroups = kept
 	return list
 }
 

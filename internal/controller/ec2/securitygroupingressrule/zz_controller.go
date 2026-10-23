@@ -21,6 +21,7 @@ package securitygroupingressrule
 import (
 	"context"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
@@ -42,11 +43,13 @@ import (
 )
 
 const (
-	errCreateConfig = "cannot create AWS config"
-	errCreate       = "cannot create SecurityGroupIngressRule in AWS"
-	errUpdate       = "cannot update SecurityGroupIngressRule in AWS"
-	errDescribe     = "failed to describe SecurityGroupIngressRule"
-	errDelete       = "failed to delete SecurityGroupIngressRule"
+	errCreateConfig  = "cannot create AWS config"
+	errCreate        = "cannot create SecurityGroupIngressRule in AWS"
+	errUpdate        = "cannot update SecurityGroupIngressRule in AWS"
+	errDescribe      = "failed to describe SecurityGroupIngressRule"
+	errDelete        = "failed to delete SecurityGroupIngressRule"
+	errEmptyDescribe = "AWS returned an empty SecurityGroupIngressRule description"
+	errMultipleFound = "found %d SecurityGroupIngressRule resources with external name %q, expected one"
 
 	// Used by hand-written code imported from provider-aws.
 	errUnexpectedObject = "managed resource is not an SecurityGroupIngressRule resource"
@@ -87,6 +90,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
+		//lint:ignore SA1019 crossplane-runtime's event recorder still needs the old events API
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	}
 	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
@@ -169,15 +173,26 @@ func (e *external) Observe(ctx context.Context, cr *svcapitypes.SecurityGroupIng
 	if err != nil {
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDescribe)
 	}
+	if resp == nil {
+		// Not "doesn't exist": that would create a duplicate.
+		return managed.ExternalObservation{}, errors.New(errEmptyDescribe)
+	}
 	resp = e.filterList(cr, resp)
-	if len(resp.SecurityGroupRules) == 0 {
+	switch n := len(resp.SecurityGroupRules); {
+	case n == 0:
 		return managed.ExternalObservation{ResourceExists: false}, nil
+	case n > 1:
+		// Never pick one of several: it may belong to someone else.
+		return managed.ExternalObservation{}, errors.Errorf(errMultipleFound, n, meta.GetExternalName(cr))
 	}
 	currentSpec := cr.Spec.ForProvider.DeepCopy()
 	if err := e.lateInitialize(&cr.Spec.ForProvider, resp); err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "late-init failed")
 	}
-	GenerateSecurityGroupIngressRule(resp).Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	observed := GenerateSecurityGroupIngressRule(resp).Status.AtProvider
+	// Hooks own the custom fields; postObserve refreshes them.
+	observed.CustomSecurityGroupIngressRuleObservation = cr.Status.AtProvider.CustomSecurityGroupIngressRuleObservation
+	observed.DeepCopyInto(&cr.Status.AtProvider)
 	upToDate := true
 	diff := ""
 	if !meta.WasDeleted(cr) { // There is no need to run isUpToDate if the resource is deleted
@@ -207,7 +222,6 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.SecurityGroupIngr
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
-
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 
@@ -255,7 +269,7 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		postObserve:    nopPostObserve,
 		lateInitialize: nopLateInitialize,
 		isUpToDate:     isUpToDateUpdatable,
-		filterList:     nopFilterList,
+		filterList:     filterByExternalName,
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
 		preDelete:      nopPreDelete,
@@ -305,7 +319,20 @@ func isUpToDateUpdatable(_ context.Context, cr *svcapitypes.SecurityGroupIngress
 	return len(diff) == 0, compare.Message(diff), nil
 }
 
-func nopFilterList(_ *svcapitypes.SecurityGroupIngressRule, list *svcsdk.DescribeSecurityGroupRulesOutput) *svcsdk.DescribeSecurityGroupRulesOutput {
+// filterByExternalName keeps only the resources whose identifier is the
+// external name, because a describe call may return other resources too.
+func filterByExternalName(cr *svcapitypes.SecurityGroupIngressRule, list *svcsdk.DescribeSecurityGroupRulesOutput) *svcsdk.DescribeSecurityGroupRulesOutput {
+	if list == nil {
+		return list
+	}
+	name := meta.GetExternalName(cr)
+	kept := list.SecurityGroupRules[:0]
+	for _, elem := range list.SecurityGroupRules {
+		if aws.ToString(elem.SecurityGroupRuleId) == name {
+			kept = append(kept, elem)
+		}
+	}
+	list.SecurityGroupRules = kept
 	return list
 }
 

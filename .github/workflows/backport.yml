@@ -6,9 +6,10 @@ on:
   # invoke any scripts, etc from within the repo. I believe the fact that we'll
   # be able to review PRs before this runs makes this fairly safe.
   # https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] checks out the base branch and runs no repo code
     types: [closed]
-  # See also commands.yml for the /backport triggered variant of this workflow.
+
+permissions: {}
 
 jobs:
   # NOTE(negz): I tested many backport GitHub actions before landing on this
@@ -19,10 +20,14 @@ jobs:
   # merged to trigger a backport.
   open-pr:
     runs-on: ubuntu-22.04
-    if: github.event.pull_request.merged
+    if: github.event.pull_request.merged && contains(join(github.event.pull_request.labels.*.name, ' '), 'backport ')
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
+      # The action pushes the backport branch with the checkout's credentials.
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0 # zizmor: ignore[artipacked]
 
       - name: Open Backport PR
-        uses: korthout/backport-action@v1
+        uses: korthout/backport-action@8560fb503c275d433c56f05a2f64850093baa9f7 # v4.7.0

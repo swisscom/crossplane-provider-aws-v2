@@ -17,6 +17,7 @@ import (
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/{{ .ServicePackageName }}"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/{{ .ServicePackageName }}/types"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "{{ .ModulePath }}/apis/{{ .ServicePackageName }}/{{ .APIVersion }}"
@@ -42,6 +43,11 @@ func Generate{{ .CRD.Ops.Create.InputRef.Shape.ShapeName }}(cr *svcapitypes.{{ .
 func Generate{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}(cr *svcapitypes.{{ .CRD.Names.Camel }}) (*svcsdk.{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}, error) {
 	res := &svcsdk.{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}{}
 {{ GoCodeSetUpdateInput .CRD "cr" "res" 1 }}
+{{- with .Plan.Identifier }}{{ if .UpdateMember }}
+	if name := meta.GetExternalName(cr); name != "" {
+		res.{{ .UpdateMember }} = aws.String(name)
+	}
+{{- end }}{{ end }}
 	return res, nil
 }
 {{ end }}
@@ -66,6 +72,11 @@ func DiffUpdatableParameters(desired, observed *svcapitypes.{{ .CRD.Names.Camel 
 func Generate{{ .CRD.Ops.Delete.InputRef.Shape.ShapeName }}(cr *svcapitypes.{{ .CRD.Names.Camel }}) (*svcsdk.{{ .CRD.Ops.Delete.InputRef.Shape.ShapeName }}, error) {
 	res := &svcsdk.{{ .CRD.Ops.Delete.InputRef.Shape.ShapeName }}{}
 {{ GoCodeSetDeleteInput .CRD "cr" "res" 1 }}
+{{- with .Plan.Identifier }}{{ if .DeleteMember }}
+	if name := meta.GetExternalName(cr); name != "" {
+		res.{{ .DeleteMember }} = aws.String(name)
+	}
+{{- end }}{{ end }}
 	return res, nil
 }
 {{ end }}

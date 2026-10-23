@@ -125,11 +125,16 @@ behavior change don't need a row.
 
 ## Definition of done
 
-- [ ] `make services` and `make generate` produce no diff.
+- [ ] `make services.all` and `make generate` produce no diff (CI runs both
+      before `check-diff`).
+- [ ] `make vulncheck` passes; a Go bump changes the `go` line of both
+      `go.mod` files.
+- [ ] `make workflows.lint` passes when `.github/workflows` changed (new
+      actions pinned to a commit SHA with a `# vX.Y.Z` comment).
 - [ ] `go build ./... && go vet ./...`, `make test` and `make lint` pass
       (both cover the `codegen/` module; `golangci-lint fmt ./...` fixes
       import grouping).
-- [ ] No `*_importtodo.go` files, no `TODO(import)`.
+- [ ] `make check-import-todo` passes (no `*_importtodo.go` files, no `TODO(import)`).
 - [ ] Tests cover the new behavior (including the "not called" case for
       AWS operations where it matters).
 - [ ] Examples apply against the CRDs (`--dry-run=server --validate=strict`).

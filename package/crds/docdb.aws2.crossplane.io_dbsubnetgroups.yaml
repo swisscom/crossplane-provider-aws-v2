@@ -67,6 +67,9 @@ spec:
                     description: Region is which region the DBSubnetGroup will be
                       created.
                     type: string
+                    x-kubernetes-validations:
+                    - message: region is immutable
+                      rule: self == oldSelf
                   subnetIDs:
                     items:
                       type: string

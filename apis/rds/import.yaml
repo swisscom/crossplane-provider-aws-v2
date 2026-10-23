@@ -6,3 +6,16 @@ kinds:
     - DBInstance
 ignoreFieldPaths:
     - ModifyAdditionalStorageVolume.SetForDelete
+    - DescribeDBInstancesInput.DBInstanceIdentifier
+    - CreateDBInstanceInput.TdeCredentialPassword
+    - ModifyDBInstanceInput.TdeCredentialPassword
+    - PendingModifiedValues.MasterUserPassword
+generatorConfigSHA256: 5711e59fd2fe462ab4b26b2c10b9a0834a7692f52904b6905e693e2fd9f593e7
+lastImport:
+    repository: ssh://git@github.com/swisscom/provider-aws.git
+    commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
+revisions:
+    DBInstance:
+        repository: ssh://git@github.com/swisscom/provider-aws.git
+        commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
+        backfilled: true

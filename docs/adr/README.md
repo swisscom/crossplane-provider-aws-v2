@@ -16,6 +16,13 @@ deliberate.
 | [0007](0007-generated-drift-detection.md) | Generated drift detection of updatable fields | Accepted |
 | [0008](0008-kind-readme-and-changelog.md) | Per-kind README and a root changelog for history | Accepted |
 | [0009](0009-ec2-security-group-model.md) | Security groups and their rules are separate kinds | Accepted |
+| [0010](0010-compare-semantics-and-pending-overlay.md) | Compare semantics and the pending-change overlay | Accepted |
+| [0011](0011-fail-closed-generator-defaults.md) | Fail-closed generator defaults | Accepted |
+| [0012](0012-importer-fails-closed.md) | The importer fails closed | Accepted |
+| [0013](0013-rds-dbinstance-password-lifecycle.md) | rds/DBInstance master password lifecycle | Accepted |
+| [0014](0014-docdb-master-password-applied-state.md) | Record the applied DocumentDB master password as a digest | Accepted |
+| [0015](0015-docdb-tag-ownership.md) | Remove only the tags the provider set (DocumentDB, RDS, EC2) | Accepted |
+| [0016](0016-ci-supply-chain-baseline.md) | CI and supply-chain baseline | Accepted |
 
 ## Writing an ADR
 

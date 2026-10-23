@@ -1,6 +1,7 @@
 # DocumentDB clusters restored from a cluster snapshot and to a point in time
 # of another cluster. Fields that the backup defines (e.g. masterUsername) are
-# taken from it.
+# taken from it; the connection secret gets the username and port of the
+# restored cluster.
 apiVersion: docdb.aws2.crossplane.io/v1alpha1
 kind: DBCluster
 metadata:
@@ -70,3 +71,32 @@ spec:
     tags:
       - key: restored-from
         value: point-in-time
+---
+# Restore with a new master password: the provider generates it into the
+# Secret and sets it with the first update once the cluster is available.
+# This works without writeConnectionSecretToRef too.
+apiVersion: docdb.aws2.crossplane.io/v1alpha1
+kind: DBCluster
+metadata:
+  namespace: default
+  name: example-docdb-cluster-new-password
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    engine: docdb
+    restoreFrom:
+      source: Snapshot
+      snapshot:
+        snapshotIdentifier: REPLACE_ME-cluster-snapshot
+    masterUserPasswordSecretRef:
+      name: example-docdb-cluster-new-password
+      key: password
+    autogeneratePassword: true
+    dbSubnetGroupName: REPLACE_ME-docdb-subnet-group
+    vpcSecurityGroupIDs:
+      - sg-0123456789abcdef0
+    deletionProtection: false
+    skipFinalSnapshot: true

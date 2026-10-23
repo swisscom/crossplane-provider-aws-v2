@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
@@ -36,16 +37,21 @@ const (
 	PasswordCacheKey    = "dbMasterUserPassword"
 	RestoreFlagCacheKay = "dbRestoreState"
 
+	// RestoreStateRestored marks the cached password as not applied yet: after
+	// a snapshot restore, or while a modify that sends it is unconfirmed.
 	RestoreStateRestored restoreSate = "RestoreStateRestored"
 	RestoreStateNormal   restoreSate = "RestoreStateNormal"
 
-	ErrNoRetrievePasswordOrGenerate                          = "cannot retrieve password form masterUserPasswordSecretRef or generate a password"
-	ErrNoMasterUserPasswordSecretRefNorAutogenerateNoRestore = "neither a masterUserPasswordSecretRef is given, nor password autogeneration was enabled, not a restore is performed"
-	ErrCachePassword                                         = "cannot cache password"
-	ErrNoPasswordUpToDate                                    = "cannot determine password up to date status"
-	ErrGetCachedPassword                                     = "cannot get cached password"
-	ErrRetrievePasswordForUpdate                             = "cannot retrieve password for update"
-	ErrDescribe                                              = "cannot describe dbinstance"
+	ErrNoRetrievePasswordOrGenerate = "cannot retrieve password form masterUserPasswordSecretRef or generate a password"
+	ErrNoMasterPasswordSource       = "no master password: set masterUserPasswordSecretRef, autogeneratePassword or manageMasterUserPassword"
+	ErrManagedPasswordConflict      = "manageMasterUserPassword cannot be combined with masterUserPasswordSecretRef or autogeneratePassword"
+	ErrEmptyMasterPassword          = "masterUserPasswordSecretRef points to a missing secret or an empty value"
+	ErrManagedOffNeedsPassword      = "cannot turn off manageMasterUserPassword: set masterUserPasswordSecretRef or autogeneratePassword for the new master password"
+	ErrCachePassword                = "cannot cache password"
+	ErrNoPasswordUpToDate           = "cannot determine password up to date status"
+	ErrGetCachedPassword            = "cannot get cached password"
+	ErrRetrievePasswordForUpdate    = "cannot retrieve password for update"
+	ErrDescribe                     = "cannot describe dbinstance"
 )
 
 const (
@@ -102,19 +108,55 @@ func GetCachedPassword(ctx context.Context, kube client.Client, mg resource.Mana
 	return getSecretValue(ctx, kube, cacheSecretKey(mg), PasswordCacheKey)
 }
 
-// Cache caches the given key/value map to the corresponding cache secret
+// AppliedPassword returns the master password AWS is known to have: the
+// cached one, or "" while a restore has not applied it yet.
+func AppliedPassword(ctx context.Context, kube client.Client, mg resource.Managed) (string, error) {
+	restoreInfo, err := getCachedRestoreInfo(ctx, kube, mg)
+	if err != nil {
+		return "", errors.Wrap(err, errGetCachedRestoreInfo)
+	}
+	if restoreInfo == RestoreStateRestored {
+		return "", nil
+	}
+	pw, err := GetCachedPassword(ctx, kube, mg)
+	return pw, errors.Wrap(err, errGetCachedPassword)
+}
+
+// Cache stores kv in the cache Secret of mg. An empty password never replaces
+// a stored one. The Secret is owned by mg, so it is garbage collected with it.
 func Cache(ctx context.Context, kube client.Client, mg resource.Managed, kv map[string]string) (*corev1.Secret, error) {
 	key := cacheSecretKey(mg)
 	data := make(map[string][]byte, len(kv))
 	for k, v := range kv {
+		// The stored password may be the only copy of what AWS has.
+		if k == PasswordCacheKey && v == "" {
+			continue
+		}
 		data[k] = []byte(v)
 	}
 	sc := &corev1.Secret{
 		Data:       data,
-		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace, OwnerReferences: ownerReferences(mg)},
 	}
 	err := resource.NewAPIPatchingApplicator(kube).Apply(ctx, sc)
 	return sc, err
+}
+
+// ownerReferences makes mg the controller of its cache Secret. It doesn't
+// block owner deletion, so the provider needs no permission on finalizers.
+func ownerReferences(mg resource.Managed) []metav1.OwnerReference {
+	gvk := mg.GetObjectKind().GroupVersionKind()
+	if gvk.Kind == "" || mg.GetUID() == "" {
+		return nil
+	}
+	return []metav1.OwnerReference{{
+		APIVersion:         gvk.GroupVersion().String(),
+		Kind:               gvk.Kind,
+		Name:               mg.GetName(),
+		UID:                mg.GetUID(),
+		Controller:         ptr.To(true),
+		BlockOwnerDeletion: ptr.To(false),
+	}}
 }
 
 func masterPassword(ctx context.Context, kube client.Client, cr svcapitypes.RDSClusterOrInstance) (string, error) {
@@ -126,29 +168,10 @@ func masterPassword(ctx context.Context, kube client.Client, cr svcapitypes.RDSC
 	return pw, errors.Wrap(err, errGetMasterPassword)
 }
 
-// GetDesiredPassword calculates the desired password from cache/masterPasswordSecretRef
-func GetDesiredPassword(ctx context.Context, kube client.Client, cr svcapitypes.RDSClusterOrInstance) (string, error) {
-	cachedPassword, err := GetCachedPassword(ctx, kube, cr)
-	if err != nil {
-		return "", errors.Wrap(err, errGetCachedPassword)
-	}
-	desiredPassword, err := masterPassword(ctx, kube, cr)
-	if err != nil {
-		return "", err
-	}
-	if desiredPassword == "" {
-		desiredPassword = cachedPassword
-	}
-	return desiredPassword, nil
-}
-
-// PasswordUpToDate tell whether the password is up-to-date (depends on restore, masterPasswordSecretRef and cached password) and return desiredPassword
+// PasswordUpToDate reports whether AWS has the desired master password. The
+// desired password is the value of masterUserPasswordSecretRef, else the
+// cached one: after a restore the cached password still has to be applied.
 func PasswordUpToDate(ctx context.Context, kube client.Client, cr svcapitypes.RDSClusterOrInstance) (upToDate bool, desiredPassword string, err error) {
-	// (schroeder-paul): We are checking password changes after the database is ready.
-	// - the restore scenario: if the new database has a different password than the old one, the old password will be
-	//   changed to the new one which was set or autogenerated (and cached) from the preCreate step.
-	// - the user wants to change the password by changing the MasterUserPasswordSecretRef secret
-
 	restoreInfo, err := getCachedRestoreInfo(ctx, kube, cr)
 	if err != nil {
 		return false, "", errors.Wrap(err, errGetCachedRestoreInfo)
@@ -157,15 +180,16 @@ func PasswordUpToDate(ctx context.Context, kube client.Client, cr svcapitypes.RD
 	if err != nil {
 		return false, "", errors.Wrap(err, errGetCachedPassword)
 	}
-	if desiredPassword, err = masterPassword(ctx, kube, cr); err != nil {
+	fromSecret, err := masterPassword(ctx, kube, cr)
+	if err != nil {
 		return false, "", err
 	}
 
-	wasRestored := restoreInfo == RestoreStateRestored
-	passwordFromSecret := desiredPassword != ""
-	secretPasswordMatchesCachedPassword := desiredPassword == cachedPassword
-	newPasswordFromSecret := passwordFromSecret && !secretPasswordMatchesCachedPassword
-	upToDate = !newPasswordFromSecret && !wasRestored
-
-	return upToDate, desiredPassword, nil
+	desiredPassword = fromSecret
+	if desiredPassword == "" {
+		desiredPassword = cachedPassword
+	}
+	secretChanged := fromSecret != "" && fromSecret != cachedPassword
+	restorePending := restoreInfo == RestoreStateRestored && desiredPassword != ""
+	return !secretChanged && !restorePending, desiredPassword, nil
 }

@@ -7,16 +7,24 @@ kinds:
     - DBClusterParameterGroup
     - DBInstance
     - DBSubnetGroup
+ignoreFieldPaths:
+    - PendingModifiedValues.MasterUserPassword
+generatorConfigSHA256: f56ae0599b630230a3ebda27d060eea8920245766e4fc1c070c26b9e21fb948c
+lastImport:
+    repository: ssh://git@github.com/swisscom/provider-aws.git
+    commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
 revisions:
     DBCluster:
         repository: ssh://git@github.com/swisscom/provider-aws.git
         commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
+        backfilled: true
     DBClusterParameterGroup:
         repository: ssh://git@github.com/swisscom/provider-aws.git
         commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
     DBInstance:
         repository: ssh://git@github.com/swisscom/provider-aws.git
         commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
+        backfilled: true
     DBSubnetGroup:
         repository: ssh://git@github.com/swisscom/provider-aws.git
         commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980

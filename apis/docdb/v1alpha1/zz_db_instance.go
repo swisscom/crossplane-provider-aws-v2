@@ -28,6 +28,7 @@ import (
 type DBInstanceParameters struct {
 	// Region is which region the DBInstance will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 	// This parameter does not apply to Amazon DocumentDB. Amazon DocumentDB does
 	// not perform minor version upgrades regardless of the value set.

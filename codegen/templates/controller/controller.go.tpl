@@ -42,6 +42,12 @@ const (
 	errUpdate       = "cannot update {{ $kind }} in AWS"
 	errDescribe     = "failed to describe {{ $kind }}"
 	errDelete       = "failed to delete {{ $kind }}"
+{{- if $readOp }}
+	errEmptyDescribe = "AWS returned an empty {{ $kind }} description"
+{{- end }}
+{{- if $readMany }}
+	errMultipleFound = "found %d {{ $kind }} resources with external name %q, expected one"
+{{- end }}
 
 	// Used by hand-written code imported from provider-aws.
 	errUnexpectedObject = "managed resource is not an {{ $kind }} resource"
@@ -82,6 +88,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
+		//lint:ignore SA1019 crossplane-runtime's event recorder still needs the old events API
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	}
 	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
@@ -176,17 +183,28 @@ func (e *external) Observe(ctx context.Context, cr *svcapitypes.{{ $kind }}) (ma
 	if err != nil {
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDescribe)
 	}
+	if {{ AnyNil "resp" .Plan.ReadWrapper }} {
+		// Not "doesn't exist": that would create a duplicate.
+		return managed.ExternalObservation{}, errors.New(errEmptyDescribe)
+	}
 {{- if $readMany }}
 	resp = e.filterList(cr, resp)
-	if len(resp.{{ ListMemberNameInReadManyOutput .CRD }}) == 0 {
+	switch n := len(resp.{{ .Plan.ListMember }}); {
+	case n == 0:
 		return managed.ExternalObservation{ResourceExists: false}, nil
+	case n > 1:
+		// Never pick one of several: it may belong to someone else.
+		return managed.ExternalObservation{}, errors.Errorf(errMultipleFound, n, meta.GetExternalName(cr))
 	}
 {{- end }}
 	currentSpec := cr.Spec.ForProvider.DeepCopy()
 	if err := e.lateInitialize(&cr.Spec.ForProvider, resp); err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "late-init failed")
 	}
-	Generate{{ $kind }}(resp).Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	observed := Generate{{ $kind }}(resp).Status.AtProvider
+	// Hooks own the custom fields; postObserve refreshes them.
+	observed.Custom{{ $kind }}Observation = cr.Status.AtProvider.Custom{{ $kind }}Observation
+	observed.DeepCopyInto(&cr.Status.AtProvider)
 	upToDate := true
 	diff := ""
 	if !meta.WasDeleted(cr) { // There is no need to run isUpToDate if the resource is deleted
@@ -219,7 +237,15 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.{{ $kind }}) (man
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
-{{ GoCodeSetCreateOutput .CRD "resp" "cr" 1 }}
+{{- with GoCodeSetCreateOutput .CRD "resp" "ko" 2 }}
+	// A nil response leaves status to the next observe.
+	if {{ NotNil "resp" $.Plan.CreateWrapper }} {
+		// Only status: spec is the user's desired state and is never rewritten.
+		ko := cr.DeepCopy()
+{{ . }}
+		ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	}
+{{- end }}
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 
@@ -277,14 +303,16 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		lateInitialize: nopLateInitialize,
 {{- if HasUpdatableFields .CRD }}
 		isUpToDate:     isUpToDateUpdatable,
+{{- else if .Plan.IsUpToDateHookRequired }}
+		isUpToDate:     notImplementedIsUpToDate,
 {{- else }}
 		isUpToDate:     alwaysUpToDate,
 {{- end }}
 {{- if $readMany }}
-		filterList: nopFilterList,
+		filterList: filterByExternalName,
 {{- end }}
 {{- else }}
-		observe: nopObserve,
+		observe: notImplementedObserve,
 {{- end }}
 		preCreate:  nopPreCreate,
 		postCreate: nopPostCreate,
@@ -292,7 +320,7 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		preDelete:  nopPreDelete,
 		postDelete: nopPostDelete,
 {{- else }}
-		delete: nopDelete,
+		delete: {{ .Plan.DeleteDefault }},
 {{- end }}
 {{- if .CRD.Ops.Update }}
 		preUpdate:  nopPreUpdate,
@@ -357,19 +385,36 @@ func isUpToDateUpdatable(_ context.Context, cr *svcapitypes.{{ $kind }}, resp *s
 	diff := DiffUpdatableParameters(&cr.Spec.ForProvider, &Generate{{ $kind }}(resp).Spec.ForProvider)
 	return len(diff) == 0, compare.Message(diff), nil
 }
+{{- else if .Plan.IsUpToDateHookRequired }}
+func notImplementedIsUpToDate(context.Context, *svcapitypes.{{ $kind }}, *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }}) (bool, string, error) {
+	return false, "", errors.New("isUpToDate is not implemented for {{ $kind }}: set the isUpToDate hook")
+}
 {{- else }}
 func alwaysUpToDate(context.Context, *svcapitypes.{{ $kind }}, *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }}) (bool, string, error) {
 	return true, "", nil
 }
 {{- end }}
 {{ if $readMany }}
-func nopFilterList(_ *svcapitypes.{{ $kind }}, list *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }}) *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }} {
+// filterByExternalName keeps only the resources whose identifier is the
+// external name, because a describe call may return other resources too.
+func filterByExternalName(cr *svcapitypes.{{ $kind }}, list *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }}) *svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }} {
+	if list == nil {
+		return list
+	}
+	name := meta.GetExternalName(cr)
+	kept := list.{{ .Plan.ListMember }}[:0]
+	for _, elem := range list.{{ .Plan.ListMember }} {
+		if aws.ToString(elem.{{ .Plan.Identifier.ElemMember }}) == name {
+			kept = append(kept, elem)
+		}
+	}
+	list.{{ .Plan.ListMember }} = kept
 	return list
 }
 {{ end }}
 {{- else }}
-func nopObserve(context.Context, *svcapitypes.{{ $kind }}) (managed.ExternalObservation, error) {
-	return managed.ExternalObservation{}, nil
+func notImplementedObserve(context.Context, *svcapitypes.{{ $kind }}) (managed.ExternalObservation, error) {
+	return managed.ExternalObservation{}, errors.New("Observe is not implemented for {{ $kind }}: set the observe hook")
 }
 {{ end }}
 func nopPreCreate(context.Context, *svcapitypes.{{ $kind }}, *svcsdk.{{ .CRD.Ops.Create.InputRef.Shape.ShapeName }}) error {
@@ -388,9 +433,16 @@ func nopPostDelete(_ context.Context, _ *svcapitypes.{{ $kind }}, _ *svcsdk.{{ .
 	return managed.ExternalDelete{}, err
 }
 {{ else }}
-func nopDelete(context.Context, *svcapitypes.{{ $kind }}) (managed.ExternalDelete, error) {
+{{- if eq .Plan.DeleteDefault "orphanDelete" }}
+// orphanDelete leaves the AWS resource in place, as codegen.yaml asks.
+func orphanDelete(context.Context, *svcapitypes.{{ $kind }}) (managed.ExternalDelete, error) {
 	return managed.ExternalDelete{}, nil
 }
+{{- else }}
+func notImplementedDelete(context.Context, *svcapitypes.{{ $kind }}) (managed.ExternalDelete, error) {
+	return managed.ExternalDelete{}, errors.New("Delete is not implemented for {{ $kind }}: set the delete hook")
+}
+{{- end }}
 {{ end }}
 {{- if .CRD.Ops.Update }}
 func nopPreUpdate(context.Context, *svcapitypes.{{ $kind }}, *svcsdk.{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}) error {

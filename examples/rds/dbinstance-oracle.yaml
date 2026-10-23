@@ -47,8 +47,14 @@ spec:
     skipFinalSnapshot: true
 
     # --- Oracle EE with the TDE option in its option group ---
+    # The TDE key store password is read from a Secret in this namespace, e.g.
+    #   kubectl -n default create secret generic example-dbinstance-oracle-tde \
+    #     --from-literal=password=REPLACE_ME
+    # It is sent on create and with every modify; restores don't send it.
     # tdeCredentialARN: arn:aws:rds:eu-central-1:123456789012:tde-credential/REPLACE_ME
-    # tdeCredentialPassword: REPLACE_ME
+    # tdeCredentialPasswordSecretRef:
+    #   name: example-dbinstance-oracle-tde
+    #   key: password
 
     # --- SQL Server (engine: sqlserver-se, licenseModel: license-included) ---
     # timezone: W. Europe Standard Time

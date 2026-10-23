@@ -102,6 +102,9 @@ spec:
                     description: Region is which region the DBClusterParameterGroup
                       will be created.
                     type: string
+                    x-kubernetes-validations:
+                    - message: region is immutable
+                      rule: self == oldSelf
                   tags:
                     description: The tags to be assigned to the cluster parameter
                       group.

@@ -42,8 +42,8 @@ const (
 	testDBClusterParameterGroupARN  = "some-arn"
 	testDescription                 = "some-description"
 	testOtherDescription            = "some-other-description"
-	testFamily                      = "some-family"
-	testOtherFamily                 = "some-other-family"
+	testFamily                      = "docdb5.0"
+	testOtherFamily                 = "docdb4.0"
 	testParameterName               = "some-parameter-name"
 	testParameterValue              = "some-parameter-value"
 	testOtherParameterName          = "some-other-parameter-name"
@@ -153,6 +153,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClusterParameterGroupsOutput{
 							DBClusterParameterGroups: []docdbtypes.DBClusterParameterGroup{
 								{
+									DBParameterGroupFamily:      pointer.ToOrNilIfZeroValue(testFamily),
 									DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
 								},
 							},
@@ -168,11 +169,13 @@ func TestObserve(t *testing.T) {
 					},
 				},
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withExternalName(testDBClusterParameterGroupName),
 				),
 			},
 			want: want{
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withDBClusterParameterGroupName(testDBClusterParameterGroupName),
 					withExternalName(testDBClusterParameterGroupName),
 					withParameters(),
@@ -221,6 +224,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClusterParameterGroupsOutput{
 							DBClusterParameterGroups: []docdbtypes.DBClusterParameterGroup{
 								{
+									DBParameterGroupFamily:      pointer.ToOrNilIfZeroValue(testFamily),
 									DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
 								},
 							},
@@ -241,6 +245,7 @@ func TestObserve(t *testing.T) {
 					},
 				},
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withExternalName(testDBClusterParameterGroupName),
 					withParameters(
 						&svcapitypes.CustomParameter{
@@ -252,6 +257,7 @@ func TestObserve(t *testing.T) {
 			},
 			want: want{
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withDBClusterParameterGroupName(testDBClusterParameterGroupName),
 					withExternalName(testDBClusterParameterGroupName),
 					withParameters(
@@ -304,6 +310,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClusterParameterGroupsOutput{
 							DBClusterParameterGroups: []docdbtypes.DBClusterParameterGroup{
 								{
+									DBParameterGroupFamily:      pointer.ToOrNilIfZeroValue(testFamily),
 									DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
 								},
 							},
@@ -328,6 +335,7 @@ func TestObserve(t *testing.T) {
 					},
 				},
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withExternalName(testDBClusterParameterGroupName),
 					withParameters(
 						&svcapitypes.CustomParameter{
@@ -339,6 +347,7 @@ func TestObserve(t *testing.T) {
 			},
 			want: want{
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withDBClusterParameterGroupName(testDBClusterParameterGroupName),
 					withExternalName(testDBClusterParameterGroupName),
 					withParameters(
@@ -347,6 +356,7 @@ func TestObserve(t *testing.T) {
 							ParameterValue: pointer.ToOrNilIfZeroValue(testParameterValue),
 						},
 						&svcapitypes.CustomParameter{
+							ApplyMethod:    pointer.ToOrNilIfZeroValue("pending-reboot"),
 							ParameterName:  pointer.ToOrNilIfZeroValue(testOtherParameterName),
 							ParameterValue: pointer.ToOrNilIfZeroValue(testOtherParameterValue),
 						},
@@ -396,6 +406,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClusterParameterGroupsOutput{
 							DBClusterParameterGroups: []docdbtypes.DBClusterParameterGroup{
 								{
+									DBParameterGroupFamily:      pointer.ToOrNilIfZeroValue(testFamily),
 									DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
 									Description:                 pointer.ToOrNilIfZeroValue(testDescription),
 								},
@@ -412,12 +423,14 @@ func TestObserve(t *testing.T) {
 					},
 				},
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withExternalName(testDBClusterParameterGroupName),
 					withDescription(testOtherDescription),
 				),
 			},
 			want: want{
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withDBClusterParameterGroupName(testDBClusterParameterGroupName),
 					withExternalName(testDBClusterParameterGroupName),
 					withDescription(testOtherDescription),
@@ -514,6 +527,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClusterParameterGroupsOutput{
 							DBClusterParameterGroups: []docdbtypes.DBClusterParameterGroup{
 								{
+									DBParameterGroupFamily:      pointer.ToOrNilIfZeroValue(testFamily),
 									DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
 								},
 							},
@@ -531,6 +545,7 @@ func TestObserve(t *testing.T) {
 					},
 				},
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withExternalName(testDBClusterParameterGroupName),
 					withParameters(
 						&svcapitypes.CustomParameter{
@@ -542,6 +557,7 @@ func TestObserve(t *testing.T) {
 			},
 			want: want{
 				cr: instance(
+					withDBParameterGroupFamily(testFamily),
 					withDBClusterParameterGroupName(testDBClusterParameterGroupName),
 					withExternalName(testDBClusterParameterGroupName),
 					withParameters(
@@ -558,6 +574,7 @@ func TestObserve(t *testing.T) {
 					Diff:             "spec.forProvider fields differ from the observed state: parameters",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusterParameterGroups: []*fake.CallDescribeDBClusterParameterGroups{
 						{
 							Ctx: context.Background(),
@@ -622,6 +639,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClusterParameterGroupsOutput{
 							DBClusterParameterGroups: []docdbtypes.DBClusterParameterGroup{
 								{
+									DBParameterGroupFamily:      pointer.ToOrNilIfZeroValue(testFamily),
 									DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
 								},
 							},
@@ -1046,6 +1064,9 @@ func TestUpdate(t *testing.T) {
 					),
 				),
 				docdb: fake.MockDocDBClientCall{
+					DescribeDBClusterParameters: []*fake.CallDescribeDBClusterParameters{
+						{I: &docdb.DescribeDBClusterParametersInput{DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName)}},
+					},
 					ModifyDBClusterParameterGroup: []*fake.CallModifyDBClusterParameterGroup{
 						{
 							Ctx: context.Background(),
@@ -1054,10 +1075,12 @@ func TestUpdate(t *testing.T) {
 								Parameters: []docdbtypes.Parameter{
 									{
 										ParameterName:  pointer.ToOrNilIfZeroValue(testParameterName),
+										ApplyMethod:    docdbtypes.ApplyMethodPendingReboot,
 										ParameterValue: pointer.ToOrNilIfZeroValue(testParameterValue),
 									},
 									{
 										ParameterName:  pointer.ToOrNilIfZeroValue(testOtherParameterName),
+										ApplyMethod:    docdbtypes.ApplyMethodPendingReboot,
 										ParameterValue: pointer.ToOrNilIfZeroValue(testOtherParameterValue),
 									},
 								},
@@ -1094,20 +1117,35 @@ func TestUpdate(t *testing.T) {
 				},
 				cr: instance(
 					withExternalName(testDBClusterParameterGroupName),
+					withParameters(&svcapitypes.CustomParameter{
+						ParameterName:  pointer.ToOrNilIfZeroValue(testParameterName),
+						ParameterValue: pointer.ToOrNilIfZeroValue(testParameterValue),
+					}),
 				),
 			},
 			want: want{
 				cr: instance(
 					withExternalName(testDBClusterParameterGroupName),
+					withParameters(&svcapitypes.CustomParameter{
+						ParameterName:  pointer.ToOrNilIfZeroValue(testParameterName),
+						ParameterValue: pointer.ToOrNilIfZeroValue(testParameterValue),
+					}),
 				),
 				err: errors.Wrap(errors.New(testErrModifyDBClusterParameterGroupFailed), errUpdate),
 				docdb: fake.MockDocDBClientCall{
+					DescribeDBClusterParameters: []*fake.CallDescribeDBClusterParameters{
+						{I: &docdb.DescribeDBClusterParametersInput{DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName)}},
+					},
 					ModifyDBClusterParameterGroup: []*fake.CallModifyDBClusterParameterGroup{
 						{
 							Ctx: context.Background(),
 							I: &docdb.ModifyDBClusterParameterGroupInput{
 								DBClusterParameterGroupName: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
-								Parameters:                  []docdbtypes.Parameter{},
+								Parameters: []docdbtypes.Parameter{{
+									ApplyMethod:    docdbtypes.ApplyMethodPendingReboot,
+									ParameterName:  pointer.ToOrNilIfZeroValue(testParameterName),
+									ParameterValue: pointer.ToOrNilIfZeroValue(testParameterValue),
+								}},
 							},
 						},
 					},
@@ -1119,7 +1157,7 @@ func TestUpdate(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			opts := []option{setupExternal}
-			e := newExternal(tc.args.kube, tc.args.docdb, opts)
+			e := wrap(newExternal(tc.args.kube, tc.args.docdb, opts))
 			o, err := e.Update(context.Background(), tc.args.cr)
 
 			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {

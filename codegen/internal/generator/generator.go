@@ -23,9 +23,10 @@ package generator
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	ttpl "text/template"
@@ -37,7 +38,6 @@ import (
 	ackmodel "github.com/aws-controllers-k8s/code-generator/pkg/model"
 	acksdk "github.com/aws-controllers-k8s/code-generator/pkg/sdk"
 	"github.com/iancoleman/strcase"
-	"golang.org/x/tools/imports"
 	"sigs.k8s.io/yaml"
 )
 
@@ -94,35 +94,65 @@ var (
 	}
 )
 
-// Run generates the code of one service.
+// Run generates the code of one service. It checks the generator config and
+// the API model first and writes nothing if any check fails.
 func Run(ctx context.Context, o Options) error {
 	svc := strings.ToLower(o.Service)
 	if o.GeneratorConfig == "" {
 		o.GeneratorConfig = filepath.Join(o.OutputDir, "apis", svc, "generator-config.yaml")
 	}
-	cfg, err := ackgenconfig.New(o.GeneratorConfig, defaultConfig)
+	cfg, err := loadConfig(o)
 	if err != nil {
-		return fmt.Errorf("cannot load generator config: %w", err)
+		return err
 	}
-	normalizeOperationTypes(&cfg)
+	// Only the entries a person wrote are checked, not the derived ones.
+	userPaths := slices.Clone(cfg.Ignore.FieldPaths)
 	if err := ignoreUnexportedInputs(&cfg, o.ServiceSDKDir); err != nil {
 		return err
 	}
-
-	m, err := loadModel(ctx, svc, o, cfg)
+	api, err := loadAPI(ctx, svc, o, cfg)
 	if err != nil {
 		return err
 	}
-	files, err := render(m, o)
+	if err := checkIgnorePaths(o.GeneratorConfig, svc, api, userPaths); err != nil {
+		return err
+	}
+	raw := snapshotMembers(api)
+	m, err := newModel(api, svc, o, cfg)
 	if err != nil {
 		return err
 	}
-	for path, content := range files {
-		if err := writeGo(filepath.Join(o.OutputDir, path), content); err != nil {
-			return err
-		}
+	sc, err := ReadServiceConfig(o.OutputDir, svc)
+	if err != nil {
+		return fmt.Errorf("cannot read %s: %w", ServiceConfigPath(o.OutputDir, svc), err)
 	}
-	if err := writeCustomTypes(m, o); err != nil {
+	plans, err := planKinds(m, raw, sc, o.GeneratorConfig, ServiceConfigPath("", svc))
+	if err != nil {
+		return err
+	}
+	files, err := render(m, o, sc, plans)
+	if err != nil {
+		return err
+	}
+	custom, err := customTypes(m, o)
+	if err != nil {
+		return err
+	}
+	maps.Copy(files, custom)
+	// Format everything before writing anything, so a failure leaves the
+	// previous output intact.
+	formatted, err := formatAll(o.OutputDir, files)
+	if err != nil {
+		return err
+	}
+	stale, err := staleFiles(o.OutputDir, m.MetaVars().ServicePackageName, formatted)
+	if err != nil {
+		return err
+	}
+	if err := writeFiles(o.OutputDir, formatted); err != nil {
+		return err
+	}
+	if err := removeStale(o.OutputDir, stale); err != nil {
 		return err
 	}
 	return WriteRegistries(o.OutputDir)
@@ -140,15 +170,19 @@ type Kind struct {
 // ListKinds returns the kinds the generator config of o yields, sorted by
 // name, before any resource is ignored by callers.
 func ListKinds(ctx context.Context, o Options) ([]Kind, error) {
-	cfg, err := ackgenconfig.New(o.GeneratorConfig, defaultConfig)
+	cfg, err := loadConfig(o)
 	if err != nil {
-		return nil, fmt.Errorf("cannot load generator config: %w", err)
+		return nil, err
 	}
-	normalizeOperationTypes(&cfg)
 	if err := ignoreUnexportedInputs(&cfg, o.ServiceSDKDir); err != nil {
 		return nil, err
 	}
-	m, err := loadModel(ctx, strings.ToLower(o.Service), o, cfg)
+	svc := strings.ToLower(o.Service)
+	api, err := loadAPI(ctx, svc, o, cfg)
+	if err != nil {
+		return nil, err
+	}
+	m, err := newModel(api, svc, o, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +198,16 @@ func ListKinds(ctx context.Context, o Options) ([]Kind, error) {
 	return kinds, nil
 }
 
-func loadModel(ctx context.Context, svc string, o Options, cfg ackgenconfig.Config) (*ackmodel.Model, error) {
+func loadConfig(o Options) (ackgenconfig.Config, error) {
+	cfg, err := ackgenconfig.New(o.GeneratorConfig, defaultConfig)
+	if err != nil {
+		return cfg, fmt.Errorf("cannot load generator config: %w", err)
+	}
+	normalizeOperationTypes(&cfg)
+	return cfg, nil
+}
+
+func loadAPI(ctx context.Context, svc string, o Options, cfg ackgenconfig.Config) (*ackmodel.SDKAPI, error) {
 	modelName := o.ModelName
 	if cfg.SDKNames.Model != "" {
 		modelName = strings.ToLower(cfg.SDKNames.Model)
@@ -178,6 +221,11 @@ func loadModel(ctx context.Context, svc string, o Options, cfg ackgenconfig.Conf
 		return nil, fmt.Errorf("cannot load AWS API model: %w", err)
 	}
 	api.APIGroupSuffix = GroupSuffix
+	return api, nil
+}
+
+// newModel applies the ignore rules of cfg to api, in place.
+func newModel(api *ackmodel.SDKAPI, svc string, o Options, cfg ackgenconfig.Config) (*ackmodel.Model, error) {
 	docCfg, err := ackgenconfig.NewDocumentationConfig("")
 	if err != nil {
 		return nil, err
@@ -198,6 +246,8 @@ type crdVars struct {
 	CRD        *ackmodel.CRD
 	// ClientOps are additional operations of the Client interface.
 	ClientOps []*awssdkmodel.Operation
+	// Plan holds the checked, kind-specific choices of the templates.
+	Plan *kindPlan
 }
 
 // ServiceConfig is the optional apis/<service>/codegen.yaml. It configures
@@ -206,6 +256,44 @@ type ServiceConfig struct {
 	// ClientOperations are SDK operations added to the Client interface of
 	// a kind's controller, keyed by kind, e.g. for hand-written code.
 	ClientOperations map[string][]string `json:"clientOperations,omitempty"`
+	// Kinds holds per-kind settings, keyed by kind.
+	Kinds map[string]KindConfig `json:"kinds,omitempty"`
+}
+
+// KindConfig holds the codegen.yaml settings of one kind.
+type KindConfig struct {
+	// Identifier is the read output member that equals the external name,
+	// if the generator can't find it.
+	Identifier string `json:"identifier,omitempty"`
+	// IdentifierInput is the read input member that takes the external
+	// name, if it is neither Identifier nor Identifier+"s".
+	IdentifierInput string `json:"identifierInput,omitempty"`
+	// CustomObserve: the kind has no read operation and a hand-written
+	// observe hook decides whether the resource exists.
+	CustomObserve bool `json:"customObserve,omitempty"`
+	// CustomDelete: the kind has no delete operation and a hand-written
+	// delete hook deletes the resource.
+	CustomDelete bool `json:"customDelete,omitempty"`
+	// OrphanOnDelete: the kind has no delete operation and deleting the
+	// managed resource deliberately leaves the AWS resource in place.
+	OrphanOnDelete bool `json:"orphanOnDelete,omitempty"`
+	// CustomIsUpToDate: the kind reads with GetAttributes, can be updated
+	// and a hand-written isUpToDate hook detects drift.
+	CustomIsUpToDate bool `json:"customIsUpToDate,omitempty"`
+	// ImmutableFields are JSON names of spec.forProvider fields that can't
+	// change once set, e.g. create-only fields.
+	ImmutableFields []string `json:"immutableFields,omitempty"`
+	// AllowSensitiveFields lists secret-looking fields that are knowingly
+	// plain API fields.
+	AllowSensitiveFields []SensitiveAllowance `json:"allowSensitiveFields,omitempty"`
+}
+
+// SensitiveAllowance allows one secret-looking field, for a reason.
+type SensitiveAllowance struct {
+	// Path is the JSON path, e.g. spec.forProvider.clientToken.
+	Path string `json:"path"`
+	// Reason says why the value is not a secret; it is required.
+	Reason string `json:"reason"`
 }
 
 // ServiceConfigPath returns the path of the codegen.yaml of a service.
@@ -213,7 +301,8 @@ func ServiceConfigPath(root, svc string) string {
 	return filepath.Join(root, "apis", svc, "codegen.yaml")
 }
 
-// ReadServiceConfig reads the codegen.yaml of a service, if any.
+// ReadServiceConfig reads the codegen.yaml of a service, if any. Unknown keys
+// are errors, so a typo can't silently drop a setting.
 func ReadServiceConfig(root, svc string) (*ServiceConfig, error) {
 	c := &ServiceConfig{}
 	b, err := os.ReadFile(ServiceConfigPath(root, svc))
@@ -223,7 +312,7 @@ func ReadServiceConfig(root, svc string) (*ServiceConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c, yaml.Unmarshal(b, c)
+	return c, yaml.UnmarshalStrict(b, c)
 }
 
 type setupVars struct {
@@ -232,7 +321,7 @@ type setupVars struct {
 	CRDs       []*ackmodel.CRD
 }
 
-func render(m *ackmodel.Model, o Options) (map[string][]byte, error) { //nolint:gocyclo // linear list of templates
+func render(m *ackmodel.Model, o Options, sc *ServiceConfig, plans map[string]*kindPlan) (map[string][]byte, error) { //nolint:gocyclo // linear list of templates
 	enumDefs, err := m.GetEnumDefs()
 	if err != nil {
 		return nil, err
@@ -245,11 +334,6 @@ func render(m *ackmodel.Model, o Options) (map[string][]byte, error) { //nolint:
 	if err != nil {
 		return nil, err
 	}
-	sc, err := ReadServiceConfig(o.OutputDir, strings.ToLower(o.Service))
-	if err != nil {
-		return nil, fmt.Errorf("cannot read %s: %w", ServiceConfigPath(o.OutputDir, o.Service), err)
-	}
-
 	ts := templateset.New([]string{o.TemplateDir}, includeTemplates, nil, funcMap())
 	mv := m.MetaVars()
 	svc := mv.ServicePackageName
@@ -278,7 +362,7 @@ func render(m *ackmodel.Model, o Options) (map[string][]byte, error) { //nolint:
 		if err != nil {
 			return nil, err
 		}
-		vars := &crdVars{MetaVars: mv, ModulePath: ModulePath, CRD: crd}
+		vars := &crdVars{MetaVars: mv, ModulePath: ModulePath, CRD: crd, Plan: plans[crd.Kind]}
 		vars.APIVersion = v
 		for _, name := range sc.ClientOperations[crd.Kind] {
 			op, ok := m.SDKAPI.API.Operations[name]
@@ -326,12 +410,15 @@ func funcMap() ttpl.FuncMap {
 			return code.SetSDK(r.Config(), r, ackmodel.OpTypeGet, src, dst, indent)
 		},
 		"GoCodeSetReadManyOutput": func(r *ackmodel.CRD, src, dst string, indent int) (string, error) {
-			return code.SetResource(r.Config(), r, ackmodel.OpTypeList, src, dst, indent)
+			s, err := code.SetResource(r.Config(), r, ackmodel.OpTypeList, src, dst, indent)
+			if err != nil {
+				return "", err
+			}
+			return firstElementOnly(r.Kind, s)
 		},
 		"GoCodeSetReadManyInput": func(r *ackmodel.CRD, src, dst string, indent int) (string, error) {
 			return code.SetSDK(r.Config(), r, ackmodel.OpTypeList, src, dst, indent)
 		},
-		"ListMemberNameInReadManyOutput": code.ListMemberNameInReadManyOutput,
 		"GoCodeGetAttributesSetInput": func(r *ackmodel.CRD, src, dst string, indent int) (string, error) {
 			return code.SetSDKGetAttributes(r.Config(), r, src, dst, indent)
 		},
@@ -339,7 +426,11 @@ func funcMap() ttpl.FuncMap {
 			return code.SetResourceGetAttributes(r.Config(), r, src, dst, indent)
 		},
 		"GoCodeSetCreateOutput": func(r *ackmodel.CRD, src, dst string, indent int) (string, error) {
-			return code.SetResource(r.Config(), r, ackmodel.OpTypeCreate, src, dst, indent)
+			s, err := code.SetResource(r.Config(), r, ackmodel.OpTypeCreate, src, dst, indent)
+			if strings.TrimSpace(s) == "" {
+				return "", err
+			}
+			return s, err
 		},
 		"GoCodeSetCreateInput": func(r *ackmodel.CRD, src, dst string, indent int) (string, error) {
 			return code.SetSDK(r.Config(), r, ackmodel.OpTypeCreate, src, dst, indent)
@@ -350,6 +441,8 @@ func funcMap() ttpl.FuncMap {
 		"GoCodeSetDeleteInput": func(r *ackmodel.CRD, src, dst string, indent int) (string, error) {
 			return code.SetSDK(r.Config(), r, ackmodel.OpTypeDelete, src, dst, indent)
 		},
+		"NotNil":             func(v string, wrapper []string) string { return nilCheck(v, wrapper, true) },
+		"AnyNil":             func(v string, wrapper []string) string { return nilCheck(v, wrapper, false) },
 		"HasUpdatableFields": HasUpdatableFields,
 		"UpdatableFields":    UpdatableFields,
 		// IAM is a global service; its resources have no region field.
@@ -359,46 +452,27 @@ func funcMap() ttpl.FuncMap {
 	}
 }
 
-// unkeyedTime matches the unkeyed metav1.Time literals ACK emits.
-var unkeyedTime = regexp.MustCompile(`metav1\.Time\{([^}:]+)\}`)
-
-func writeGo(path string, src []byte) error {
-	src = unkeyedTime.ReplaceAll(src, []byte("metav1.Time{Time: $1}"))
-	out, err := imports.Process(path, src, nil)
-	if err != nil {
-		// Keep the unformatted source to make template errors debuggable.
-		_ = writeFile(path, src)
-		return fmt.Errorf("cannot format %s: %w", path, err)
-	}
-	return writeFile(path, out)
-}
-
-func writeFile(path string, b []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o600)
-}
-
-// writeCustomTypes creates custom_types.go with empty Custom<Kind>Parameters
-// and Custom<Kind>Observation structs, unless the file exists. The file is hand-written afterwards: it is
-// where additional fields such as references are added.
-func writeCustomTypes(m *ackmodel.Model, o Options) error {
+// customTypes returns custom_types.go with empty Custom<Kind>Parameters
+// and Custom<Kind>Observation structs for each API version that has none
+// yet. The file is hand-written afterwards: it is where additional fields
+// such as references are added.
+func customTypes(m *ackmodel.Model, o Options) (map[string][]byte, error) {
 	crds, err := m.GetCRDs()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	byVersion := map[string][]string{}
 	for _, crd := range crds {
 		v, err := crd.GetStorageVersion(o.APIVersion)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		byVersion[v] = append(byVersion[v], crd.Kind)
 	}
+	files := map[string][]byte{}
 	for v, kinds := range byVersion {
-		path := filepath.Join(o.OutputDir, "apis", m.MetaVars().ServicePackageName, v, "custom_types.go")
-		if _, err := os.Stat(path); err == nil {
+		path := filepath.Join("apis", m.MetaVars().ServicePackageName, v, "custom_types.go")
+		if _, err := os.Stat(filepath.Join(o.OutputDir, path)); err == nil {
 			continue
 		}
 		sort.Strings(kinds)
@@ -409,11 +483,9 @@ func writeCustomTypes(m *ackmodel.Model, o Options) error {
 			fmt.Fprintf(&b, "\n// Custom%[1]sParameters contains the hand-written fields of %[1]sParameters.\ntype Custom%[1]sParameters struct{}\n", k)
 			fmt.Fprintf(&b, "\n// Custom%[1]sObservation contains the hand-written fields of %[1]sObservation.\ntype Custom%[1]sObservation struct{}\n", k)
 		}
-		if err := writeGo(path, []byte(b.String())); err != nil {
-			return err
-		}
+		files[path] = []byte(b.String())
 	}
-	return nil
+	return files, nil
 }
 
 // legacyOperationTypes maps operation types used by provider-aws generator

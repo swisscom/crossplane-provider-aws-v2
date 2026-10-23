@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/swisscom/crossplane-provider-aws-v2/codegen/internal/modeltest"
 )
 
 // TestRunServiceCatalog generates the servicecatalog fixture and checks the
@@ -43,9 +45,7 @@ func TestRunServiceCatalog(t *testing.T) {
 		TemplateDir:       filepath.Join("..", "..", "templates"),
 	}
 	if err := Run(context.Background(), o); err != nil {
-		if strings.Contains(err.Error(), "fetch") {
-			t.Skipf("AWS API model not available: %v", err)
-		}
+		modeltest.SkipOnFetchError(t, err)
 		t.Fatal(err)
 	}
 

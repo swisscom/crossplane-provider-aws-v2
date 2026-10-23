@@ -9,9 +9,10 @@ references one with `spec.providerConfigRef` (`kind` + `name`).
 
 ## Why
 
-- Crossplane v2 separates tenants by namespace: a team gets a namespaced
-  `ProviderConfig` and can't use another team's credentials
-  ([ADR 0002](../adr/0002-namespaced-resources-only.md)).
+- Crossplane v2 scopes a namespaced `ProviderConfig` to the MRs of its
+  namespace, and its Secret must be in that namespace
+  ([ADR 0002](../adr/0002-namespaced-resources-only.md)). This is not an
+  AWS trust boundary; see "Trust model" below.
 - Platform teams still need one shared config: `ClusterProviderConfig`.
 
 ## How it is used
@@ -45,6 +46,14 @@ with `spec.forProvider.region` (IAM: the global region).
 
 Example: [examples/provider/config.yaml](../../examples/provider/config.yaml).
 
+## Trust model
+
+Only `Secret` credentials stay in the namespace. With `IRSA`, `PodIdentity`
+or `WebIdentity` a namespaced `ProviderConfig` acts as the provider pod and
+can assume any role that trusts it (as in `provider-upjet-aws`); MRs can use
+any `ClusterProviderConfig`. Grant `ProviderConfig` create (`crossplane-edit`)
+only to trusted teams ([README](../../README.md#trust-model)).
+
 ## Secrets in general
 
 All secret references in MRs are **local**
@@ -60,4 +69,7 @@ stored there too. Connection details go only to
 - A namespaced `ProviderConfig` may only use a Secret in its own namespace;
   `GetConfig` enforces this.
 - `endpoint.url` overrides the endpoint for **all** services of the config
-  (meant for LocalStack and tests).
+  (meant for LocalStack and tests), never for STS. It must be an
+  `http`/`https` URL with a host; the CRD and `NewConfig` both check it.
+- Credential-file parse errors name only the Secret key, never its lines,
+  because the error lands in the MR's status.

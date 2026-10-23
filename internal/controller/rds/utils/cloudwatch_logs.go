@@ -17,6 +17,7 @@ limitations under the License.
 package utils
 
 import (
+	"maps"
 	"slices"
 
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
@@ -27,15 +28,15 @@ import (
 // AreSameElements reports whether the desired and observed slices contain
 // the same set of elements, ignoring order and duplicates.
 func AreSameElements(desired []*string, observed []string) bool {
-	if len(desired) != len(observed) {
-		return false
-	}
+	want := make(map[string]struct{}, len(desired))
 	for _, d := range desired {
-		if !slices.Contains(observed, pointer.StringValue(d)) {
-			return false
-		}
+		want[pointer.StringValue(d)] = struct{}{}
 	}
-	return true
+	got := make(map[string]struct{}, len(observed))
+	for _, o := range observed {
+		got[o] = struct{}{}
+	}
+	return maps.Equal(want, got)
 }
 
 // GenerateCloudWatchExportConfiguration computes the CloudwatchLogsExportConfiguration

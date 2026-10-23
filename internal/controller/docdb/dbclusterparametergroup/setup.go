@@ -26,6 +26,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
+	cpresource "github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,6 +46,28 @@ const (
 type hooks struct {
 	client Client
 	kube   client.Client
+	// arn is cached by Observe: the late-init update replaces the status
+	// before Update runs.
+	arn *string
+	// tagKeysChanged makes Observe report a late-init so that the runtime
+	// persists the managed tag keys.
+	tagKeysChanged bool
+}
+
+// observeTags records the ARN and the managed tag keys for Update.
+func (e *hooks) observeTags(ctx context.Context, mg cpresource.Managed, spec []*svcapitypes.Tag, arn *string) (bool, error) {
+	e.arn = arn
+	upToDate, changed, err := svcutils.ObserveTags(ctx, e.client, mg, spec, arn)
+	e.tagKeysChanged = changed
+	return upToDate, err
+}
+
+// tagARN prefers the ARN of this reconcile's Observe.
+func (e *hooks) tagARN(status *string) *string {
+	if e.arn != nil {
+		return e.arn
+	}
+	return status
 }
 
 func preObserve(_ context.Context, cr *svcapitypes.DBClusterParameterGroup, obj *svcsdk.DescribeDBClusterParameterGroupsInput) error {
@@ -52,10 +75,11 @@ func preObserve(_ context.Context, cr *svcapitypes.DBClusterParameterGroup, obj 
 	return nil
 }
 
-func postObserve(_ context.Context, cr *svcapitypes.DBClusterParameterGroup, _ *svcsdk.DescribeDBClusterParameterGroupsOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
+func (e *hooks) postObserve(_ context.Context, cr *svcapitypes.DBClusterParameterGroup, _ *svcsdk.DescribeDBClusterParameterGroupsOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
 	if err != nil {
 		return obs, err
 	}
+	obs.ResourceLateInitialized = obs.ResourceLateInitialized || e.tagKeysChanged
 
 	cr.SetConditions(xpv2.Available())
 	return obs, err
@@ -92,42 +116,18 @@ func (e *hooks) isUpToDate(ctx context.Context, cr *svcapitypes.DBClusterParamet
 	if err != nil {
 		return false, "", err
 	}
-	if !areParametersEqual(cr.Spec.ForProvider.Parameters, params) {
+	if len(changedParameters(cr.Spec.ForProvider.Parameters, params)) > 0 {
 		diff = append(diff, "parameters")
 	}
-	if len(diff) > 0 {
-		return false, compare.Message(diff), nil
+	// Always, so new spec keys are recorded before Update adds them.
+	tagsUpToDate, err := e.observeTags(ctx, cr, cr.Spec.ForProvider.Tags, group.DBClusterParameterGroupArn)
+	if err != nil {
+		return false, "", err
 	}
-
-	areTagsUpToDate, err := svcutils.AreTagsUpToDate(ctx, e.client, cr.Spec.ForProvider.Tags, group.DBClusterParameterGroupArn)
-	if err != nil || !areTagsUpToDate {
-		return false, compare.Message([]string{"tags"}), err
+	if !tagsUpToDate {
+		diff = append(diff, "tags")
 	}
-	return true, "", nil
-}
-
-// describeParameters returns all parameters of the group, following the
-// pagination markers.
-func (e *hooks) describeParameters(ctx context.Context, name *string) ([]svcsdktypes.Parameter, error) {
-	var params []svcsdktypes.Parameter
-	in := &svcsdk.DescribeDBClusterParametersInput{DBClusterParameterGroupName: name}
-	for {
-		out, err := e.client.DescribeDBClusterParameters(ctx, in)
-		if err != nil {
-			return nil, errors.Wrap(err, errDescribeParameters)
-		}
-		params = append(params, out.Parameters...)
-		if aws.ToString(out.Marker) == "" {
-			return params, nil
-		}
-		in = &svcsdk.DescribeDBClusterParametersInput{DBClusterParameterGroupName: name, Marker: out.Marker}
-	}
-}
-
-func preUpdate(_ context.Context, cr *svcapitypes.DBClusterParameterGroup, obj *svcsdk.ModifyDBClusterParameterGroupInput) error {
-	obj.DBClusterParameterGroupName = pointer.ToOrNilIfZeroValue(meta.GetExternalName(cr))
-	obj.Parameters = generateSdkParameters(cr.Spec.ForProvider.Parameters)
-	return nil
+	return len(diff) == 0, compare.Message(diff), nil
 }
 
 func (e *hooks) postUpdate(ctx context.Context, cr *svcapitypes.DBClusterParameterGroup, _ *svcsdk.ModifyDBClusterParameterGroupOutput, upd managed.ExternalUpdate, err error) (managed.ExternalUpdate, error) {
@@ -135,17 +135,22 @@ func (e *hooks) postUpdate(ctx context.Context, cr *svcapitypes.DBClusterParamet
 		return upd, err
 	}
 	cr.Status.SetConditions(xpv2.Available())
-	return upd, svcutils.UpdateTagsForResource(ctx, e.client, cr.Spec.ForProvider.Tags, cr.Status.AtProvider.DBClusterParameterGroupARN)
+	return upd, svcutils.UpdateTagsForResource(ctx, e.client, cr, cr.Spec.ForProvider.Tags, e.tagARN(cr.Status.AtProvider.DBClusterParameterGroupARN))
 }
 
 func filterList(cr *svcapitypes.DBClusterParameterGroup, list *svcsdk.DescribeDBClusterParameterGroupsOutput) *svcsdk.DescribeDBClusterParameterGroupsOutput {
 	id := meta.GetExternalName(cr)
 	for _, group := range list.DBClusterParameterGroups {
-		if pointer.StringValue(group.DBClusterParameterGroupName) == id {
-			return &svcsdk.DescribeDBClusterParameterGroupsOutput{
-				Marker:                   list.Marker,
-				DBClusterParameterGroups: []svcsdktypes.DBClusterParameterGroup{group},
-			}
+		if !compare.IdentifierEqual(aws.ToString(group.DBClusterParameterGroupName), id) {
+			continue
+		}
+		// A deleted MR lets go of a foreign group without touching it.
+		if meta.WasDeleted(cr) && svcutils.CheckParameterGroupFamily(id, group.DBParameterGroupFamily) != nil {
+			break
+		}
+		return &svcsdk.DescribeDBClusterParameterGroupsOutput{
+			Marker:                   list.Marker,
+			DBClusterParameterGroups: []svcsdktypes.DBClusterParameterGroup{group},
 		}
 	}
 
@@ -155,33 +160,11 @@ func filterList(cr *svcapitypes.DBClusterParameterGroup, list *svcsdk.DescribeDB
 	}
 }
 
-func generateSdkParameters(params []*svcapitypes.CustomParameter) []svcsdktypes.Parameter {
-	sdkParams := make([]svcsdktypes.Parameter, len(params))
-	for i, p := range params {
-		sdkParams[i] = svcsdktypes.Parameter{
-			ApplyMethod:    svcsdktypes.ApplyMethod(pointer.StringValue(p.ApplyMethod)),
-			ParameterName:  p.ParameterName,
-			ParameterValue: p.ParameterValue,
-		}
-	}
-
-	return sdkParams
-}
-
-func generateAPIParameter(p *svcsdktypes.Parameter, o *svcapitypes.CustomParameter) *svcapitypes.CustomParameter {
-	o.ApplyMethod = pointer.ToOrNilIfZeroValue(string(p.ApplyMethod))
-	o.ParameterName = p.ParameterName
-	o.ParameterValue = p.ParameterValue
-
-	return o
-}
-
 func setupExternal(e *external) {
 	h := &hooks{client: e.client, kube: e.kube}
 	e.preObserve = preObserve
-	e.postObserve = postObserve
+	e.postObserve = h.postObserve
 	e.isUpToDate = h.isUpToDate
-	e.preUpdate = preUpdate
 	e.postUpdate = h.postUpdate
 	e.preCreate = preCreate
 	e.preDelete = preDelete
@@ -191,6 +174,10 @@ func setupExternal(e *external) {
 
 func (e *hooks) lateInitialize(cr *svcapitypes.DBClusterParameterGroupParameters, resp *svcsdk.DescribeDBClusterParameterGroupsOutput) error {
 	group := resp.DBClusterParameterGroups[0]
+	// First, so a foreign group is neither read nor copied into the spec.
+	if err := svcutils.CheckParameterGroupFamily(aws.ToString(group.DBClusterParameterGroupName), group.DBParameterGroupFamily); err != nil {
+		return err
+	}
 
 	// The lateInitialize hook has no context.
 	params, err := e.describeParameters(context.TODO(), group.DBClusterParameterGroupName)
@@ -202,47 +189,6 @@ func (e *hooks) lateInitialize(cr *svcapitypes.DBClusterParameterGroupParameters
 	return nil
 }
 
-// lateInitializeParameters adds the parameters of the group that the spec
-// does not list.
-func lateInitializeParameters(in []*svcapitypes.CustomParameter, from []svcsdktypes.Parameter) []*svcapitypes.CustomParameter {
-	out := in
-	if out == nil {
-		out = []*svcapitypes.CustomParameter{}
-	}
-
-	apiParams := make(map[string]*svcapitypes.CustomParameter, len(out))
-	for _, p := range out {
-		apiParams[pointer.StringValue(p.ParameterName)] = p
-	}
-
-	for i := range from {
-		if _, exists := apiParams[pointer.StringValue(from[i].ParameterName)]; !exists {
-			out = append(out, generateAPIParameter(&from[i], &svcapitypes.CustomParameter{}))
-		}
-	}
-
-	return out
-}
-
-// areParametersEqual reports whether every parameter of the spec has the
-// same value in AWS. The apply method is not compared: AWS only changes it
-// together with the value.
-func areParametersEqual(spec []*svcapitypes.CustomParameter, current []svcsdktypes.Parameter) bool {
-	currentMap := make(map[string]string, len(current))
-	for _, currentParam := range current {
-		currentMap[pointer.StringValue(currentParam.ParameterName)] = pointer.StringValue(currentParam.ParameterValue)
-	}
-
-	for _, specParam := range spec {
-		currentValue, exists := currentMap[pointer.StringValue(specParam.ParameterName)]
-		if !exists || pointer.StringValue(specParam.ParameterValue) != currentValue {
-			return false
-		}
-	}
-
-	return true
-}
-
 func configureDBClusterParameterGroup(mgr ctrl.Manager, _ controller.Options) ([]option, []managed.ReconcilerOption, error) {
 	return []option{setupExternal}, []managed.ReconcilerOption{
 		managed.WithReferenceResolver(managed.NewAPISimpleReferenceResolver(mgr.GetClient())),
@@ -252,4 +198,5 @@ func configureDBClusterParameterGroup(mgr ctrl.Manager, _ controller.Options) ([
 
 func init() {
 	configure = configureDBClusterParameterGroup
+	wrapExternal = wrap
 }

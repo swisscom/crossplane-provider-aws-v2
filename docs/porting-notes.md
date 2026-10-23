@@ -52,13 +52,14 @@ generation:
   after dropping references.
 - **Hand-built `external{...}`**: every hook field must be set; nil hooks panic.
 - **Restore in `preCreate`**: provider-aws restored snapshots in `preCreate`
-  and then still ran the create operation. Override `Create` via
-  `wrapExternal` instead (done for docdb/DBCluster; rds/DBInstance still
-  has the old pattern).
+  and then still ran the create operation. Override `Create` instead and
+  cache any password before the restore call (done for docdb/DBCluster and
+  rds/DBInstance, ADR 0013).
 - **Connection details publish order**: the reconciler publishes Observe's
   connection details before Update. A `postObserve` that publishes the
-  desired password makes "password changed" checks against the connection
-  secret always false; publish it in `postUpdate`.
+  desired password publishes it before AWS has it; publish the applied
+  password in `postObserve` and the new one in `postUpdate`, after the
+  modify succeeded (rds/DBInstance: ADR 0013, docdb: ADR 0014).
 - **Cache/secret location**: code that used the provider namespace
   (`GetProviderNamespace`) compiles but is wrong for namespaced MRs.
 - **nil vs. empty slices**: `aws.StringSlice(nil)` returns an empty, non-nil

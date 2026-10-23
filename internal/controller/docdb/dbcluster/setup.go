@@ -26,13 +26,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
-	"github.com/crossplane/crossplane-runtime/v2/pkg/password"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
 	cpresource "github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -46,23 +43,56 @@ import (
 const (
 	errNotDBCluster             = "managed resource is not a DB Cluster custom resource"
 	errKubeUpdateFailed         = "cannot update DBCluster instance custom resource"
-	errGetPasswordSecretFailed  = "cannot get password secret"
-	errSaveSecretFailed         = "failed to save generated password to Kubernetes secret"
 	errRestore                  = "cannot restore DBCluster in AWS"
 	errUnknownRestoreFromSource = "unknown restoreFrom source"
+)
+
+// transitionalStates is a deny-list on purpose: failed or unknown states
+// still show their diff instead of hiding it.
+var transitionalStates = sets.New(
+	svcapitypes.DocDBInstanceStateCreating,
+	svcapitypes.DocDBInstanceStateModifying,
+	svcapitypes.DocDBInstanceStateUpgrading,
+	svcapitypes.DocDBClusterStateBackingUp,
+	svcapitypes.DocDBClusterStateResettingMasterCredentials,
+	svcapitypes.DocDBClusterStateRebooting,
+	svcapitypes.DocDBClusterStateRenaming,
+	svcapitypes.DocDBClusterStateStarting,
+	svcapitypes.DocDBClusterStateStopping,
+	svcapitypes.DocDBClusterStateMigrating,
+	svcapitypes.DocDBClusterStateMaintenance,
 )
 
 type hooks struct {
 	client Client
 	kube   client.Client
+	// sentPassword is the password preCreate or preUpdate sent to AWS.
+	sentPassword string
+	// arn is cached by Observe: the late-init update replaces the status
+	// before Update runs.
+	arn *string
+	// tagKeysChanged makes Observe report a late-init so that the runtime
+	// persists the managed tag keys.
+	tagKeysChanged bool
 }
 
 func preObserve(_ context.Context, cr *svcapitypes.DBCluster, obj *svcsdk.DescribeDBClustersInput) error {
 	obj.DBClusterIdentifier = pointer.ToOrNilIfZeroValue(meta.GetExternalName(cr))
+	obj.Filters = docDBOnly()
 	return nil
 }
 
+// docDBOnly is the AWS-documented filter that hides RDS and Neptune clusters
+// from DescribeDBClusters.
+func docDBOnly() []svcsdktypes.Filter {
+	return []svcsdktypes.Filter{{Name: aws.String("engine"), Values: []string{svcapitypes.EngineDocDB}}}
+}
+
 func preDelete(_ context.Context, cr *svcapitypes.DBCluster, obj *svcsdk.DeleteDBClusterInput) (bool, error) {
+	// AWS rejects a second delete while the first one runs.
+	if pointer.StringValue(cr.Status.AtProvider.Status) == svcapitypes.DocDBInstanceStateDeleting {
+		return true, nil
+	}
 	obj.DBClusterIdentifier = pointer.ToOrNilIfZeroValue(meta.GetExternalName(cr))
 	obj.FinalDBSnapshotIdentifier = cr.Spec.ForProvider.FinalDBSnapshotIdentifier
 	obj.SkipFinalSnapshot = cr.Spec.ForProvider.SkipFinalSnapshot
@@ -83,16 +113,33 @@ func isEngineVersionUpToDate(p *svcapitypes.DBClusterParameters, cluster svcsdkt
 	return svcutils.CompareEngineVersions(*p.EngineVersion, *cluster.EngineVersion) <= 0
 }
 
-func getConnectionDetails(cr *svcapitypes.DBCluster) managed.ConnectionDetails {
-	return managed.ConnectionDetails{
-		awsclient.ResourceCredentialsSecretUserKey:     []byte(pointer.StringValue(cr.Spec.ForProvider.MasterUsername)),
+// getConnectionDetails prefers the observed cluster's username and port: a
+// restored cluster takes them from the backup, so the spec may have neither.
+func getConnectionDetails(cr *svcapitypes.DBCluster, cluster *svcsdktypes.DBCluster) managed.ConnectionDetails {
+	user := cr.Spec.ForProvider.MasterUsername
+	port := pointer.Int64Value(cr.Spec.ForProvider.Port)
+	if cluster != nil {
+		user = pointer.LateInitialize(cluster.MasterUsername, user)
+		if p := aws.ToInt32(cluster.Port); p != 0 {
+			port = int64(p)
+		}
+	}
+	cd := managed.ConnectionDetails{
+		awsclient.ResourceCredentialsSecretUserKey:     []byte(pointer.StringValue(user)),
 		awsclient.ResourceCredentialsSecretEndpointKey: []byte(pointer.StringValue(cr.Status.AtProvider.Endpoint)),
-		awsclient.ResourceCredentialsSecretPortKey:     []byte(strconv.Itoa(int(pointer.Int64Value(cr.Spec.ForProvider.Port)))),
 		"readerEndpoint": []byte(pointer.StringValue(cr.Status.AtProvider.ReaderEndpoint)),
 	}
+	if port != 0 {
+		cd[awsclient.ResourceCredentialsSecretPortKey] = []byte(strconv.FormatInt(port, 10))
+	}
+	return cd
 }
 func lateInitialize(cr *svcapitypes.DBClusterParameters, resp *svcsdk.DescribeDBClustersOutput) error {
 	cluster := resp.DBClusters[0]
+	// First, so a foreign cluster changes neither spec nor status.
+	if err := svcutils.CheckEngine("DBCluster", aws.ToString(cluster.DBClusterIdentifier), cluster.Engine); err != nil {
+		return err
+	}
 
 	if cr.AvailabilityZones == nil && cluster.AvailabilityZones != nil {
 		cr.AvailabilityZones = aws.StringSlice(cluster.AvailabilityZones)
@@ -131,28 +178,33 @@ func lateInitialize(cr *svcapitypes.DBClusterParameters, resp *svcsdk.DescribeDB
 func (e *hooks) isUpToDate(ctx context.Context, cr *svcapitypes.DBCluster, resp *svcsdk.DescribeDBClustersOutput) (bool, string, error) {
 	cluster := resp.DBClusters[0]
 
-	if pointer.StringValue(cluster.Status) == svcapitypes.DocDBInstanceStateModifying || pointer.StringValue(cluster.Status) == svcapitypes.DocDBInstanceStateUpgrading {
+	// AWS rejects a Modify in these states; wait instead of failing.
+	if transitionalStates.Has(pointer.StringValue(cluster.Status)) {
 		return true, "", nil
 	}
 
-	_, pwChanged, err := e.getPasswordFromRef(ctx, cr)
+	_, pwChanged, err := e.desiredPassword(ctx, cr)
 	if err != nil {
 		return false, "", err
 	}
 
 	diff := diffParameters(&cr.Spec.ForProvider, resp)
-	if pwChanged {
+	// While AWS manages the password, the referenced one is not used.
+	if pwChanged && !aws.ToBool(cr.Spec.ForProvider.ManageMasterUserPassword) {
 		diff = append(diff, "masterUserPasswordSecretRef")
 	}
-	if len(diff) > 0 {
-		return false, compare.Message(diff), nil
-	}
 
-	areTagsUpToDate, err := svcutils.AreTagsUpToDate(ctx, e.client, cr.Spec.ForProvider.Tags, cluster.DBClusterArn)
-	if err != nil || !areTagsUpToDate {
-		return false, compare.Message([]string{"tags"}), err
+	// Always, so new spec keys are recorded before Update adds them.
+	e.arn = cluster.DBClusterArn
+	tagsUpToDate, changed, err := svcutils.ObserveTags(ctx, e.client, cr, cr.Spec.ForProvider.Tags, e.arn)
+	if err != nil {
+		return false, "", err
 	}
-	return true, "", nil
+	e.tagKeysChanged = changed
+	if !tagsUpToDate {
+		diff = append(diff, "tags")
+	}
+	return len(diff) == 0, compare.Message(diff), nil
 }
 
 // diffParameters returns the spec fields that differ from the observed
@@ -163,11 +215,15 @@ func (e *hooks) isUpToDate(ctx context.Context, cr *svcapitypes.DBCluster, resp 
 func diffParameters(p *svcapitypes.DBClusterParameters, resp *svcsdk.DescribeDBClustersOutput) []string {
 	cluster := resp.DBClusters[0]
 	// EngineVersion is compared by isEngineVersionUpToDate (no downgrades).
-	diff := compare.Without(DiffUpdatableParameters(p, &GenerateDBCluster(resp).Spec.ForProvider), "engineVersion")
+	diff := compare.Without(DiffUpdatableParameters(p, &GenerateDBCluster(resp).Spec.ForProvider), "engineVersion", "preferredMaintenanceWindow")
 	if !isEngineVersionUpToDate(p, cluster) {
 		diff = append(diff, "engineVersion")
 	}
-	if p.DBClusterParameterGroupName != nil && *p.DBClusterParameterGroupName != pointer.StringValue(cluster.DBClusterParameterGroup) {
+	// AWS returns the window and group names in lowercase.
+	if !compare.EqualIgnoreCase(p.PreferredMaintenanceWindow, cluster.PreferredMaintenanceWindow) {
+		diff = append(diff, "preferredMaintenanceWindow")
+	}
+	if !isParameterGroupUpToDate(p, cluster) {
 		diff = append(diff, "dbClusterParameterGroupName")
 	}
 	if !compare.IsSubset(p.EnableCloudwatchLogsExports, aws.StringSlice(cluster.EnabledCloudwatchLogsExports)) {
@@ -180,6 +236,10 @@ func diffParameters(p *svcapitypes.DBClusterParameters, resp *svcsdk.DescribeDBC
 		diff = append(diff, "manageMasterUserPassword")
 	}
 	return diff
+}
+
+func isParameterGroupUpToDate(p *svcapitypes.DBClusterParameters, cluster svcsdktypes.DBCluster) bool {
+	return p.DBClusterParameterGroupName == nil || compare.IdentifierEqual(*p.DBClusterParameterGroupName, aws.ToString(cluster.DBClusterParameterGroup))
 }
 
 func vpcSecurityGroupIDs(groups []svcsdktypes.VpcSecurityGroupMembership) []*string {
@@ -201,18 +261,28 @@ func (e *hooks) postUpdate(ctx context.Context, cr *svcapitypes.DBCluster, resp 
 	if err != nil {
 		return managed.ExternalUpdate{}, err
 	}
+	// Before the second Modify, so its failure does not resend the password.
+	if e.sentPassword != "" {
+		if err := e.recordAppliedPassword(ctx, cr, e.sentPassword); err != nil {
+			return managed.ExternalUpdate{}, err
+		}
+	}
 
 	if err := e.modifyEngineVersionAndParameterGroup(ctx, cr); err != nil {
 		return managed.ExternalUpdate{}, err
 	}
 
-	// postObserve does not publish a changed password; publish it now that
-	// AWS has it.
-	if pw, _, err := e.getPasswordFromRef(ctx, cr); err == nil && pw != "" {
-		upd.ConnectionDetails = managed.ConnectionDetails{awsclient.ResourceCredentialsSecretPasswordKey: []byte(pw)}
+	// postObserve does not publish a changed password; publish the one AWS
+	// just accepted.
+	if e.sentPassword != "" {
+		upd.ConnectionDetails = managed.ConnectionDetails{awsclient.ResourceCredentialsSecretPasswordKey: []byte(e.sentPassword)}
 	}
 
-	return upd, svcutils.UpdateTagsForResource(ctx, e.client, cr.Spec.ForProvider.Tags, resp.DBCluster.DBClusterArn)
+	arn := e.arn
+	if arn == nil && resp != nil && resp.DBCluster != nil {
+		arn = resp.DBCluster.DBClusterArn
+	}
+	return upd, svcutils.UpdateTagsForResource(ctx, e.client, cr, cr.Spec.ForProvider.Tags, arn)
 }
 
 // modifyEngineVersionAndParameterGroup updates the engine version and the
@@ -227,6 +297,7 @@ func (e *hooks) modifyEngineVersionAndParameterGroup(ctx context.Context, cr *sv
 	// and the function is generated by ack-generate, so we manually need to set the
 	// DBClusterIdentifier
 	input.DBClusterIdentifier = pointer.ToOrNilIfZeroValue(meta.GetExternalName(cr))
+	input.Filters = docDBOnly()
 	out, err := e.client.DescribeDBClusters(ctx, input)
 	if err != nil {
 		return awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDescribe)
@@ -237,7 +308,7 @@ func (e *hooks) modifyEngineVersionAndParameterGroup(ctx context.Context, cr *sv
 	}
 	p := &cr.Spec.ForProvider
 	needsEngineVersionUpdate := !isEngineVersionUpToDate(p, out.DBClusters[0])
-	needsDBClusterParamGroupUpdate := p.DBClusterParameterGroupName != nil && *p.DBClusterParameterGroupName != pointer.StringValue(out.DBClusters[0].DBClusterParameterGroup)
+	needsDBClusterParamGroupUpdate := !isParameterGroupUpToDate(p, out.DBClusters[0])
 
 	if needsEngineVersionUpdate || needsDBClusterParamGroupUpdate {
 		modifyInput := &svcsdk.ModifyDBClusterInput{
@@ -251,7 +322,7 @@ func (e *hooks) modifyEngineVersionAndParameterGroup(ctx context.Context, cr *sv
 		}
 
 		if _, err = e.client.ModifyDBCluster(ctx, modifyInput); err != nil {
-			return err
+			return awsclient.Wrap(err, errUpdate)
 		}
 	}
 	return nil
@@ -322,12 +393,17 @@ func sdkTags(tags []*svcapitypes.Tag) []svcsdktypes.Tag {
 
 func filterList(cr *svcapitypes.DBCluster, list *svcsdk.DescribeDBClustersOutput) *svcsdk.DescribeDBClustersOutput {
 	id := meta.GetExternalName(cr)
-	for _, instance := range list.DBClusters {
-		if pointer.StringValue(instance.DBClusterIdentifier) == id {
-			return &svcsdk.DescribeDBClustersOutput{
-				Marker:     list.Marker,
-				DBClusters: []svcsdktypes.DBCluster{instance},
-			}
+	for _, cluster := range list.DBClusters {
+		if !compare.IdentifierEqual(aws.ToString(cluster.DBClusterIdentifier), id) {
+			continue
+		}
+		// A deleted MR lets go of a foreign cluster without touching it.
+		if meta.WasDeleted(cr) && svcutils.CheckEngine("DBCluster", id, cluster.Engine) != nil {
+			break
+		}
+		return &svcsdk.DescribeDBClustersOutput{
+			Marker:     list.Marker,
+			DBClusters: []svcsdktypes.DBCluster{cluster},
 		}
 	}
 
@@ -368,61 +444,6 @@ func generateCloudWatchExportConfiguration(spec, current []*string) *svcsdktypes
 	}
 }
 
-// getPasswordFromRef returns the password of the masterUserPasswordSecretRef
-// of cr and whether it differs from the one in the connection secret. Both
-// secrets are in the namespace of cr.
-func (e *hooks) getPasswordFromRef(ctx context.Context, cr *svcapitypes.DBCluster) (newPwd string, changed bool, err error) {
-	in := cr.Spec.ForProvider.MasterUserPasswordSecretRef
-	if in == nil {
-		return "", false, nil
-	}
-	out := cr.Spec.WriteConnectionSecretToReference
-	nn := types.NamespacedName{
-		Name:      in.Name,
-		Namespace: cr.GetNamespace(),
-	}
-	s := &corev1.Secret{}
-	if err := e.kube.Get(ctx, nn, s); err != nil {
-		return "", false, errors.Wrap(err, errGetPasswordSecretFailed)
-	}
-	newPwd = string(s.Data[in.Key])
-
-	if out != nil {
-		nn = types.NamespacedName{
-			Name:      out.Name,
-			Namespace: cr.GetNamespace(),
-		}
-		s = &corev1.Secret{}
-		// the output secret may not exist yet, so we can skip returning an
-		// error if the error is NotFound
-		if err := e.kube.Get(ctx, nn, s); cpresource.IgnoreNotFound(err) != nil {
-			return "", false, err
-		}
-		// if newPwd was set to some value, compare value in output secret with
-		// newPwd
-		changed = newPwd != "" && newPwd != string(s.Data[awsclient.ResourceCredentialsSecretPasswordKey])
-	}
-	return newPwd, changed, nil
-}
-
-func (e *hooks) savePasswordSecret(ctx context.Context, cr *svcapitypes.DBCluster, pw string) error {
-	if cr.Spec.ForProvider.MasterUserPasswordSecretRef == nil {
-		return errors.New("no MasterUserPasswordSecretRef given, unable to store password")
-	}
-	patcher := cpresource.NewAPIPatchingApplicator(e.kube)
-	ref := cr.Spec.ForProvider.MasterUserPasswordSecretRef
-	sc := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ref.Name,
-			Namespace: cr.GetNamespace(),
-		},
-		Data: map[string][]byte{
-			ref.Key: []byte(pw),
-		},
-	}
-	return patcher.Apply(ctx, sc)
-}
-
 func setupExternal(e *external) {
 	h := &hooks{client: e.client, kube: e.kube}
 	e.preObserve = preObserve
@@ -445,13 +466,17 @@ func (e *hooks) postObserve(ctx context.Context, cr *svcapitypes.DBCluster, resp
 	cluster := resp.DBClusters[0]
 	cr.Status.AtProvider.EngineVersion = cluster.EngineVersion
 
-	obs.ConnectionDetails = getConnectionDetails(cr)
+	obs.ResourceLateInitialized = obs.ResourceLateInitialized || e.tagKeysChanged
+	obs.ConnectionDetails = getConnectionDetails(cr, &cluster)
 
-	if !meta.WasDeleted(cr) {
+	// While AWS manages the password, the referenced one is not the cluster's.
+	if !meta.WasDeleted(cr) && !aws.ToBool(cr.Spec.ForProvider.ManageMasterUserPassword) {
 		// A changed password is published by postUpdate once AWS has it:
 		// the reconciler publishes these details before Update, and
 		// preUpdate would then no longer see the change.
-		pw, changed, _ := e.getPasswordFromRef(ctx, cr)
+		// isUpToDate reports this error outside transitional states; here we
+		// only skip publishing.
+		pw, changed, _ := e.desiredPassword(ctx, cr)
 		if pw != "" && !changed {
 			obs.ConnectionDetails[awsclient.ResourceCredentialsSecretPasswordKey] = []byte(pw)
 		}
@@ -486,7 +511,7 @@ func (e *hooks) preUpdate(ctx context.Context, cr *svcapitypes.DBCluster, obj *s
 		obj.MasterUserSecretKmsKeyId = nil
 	}
 
-	pw, pwchanged, err := e.getPasswordFromRef(ctx, cr)
+	pw, pwchanged, err := e.desiredPassword(ctx, cr)
 	if err != nil {
 		return err
 	}
@@ -496,9 +521,16 @@ func (e *hooks) preUpdate(ctx context.Context, cr *svcapitypes.DBCluster, obj *s
 	case obj.ManageMasterUserPassword != nil:
 		// Switching to a self-managed password requires one.
 		obj.MasterUserPassword = pointer.ToOrNilIfZeroValue(pw)
-	case pwchanged:
+	case pwchanged && !aws.ToBool(cr.Spec.ForProvider.ManageMasterUserPassword):
+		// AWS rejects a password while it manages it.
 		obj.MasterUserPassword = aws.String(pw)
 	}
+	// Without it AWS waits for the maintenance window; the flag only affects
+	// the password and the identifier.
+	if obj.MasterUserPassword != nil {
+		obj.ApplyImmediately = aws.Bool(true)
+	}
+	e.sentPassword = aws.ToString(obj.MasterUserPassword)
 
 	// ModifyDBCluster() returns error, when trying to upgrade major (minor is fine) EngineVersion:
 	// "Cannot change VPC security group while doing a major version upgrade."
@@ -518,28 +550,8 @@ func (e *hooks) preCreate(ctx context.Context, cr *svcapitypes.DBCluster, obj *s
 		return err
 	}
 	obj.MasterUserPassword = pointer.ToOrNilIfZeroValue(pw)
+	e.sentPassword = pw
 	return nil
-}
-
-// masterPassword returns the password of masterUserPasswordSecretRef. With
-// autogeneratePassword and no password yet, it generates one and saves it
-// to that secret.
-func (e *hooks) masterPassword(ctx context.Context, cr *svcapitypes.DBCluster) (string, error) {
-	pw, _, err := e.getPasswordFromRef(ctx, cr)
-	if cpresource.IgnoreNotFound(err) != nil {
-		return "", err
-	}
-	if pw != "" || !cr.Spec.ForProvider.AutogeneratePassword {
-		return pw, nil
-	}
-	pw, err = password.Generate()
-	if err != nil {
-		return "", errors.Wrap(err, "unable to generate a password")
-	}
-	if err := e.savePasswordSecret(ctx, cr, pw); err != nil {
-		return "", errors.Wrap(err, errSaveSecretFailed)
-	}
-	return pw, nil
 }
 
 // customExternal creates restored clusters with RestoreDBClusterFromSnapshot
@@ -559,9 +571,9 @@ func (c *customExternal) Create(ctx context.Context, cr *svcapitypes.DBCluster) 
 		return c.external.Create(ctx, cr)
 	}
 	cr.Status.SetConditions(xpv2.Creating())
-	// The restored cluster has the master password of its source.
-	// isUpToDate detects that the connection secret has no password yet and
-	// ModifyDBCluster sets this one.
+	// The restored cluster has the master password of its source. No state
+	// is recorded, so the next Observe sees this password as not applied
+	// and Update sets it.
 	if _, err := c.hooks.masterPassword(ctx, cr); err != nil {
 		return managed.ExternalCreation{}, err
 	}
@@ -592,9 +604,7 @@ func (c *customExternal) Create(ctx context.Context, cr *svcapitypes.DBCluster) 
 		observed := GenerateDBCluster(&svcsdk.DescribeDBClustersOutput{DBClusters: []svcsdktypes.DBCluster{*cluster}})
 		observed.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
 	}
-	cre := managed.ExternalCreation{ConnectionDetails: getConnectionDetails(cr)}
-	cre.ConnectionDetails[awsclient.ResourceCredentialsSecretUserKey] = []byte(pointer.StringValue(cr.Spec.ForProvider.MasterUsername))
-	return cre, nil
+	return managed.ExternalCreation{ConnectionDetails: getConnectionDetails(cr, cluster)}, nil
 }
 
 func (e *hooks) postCreate(ctx context.Context, cr *svcapitypes.DBCluster, resp *svcsdk.CreateDBClusterOutput, cre managed.ExternalCreation, err error) (managed.ExternalCreation, error) {
@@ -602,16 +612,17 @@ func (e *hooks) postCreate(ctx context.Context, cr *svcapitypes.DBCluster, resp 
 		return managed.ExternalCreation{}, err
 	}
 
-	cre.ConnectionDetails = getConnectionDetails(cr)
-	pw, _, err := e.getPasswordFromRef(ctx, cr)
-	if err != nil {
-		return managed.ExternalCreation{}, err
+	var cluster *svcsdktypes.DBCluster
+	if resp != nil {
+		cluster = resp.DBCluster
 	}
-	if pw != "" {
-		cre.ConnectionDetails[awsclient.ResourceCredentialsSecretPasswordKey] = []byte(pw)
+	cre.ConnectionDetails = getConnectionDetails(cr, cluster)
+	if e.sentPassword != "" {
+		if err := e.recordAppliedPassword(ctx, cr, e.sentPassword); err != nil {
+			return managed.ExternalCreation{}, err
+		}
+		cre.ConnectionDetails[awsclient.ResourceCredentialsSecretPasswordKey] = []byte(e.sentPassword)
 	}
-
-	cre.ConnectionDetails[awsclient.ResourceCredentialsSecretUserKey] = []byte(pointer.StringValue(cr.Spec.ForProvider.MasterUsername))
 	// Tags are added during update
 	return cre, nil
 }

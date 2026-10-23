@@ -19,8 +19,6 @@ ignore:
     - UpdateProvisionedProductInput.ProvisionedProductName
     - TerminateProvisionedProductInput.ProvisionedProductId
     - TerminateProvisionedProductInput.ProvisionedProductName
-    - DescribeProvisionedProductInput.ProvisionedProductId
-    - DescribeProvisionedProductInput.ProvisionedProductName
     - ProvisionProductOutput.RecordDetail.PathId
     - ProvisionProductOutput.RecordDetail.ProductId
     - ProvisionProductOutput.RecordDetail.ProvisioningArtifactId

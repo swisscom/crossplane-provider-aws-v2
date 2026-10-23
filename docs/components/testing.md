@@ -10,6 +10,14 @@
 | Schema | Install `package/crds` in envtest, apply examples with `--dry-run=server --validate=strict` | ad hoc | see below |
 | End to end | Real AWS in a dev cluster; manual for now (planned: [uptest](https://github.com/crossplane/uptest)) | — | [see below](#manual-validation-against-aws) |
 
+`FuzzIsSubsetProperties` checks `compare.IsSubset` against a brute-force
+oracle and for order independence. Its seeds also run in `make test`; run it
+after changing `internal/utils/compare`:
+
+```sh
+go test -fuzz FuzzIsSubsetProperties -fuzztime 60s ./internal/utils/compare/
+```
+
 ## Unit tests of a controller
 
 - **SDK fakes** implement the generated `Client` interface with
@@ -86,4 +94,6 @@ you, should change AWS.
 `codegen/testdata`) and docdb (the repository's config) into a temp dir and
 checks snippets of the output, e.g. which fields `DiffUpdatableParameters`
 compares. They download the API model on first run and skip if it is not
-available.
+available. In CI (`CI=true`), or with `CODEGEN_REQUIRE_MODELS=1`, a failed
+download fails the test instead, so the safety checks can't pass by
+skipping (`codegen/internal/modeltest`).

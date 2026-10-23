@@ -37,7 +37,9 @@ operations mapped by hand: `AuthorizeSecurityGroupEgress`, `DescribeSecurityGrou
   (see Limitations), or an external name pointing to an ingress rule, is
   an error.
 - **Update**: `ModifySecurityGroupRules` (in place, keeping the rule ID),
-  then `CreateTags`/`DeleteTags`.
+  then `CreateTags`/`DeleteTags`. Only keys the provider recorded in the
+  annotation `ec2.aws2.crossplane.io/managed-tag-keys` and no longer wants
+  are deleted; other tags are kept ([ADR 0015](../../../../docs/adr/0015-docdb-tag-ownership.md)).
 - **Delete**: `RevokeSecurityGroupEgress` by rule ID; done if the rule or
   the group is already gone.
 - **Status**: `securityGroupRuleID`, `securityGroupRuleARN`,
@@ -54,7 +56,7 @@ Shared logic is in [`../utils`](../utils) (`Rule`).
 | `postCreate` | external name from the created rule |
 | `preUpdate`, `postUpdate` | `SecurityGroupRules` of the modify call, tags |
 | `preDelete`, `postDelete` | revoke by rule ID; group already deleted |
-| `postObserve` | status fields, condition |
+| `postObserve` | status fields, condition; late-init when the managed tag keys changed |
 | `wrapExternal` (`adoptingExternal.Observe`) | `adoptExisting`, adoption event |
 
 ## Risks of `adoptExisting`
@@ -91,6 +93,8 @@ set the external name instead.
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-10-23 | — | Removes only the tags it recorded (`ec2.aws2.crossplane.io/managed-tag-keys`, BREAKING) |
+| 2026-10-23 | — | Generator (ADR 0011): Create writes `status.atProvider` only; Observe keeps only the resource whose ID is the external name and fails on more than one; `region` is immutable |
 | 2026-10-19 | — | Generated from scratch |
 | 2026-10-20 | | A source type change is an error instead of a modify AWS rejects; prefix lists validated against AWS |
 | 2026-10-20 | | `adoptExisting` |

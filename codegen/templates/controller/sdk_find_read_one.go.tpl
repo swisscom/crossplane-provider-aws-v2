@@ -4,12 +4,21 @@
 func Generate{{ .CRD.Ops.ReadOne.InputRef.Shape.ShapeName }}(cr *svcapitypes.{{ .CRD.Names.Camel }}) (*svcsdk.{{ .CRD.Ops.ReadOne.InputRef.Shape.ShapeName }}, error) {
 	res := &svcsdk.{{ .CRD.Ops.ReadOne.InputRef.Shape.ShapeName }}{}
 {{ GoCodeSetReadOneInput .CRD "cr" "res" 1 }}
+{{- with .Plan.Identifier }}
+	// The external name identifies the resource; status may be empty or stale.
+	if name := meta.GetExternalName(cr); name != "" {
+		res.{{ .InputMember }} = {{ if .InputIsList }}[]string{name}{{ else }}aws.String(name){{ end }}
+	}
+{{- end }}
 	return res, nil
 }
 
 // Generate{{ .CRD.Names.Camel }} returns the current state in the form of *svcapitypes.{{ .CRD.Names.Camel }}.
 func Generate{{ .CRD.Names.Camel }}(resp *svcsdk.{{ .CRD.Ops.ReadOne.OutputRef.Shape.ShapeName }}) *svcapitypes.{{ .CRD.Names.Camel }} {
 	cr := &svcapitypes.{{ .CRD.Names.Camel }}{}
+	if {{ AnyNil "resp" .Plan.ReadWrapper }} {
+		return cr
+	}
 {{ GoCodeSetReadOneOutput .CRD "resp" "cr" 1 }}
 	return cr
 }

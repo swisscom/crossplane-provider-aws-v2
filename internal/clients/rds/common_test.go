@@ -143,13 +143,9 @@ func TestPasswords(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			kube := newKube(t, tc.objs...)
 			cr := instance(tc.ref)
-			desired, err := GetDesiredPassword(context.Background(), kube, cr)
-			if err != nil || desired != tc.wantDesired {
-				t.Errorf("GetDesiredPassword() = %q, %v; want %q", desired, err, tc.wantDesired)
-			}
-			upToDate, _, err := PasswordUpToDate(context.Background(), kube, cr)
-			if err != nil || upToDate != tc.wantUpToDate {
-				t.Errorf("PasswordUpToDate() = %t, %v; want %t", upToDate, err, tc.wantUpToDate)
+			upToDate, desired, err := PasswordUpToDate(context.Background(), kube, cr)
+			if err != nil || upToDate != tc.wantUpToDate || desired != tc.wantDesired {
+				t.Errorf("PasswordUpToDate() = %t, %q, %v; want %t, %q", upToDate, desired, err, tc.wantUpToDate, tc.wantDesired)
 			}
 		})
 	}

@@ -28,6 +28,7 @@ import (
 type DBClusterParameters struct {
 	// Region is which region the DBCluster will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 	// A value that indicates whether major version upgrades are allowed.
 	//

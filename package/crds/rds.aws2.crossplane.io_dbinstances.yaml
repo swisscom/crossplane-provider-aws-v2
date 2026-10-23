@@ -225,8 +225,9 @@ spec:
                       a random password for the master user if one is not provided via
                       MasterUserPasswordSecretRef.
 
-                      If a password is generated, it will
-                      be stored as a secret at the location specified by MasterUserPasswordSecretRef.
+                      The generated password is kept in a provider-owned Secret in the
+                      namespace of the DBInstance and published in the connection secret; it
+                      is not written to MasterUserPasswordSecretRef.
                     type: boolean
                   availabilityZone:
                     description: |-
@@ -961,6 +962,10 @@ spec:
                       printable ASCII character except "/", """, or "@".
 
                       Constraints: Must contain from 8 to 41 characters.
+
+                      A changed value is applied with ModifyDBInstance; the connection secret
+                      switches to it once AWS accepted the change. Can't be combined with
+                      manageMasterUserPassword when the instance is created.
                     properties:
                       key:
                         type: string
@@ -1274,6 +1279,9 @@ spec:
                   region:
                     description: Region is which region the DBInstance will be created.
                     type: string
+                    x-kubernetes-validations:
+                    - message: region is immutable
+                      rule: self == oldSelf
                   restoreFrom:
                     description: RestoreFrom specifies the details of the backup to
                       restore when creating a new DBInstance.
@@ -1588,13 +1596,23 @@ spec:
 
                       This setting doesn't apply to Amazon Aurora or RDS Custom DB instances.
                     type: string
-                  tdeCredentialPassword:
+                  tdeCredentialPasswordSecretRef:
                     description: |-
-                      The password for the given ARN from the key store in order to access the
-                      device.
-
-                      This setting doesn't apply to RDS Custom DB instances.
-                    type: string
+                      TDECredentialPasswordSecretRef references the password for the key store
+                      of the Oracle TDE credential (tdeCredentialARN), in a Secret in the
+                      namespace of the DBInstance. It is sent on create and with every modify;
+                      restores don't send it. A changed value is sent with the next modify,
+                      it is not detected as drift.
+                    properties:
+                      key:
+                        type: string
+                      name:
+                        description: Name of the secret.
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
                   timezone:
                     description: |-
                       The time zone of the DB instance. The time zone parameter is currently supported
@@ -2090,8 +2108,6 @@ spec:
                         format: int64
                         type: integer
                       licenseModel:
-                        type: string
-                      masterUserPassword:
                         type: string
                       multiAZ:
                         type: boolean

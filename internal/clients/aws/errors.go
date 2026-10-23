@@ -29,25 +29,28 @@ const GlobalRegion = "us-east-1"
 
 // Wrap wraps err with msg. AWS API errors are reduced to their code and
 // message, which drops the per-request ID that would otherwise change the
-// resource status on every reconcile. The result still unwraps to err, so
-// errors.As finds the API error. Wrap returns nil if err is nil.
+// resource status on every reconcile. The original error stays in the chain,
+// so errors.As still finds typed AWS errors. Wrap returns nil if err is nil.
 func Wrap(err error, msg string) error {
 	if err == nil {
 		return nil
 	}
 	var ae smithy.APIError
 	if errors.As(err, &ae) {
-		return xperrors.Wrap(&apiError{err: err, text: fmt.Sprintf("%s: %s", ae.ErrorCode(), ae.ErrorMessage())}, msg)
+		return xperrors.Wrap(&apiError{APIError: ae, err: err}, msg)
 	}
 	return xperrors.Wrap(err, msg)
 }
 
-// apiError reports an AWS API error by code and message only.
+// apiError prints only the code and message of an AWS API error but keeps the
+// full error, request ID included, for errors.As and errors.Is.
 type apiError struct {
-	err  error
-	text string
+	smithy.APIError
+	err error
 }
 
-func (e *apiError) Error() string { return e.text }
+func (e *apiError) Error() string {
+	return fmt.Sprintf("%s: %s", e.ErrorCode(), e.ErrorMessage())
+}
 
 func (e *apiError) Unwrap() error { return e.err }

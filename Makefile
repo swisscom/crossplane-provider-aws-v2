@@ -124,9 +124,15 @@ services:
 	@$(if $(SERVICES),,$(ERR) SERVICES is required, e.g. make services SERVICES=servicecatalog; exit 1)
 	@for s in $(SERVICES); do \
 		$(INFO) Generating $$s; \
-		(cd codegen && $(GO) run ./cmd/generate --service $$s --output ..) || exit 1; \
+		(cd codegen && $(GO) run ./cmd/generate --service $$s --output .. $(if $(CODEGEN_CACHE_DIR),--cache-dir $(abspath $(CODEGEN_CACHE_DIR)))) || exit 1; \
 	done
 	@$(OK) Generated $(SERVICES)
+
+# Regenerate every service that has a generator config. CI runs this before
+# check-diff, so a hand-edited or stale zz_ file fails the build.
+ALL_SERVICES := $(patsubst apis/%/generator-config.yaml,%,$(wildcard apis/*/generator-config.yaml))
+services.all:
+	@$(MAKE) services SERVICES="$(ALL_SERVICES)"
 
 # Unit tests of the code generator, which is a separate Go module.
 codegen.test:
@@ -145,7 +151,49 @@ codegen.lint: $(GOLANGCILINT)
 test.run: codegen.test
 lint.run: codegen.lint
 
-.PHONY: submodules fallthrough test-integration run dev dev-clean services codegen.test codegen.lint
+# Fails while code from codegen/cmd/import still needs porting by hand.
+check-import-todo:
+	@$(INFO) Checking for unported import leftovers
+	@./hack/check-import-todo.sh || $(FAIL)
+	@$(OK) No unported import leftovers
+
+# Both modules must build with the same Go, so a bump of only one fails CI.
+GO_LINES = awk '$$1 == "go" || $$1 == "toolchain" { printf "%s%s %s", sep, $$1, $$2; sep = ", " }'
+toolchain.check:
+	@a=$$($(GO_LINES) go.mod); b=$$($(GO_LINES) codegen/go.mod); \
+	echo "go.mod: $$a; codegen/go.mod: $$b"; \
+	if [ -z "$$a" ] || [ "$$a" != "$$b" ]; then $(ERR) both go.mod files need the same go and toolchain lines; exit 1; fi
+	@$(OK) Go versions match
+
+modules.check: toolchain.check
+
+# The govulncheck version is pinned; the vulnerability database is always the
+# current one, so new advisories fail CI without a code change.
+GOVULNCHECK_VERSION ?= v1.8.0
+vulncheck:
+	@$(INFO) govulncheck $(GOVULNCHECK_VERSION)
+	@$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./... || $(FAIL)
+	@cd codegen && $(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./... || $(FAIL)
+	@$(OK) govulncheck
+
+# Scans the provider binary we ship, which also covers the Go it was built with.
+vulncheck.binary:
+	@$(INFO) govulncheck $(GO_OUT_DIR)/provider
+	@$(GO) run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) -mode=binary $(GO_OUT_DIR)/provider || $(FAIL)
+	@$(OK) govulncheck binary
+
+ACTIONLINT_VERSION ?= v1.7.12
+ZIZMOR_VERSION ?= 1.30.1
+# pipx is on the GitHub runners; use ZIZMOR="uvx zizmor==1.30.1" locally if you prefer uv.
+ZIZMOR ?= pipx run zizmor==$(ZIZMOR_VERSION)
+# Without a token zizmor skips the audits that need the GitHub API.
+workflows.lint:
+	@$(INFO) actionlint $(ACTIONLINT_VERSION), zizmor $(ZIZMOR_VERSION)
+	@$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) || $(FAIL)
+	@$(ZIZMOR) $(if $(GH_TOKEN),,--offline) --config .github/zizmor.yml .github/workflows || $(FAIL)
+	@$(OK) workflows lint
+
+.PHONY: submodules fallthrough test-integration run dev dev-clean services services.all codegen.test codegen.lint toolchain.check vulncheck vulncheck.binary workflows.lint check-import-todo
 
 # ====================================================================================
 # Special Targets
@@ -155,8 +203,14 @@ Crossplane Targets:
     submodules            Update the submodules, such as the common build scripts.
     run                   Run crossplane locally, out-of-cluster. Useful for development.
     services              Generate AWS services, e.g. make services SERVICES=servicecatalog.
+    services.all          Regenerate every service with an apis/<svc>/generator-config.yaml.
+    toolchain.check       Check that both go.mod files have the same go and toolchain lines.
+    vulncheck             Run govulncheck on both Go modules.
+    vulncheck.binary      Run govulncheck on the built provider binary.
+    workflows.lint        Lint the GitHub workflows with actionlint and zizmor.
     codegen.test          Run the unit tests of the code generator.
     codegen.lint          Run golangci-lint on the code generator.
+    check-import-todo     Fail if *_importtodo.go files or TODO(import) markers are left.
 
 endef
 # The reason CROSSPLANE_MAKE_HELP is used instead of CROSSPLANE_HELP is because the crossplane

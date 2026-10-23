@@ -28,6 +28,7 @@ import (
 type SecurityGroupEgressRuleParameters struct {
 	// Region is which region the SecurityGroupEgressRule will be created.
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="region is immutable"
 	Region string `json:"region"`
 	// Not supported. Use IP permissions instead.
 	FromPort *int64 `json:"fromPort,omitempty"`

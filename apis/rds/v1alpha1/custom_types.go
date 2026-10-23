@@ -103,8 +103,9 @@ type CustomDBInstanceParameters struct {
 	// a random password for the master user if one is not provided via
 	// MasterUserPasswordSecretRef.
 	//
-	// If a password is generated, it will
-	// be stored as a secret at the location specified by MasterUserPasswordSecretRef.
+	// The generated password is kept in a provider-owned Secret in the
+	// namespace of the DBInstance and published in the connection secret; it
+	// is not written to MasterUserPasswordSecretRef.
 	// +optional
 	AutogeneratePassword bool `json:"autogeneratePassword,omitempty"`
 
@@ -187,6 +188,10 @@ type CustomDBInstanceParameters struct {
 	// printable ASCII character except "/", """, or "@".
 	//
 	// Constraints: Must contain from 8 to 41 characters.
+	//
+	// A changed value is applied with ModifyDBInstance; the connection secret
+	// switches to it once AWS accepted the change. Can't be combined with
+	// manageMasterUserPassword when the instance is created.
 	// +optional
 	MasterUserPasswordSecretRef *xpv2.LocalSecretKeySelector `json:"masterUserPasswordSecretRef,omitempty"`
 
@@ -295,6 +300,14 @@ type CustomDBInstanceParameters struct {
 	// deleted.
 	// +optional
 	DeleteAutomatedBackups *bool `json:"deleteAutomatedBackups,omitempty"`
+
+	// TDECredentialPasswordSecretRef references the password for the key store
+	// of the Oracle TDE credential (tdeCredentialARN), in a Secret in the
+	// namespace of the DBInstance. It is sent on create and with every modify;
+	// restores don't send it. A changed value is sent with the next modify,
+	// it is not detected as drift.
+	// +optional
+	TDECredentialPasswordSecretRef *xpv2.LocalSecretKeySelector `json:"tdeCredentialPasswordSecretRef,omitempty"`
 
 	// TagsIgnore contains rules that tell the reconciler to pretend matching
 	// tags don't exist during diff/updates. A rule key supports either exact

@@ -19,8 +19,10 @@ package pointer
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
 
@@ -153,4 +155,41 @@ func TestLateInitializeSlice(t *testing.T) {
 	expect(t, LateInitializeSlice(nil, []*int{}), nil)
 	expect(t, LateInitializeSlice([]*int{ptr.To(4), ptr.To(5)}, []*int{ptr.To(1), ptr.To(2), ptr.To(3)}), []*int{ptr.To(4), ptr.To(5)})
 	expect(t, LateInitializeSlice([]*int{ptr.To(4), ptr.To(5)}, nil), []*int{ptr.To(4), ptr.To(5)})
+}
+
+func TestLateInitializeInts(t *testing.T) {
+	cases := map[string]struct {
+		got  *int
+		want *int
+	}{
+		"FromPtrKeepsSet":     {got: LateInitializeIntFrom32Ptr(ptr.To(1), ptr.To(int32(2))), want: ptr.To(1)},
+		"FromPtrTakesValue":   {got: LateInitializeIntFrom32Ptr(nil, ptr.To(int32(2))), want: ptr.To(2)},
+		"FromPtrSkipsZero":    {got: LateInitializeIntFrom32Ptr(nil, ptr.To(int32(0))), want: nil},
+		"FromPtrNothing":      {got: LateInitializeIntFrom32Ptr(nil, nil), want: nil},
+		"FromInt32KeepsSet":   {got: LateInitializeIntFromInt32Ptr(ptr.To(1), ptr.To(int32(2))), want: ptr.To(1)},
+		"FromInt32TakesValue": {got: LateInitializeIntFromInt32Ptr(nil, ptr.To(int32(2))), want: ptr.To(2)},
+		"FromInt32KeepsZero":  {got: LateInitializeIntFromInt32Ptr(nil, ptr.To(int32(0))), want: ptr.To(0)},
+		"FromInt32Nothing":    {got: LateInitializeIntFromInt32Ptr(nil, nil), want: nil},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if diff := cmp.Diff(tc.want, tc.got); diff != "" {
+				t.Errorf("-want, +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestLateInitializeTimePtr(t *testing.T) {
+	now := time.Now()
+	set := metav1.NewTime(now.Add(-time.Hour))
+	if got := LateInitializeTimePtr(&set, &now); got != &set {
+		t.Errorf("a set value must be kept, got %v", got)
+	}
+	if got := LateInitializeTimePtr(nil, &now); got == nil || !got.Time.Equal(now) {
+		t.Errorf("an unset value must take the observed time, got %v", got)
+	}
+	if got := LateInitializeTimePtr(nil, nil); got != nil {
+		t.Errorf("nothing to take: want nil, got %v", got)
+	}
 }

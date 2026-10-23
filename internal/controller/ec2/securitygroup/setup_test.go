@@ -36,6 +36,7 @@ import (
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/clients/ec2/fake"
+	svcutils "github.com/swisscom/crossplane-provider-aws-v2/internal/controller/ec2/utils"
 )
 
 const (
@@ -108,6 +109,14 @@ func TestObserve(t *testing.T) {
 			}},
 			want: want{externalName: testID},
 		},
+		// Only a group with the external name as ID counts as observed.
+		"OtherGroupReturned": {
+			cr: group(withExternalName(testID)),
+			mock: &fake.MockEC2Client{MockDescribeSecurityGroups: func(context.Context, *svcsdk.DescribeSecurityGroupsInput) (*svcsdk.DescribeSecurityGroupsOutput, error) {
+				return observed(func(g *svcsdktypes.SecurityGroup) { g.GroupId = aws.String("sg-999") }), nil
+			}},
+			want: want{externalName: testID},
+		},
 		"LateInitAndTagsDiffer": {
 			cr: group(withExternalName(testID)),
 			mock: &fake.MockEC2Client{MockDescribeSecurityGroups: func(_ context.Context, in *svcsdk.DescribeSecurityGroupsInput) (*svcsdk.DescribeSecurityGroupsOutput, error) {
@@ -122,6 +131,7 @@ func TestObserve(t *testing.T) {
 			cr: group(withExternalName(testID), func(cr *svcapitypes.SecurityGroup) {
 				cr.Spec.ForProvider.GroupName = aws.String(testName)
 				cr.Spec.ForProvider.VPCID = aws.String(testVPC)
+				meta.AddAnnotations(cr, map[string]string{svcutils.AnnotationManagedTagKeys: record()})
 			}),
 			mock: &fake.MockEC2Client{MockDescribeSecurityGroups: func(context.Context, *svcsdk.DescribeSecurityGroupsInput) (*svcsdk.DescribeSecurityGroupsOutput, error) {
 				return observed(func(g *svcsdktypes.SecurityGroup) {
@@ -278,9 +288,11 @@ func TestAdoptExistingByName(t *testing.T) {
 			want: want{err: errAdoptDefault},
 		},
 		"ExternalNameWins": {
-			cr:       group(withAdopt, withExternalName("sg-other")),
-			describe: describeCalls{byID: found},
-			want:     want{exists: true, lateInit: true, externalName: "sg-other", describes: 1},
+			cr: group(withAdopt, withExternalName("sg-other")),
+			describe: describeCalls{byID: func() (*svcsdk.DescribeSecurityGroupsOutput, error) {
+				return observed(func(g *svcsdktypes.SecurityGroup) { g.GroupId = aws.String("sg-other") }), nil
+			}},
+			want: want{exists: true, lateInit: true, externalName: "sg-other", describes: 1},
 		},
 		"ExternalNameNotFoundCreatesWithoutLookup": {
 			cr:       group(withAdopt, withExternalName("sg-gone")),
@@ -431,6 +443,14 @@ func TestCreate(t *testing.T) {
 			wantRevokes: 1,
 			wantDeletes: 1,
 		},
+		"NilResponse": {
+			mock: &fake.MockEC2Client{MockCreateSecurityGroup: func(context.Context, *svcsdk.CreateSecurityGroupInput) (*svcsdk.CreateSecurityGroupOutput, error) {
+				return nil, nil
+			}},
+			wantErr:     true,
+			wantErrText: errNoGroupID,
+			wantNoName:  true,
+		},
 		"CreateFails": {
 			mock: &fake.MockEC2Client{MockCreateSecurityGroup: func(context.Context, *svcsdk.CreateSecurityGroupInput) (*svcsdk.CreateSecurityGroupOutput, error) {
 				return nil, apiErr("InvalidGroup.Duplicate")
@@ -450,9 +470,17 @@ func TestCreate(t *testing.T) {
 			if tc.cancelled {
 				cancel()
 			}
+			spec := cr.Spec.ForProvider.DeepCopy()
 			_, err := newTestExternal(tc.mock).Create(ctx, cr)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("Create() error = %v, wantErr %v", err, tc.wantErr)
+			}
+			// Create writes status only; spec stays as the user wrote it.
+			if diff := cmp.Diff(spec, &cr.Spec.ForProvider); diff != "" {
+				t.Errorf("Create() changed spec.forProvider (-before +after):\n%s", diff)
+			}
+			if !tc.wantNoName && aws.ToString(cr.Status.AtProvider.GroupID) != testID {
+				t.Errorf("status.atProvider.groupID = %q, want %q", aws.ToString(cr.Status.AtProvider.GroupID), testID)
 			}
 			if err != nil && !strings.Contains(err.Error(), tc.wantErrText) {
 				t.Errorf("Create() error = %v, want containing %q", err, tc.wantErrText)
@@ -484,6 +512,7 @@ func TestCreate(t *testing.T) {
 func TestUpdateTags(t *testing.T) {
 	cr := group(withExternalName(testID), func(cr *svcapitypes.SecurityGroup) {
 		cr.Spec.ForProvider.Tags = []*svcapitypes.Tag{{Key: aws.String("team"), Value: aws.String("b")}}
+		meta.AddAnnotations(cr, map[string]string{svcutils.AnnotationManagedTagKeys: record("old", "team")})
 		cr.Status.AtProvider.Tags = []*svcapitypes.Tag{
 			{Key: aws.String("team"), Value: aws.String("a")},
 			{Key: aws.String("old"), Value: aws.String("x")},

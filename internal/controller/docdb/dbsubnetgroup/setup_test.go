@@ -205,6 +205,7 @@ func TestObserve(t *testing.T) {
 					Diff:             "spec.forProvider fields differ from the observed state: dbSubnetGroupDescription",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBSubnetGroups: []*fake.CallDescribeDBSubnetGroups{
 						{
 							Ctx: context.Background(),
@@ -306,6 +307,7 @@ func TestObserve(t *testing.T) {
 					Diff:             "spec.forProvider fields differ from the observed state: subnetIDs",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBSubnetGroups: []*fake.CallDescribeDBSubnetGroups{
 						{
 							Ctx: context.Background(),

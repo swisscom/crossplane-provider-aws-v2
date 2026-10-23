@@ -27,6 +27,7 @@ import (
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/docdb"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/docdb/types"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
@@ -42,6 +43,10 @@ func GenerateDescribeDBInstancesInput(cr *svcapitypes.DBInstance) (*svcsdk.Descr
 		res.DBInstanceIdentifier = cr.Status.AtProvider.DBInstanceIdentifier
 	}
 
+	// The external name identifies the resource; status may be empty or stale.
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBInstanceIdentifier = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -50,7 +55,8 @@ func GenerateDBInstance(resp *svcsdk.DescribeDBInstancesOutput) *svcapitypes.DBI
 	cr := &svcapitypes.DBInstance{}
 
 	found := false
-	for _, elem := range resp.DBInstances {
+	if len(resp.DBInstances) > 0 {
+		elem := resp.DBInstances[0]
 		if elem.AutoMinorVersionUpgrade != nil {
 			cr.Spec.ForProvider.AutoMinorVersionUpgrade = elem.AutoMinorVersionUpgrade
 		} else {
@@ -242,21 +248,18 @@ func GenerateDBInstance(resp *svcsdk.DescribeDBInstancesOutput) *svcapitypes.DBI
 			if elem.PendingModifiedValues.LicenseModel != nil {
 				f20.LicenseModel = elem.PendingModifiedValues.LicenseModel
 			}
-			if elem.PendingModifiedValues.MasterUserPassword != nil {
-				f20.MasterUserPassword = elem.PendingModifiedValues.MasterUserPassword
-			}
 			if elem.PendingModifiedValues.MultiAZ != nil {
 				f20.MultiAZ = elem.PendingModifiedValues.MultiAZ
 			}
 			if elem.PendingModifiedValues.PendingCloudwatchLogsExports != nil {
-				f20f11 := &svcapitypes.PendingCloudwatchLogsExports{}
+				f20f10 := &svcapitypes.PendingCloudwatchLogsExports{}
 				if elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToDisable != nil {
-					f20f11.LogTypesToDisable = aws.StringSlice(elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToDisable)
+					f20f10.LogTypesToDisable = aws.StringSlice(elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToDisable)
 				}
 				if elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToEnable != nil {
-					f20f11.LogTypesToEnable = aws.StringSlice(elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToEnable)
+					f20f10.LogTypesToEnable = aws.StringSlice(elem.PendingModifiedValues.PendingCloudwatchLogsExports.LogTypesToEnable)
 				}
-				f20.PendingCloudwatchLogsExports = f20f11
+				f20.PendingCloudwatchLogsExports = f20f10
 			}
 			if elem.PendingModifiedValues.Port != nil {
 				portCopy := int64(*elem.PendingModifiedValues.Port)
@@ -344,7 +347,6 @@ func GenerateDBInstance(resp *svcsdk.DescribeDBInstancesOutput) *svcapitypes.DBI
 			cr.Status.AtProvider.VPCSecurityGroups = nil
 		}
 		found = true
-		break
 	}
 	if !found {
 		return cr
@@ -444,6 +446,9 @@ func GenerateModifyDBInstanceInput(cr *svcapitypes.DBInstance) (*svcsdk.ModifyDB
 		res.PromotionTier = &promotionTierCopy
 	}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBInstanceIdentifier = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -482,6 +487,9 @@ func DiffUpdatableParameters(desired, observed *svcapitypes.DBInstanceParameters
 func GenerateDeleteDBInstanceInput(cr *svcapitypes.DBInstance) (*svcsdk.DeleteDBInstanceInput, error) {
 	res := &svcsdk.DeleteDBInstanceInput{}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBInstanceIdentifier = aws.String(name)
+	}
 	return res, nil
 }
 

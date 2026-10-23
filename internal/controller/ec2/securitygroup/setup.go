@@ -44,6 +44,7 @@ const (
 
 	errFmtImmutable      = "%s cannot be changed: it is %q in AWS but %q in the spec; delete and recreate the security group"
 	errRevokeEgress      = "cannot revoke a default egress rule"
+	errNoGroupID         = "AWS returned no security group ID"
 	errRollback          = "cannot delete the security group after failing to revoke its default egress rules"
 	errAdoptDescribe     = "cannot look up the security group by name"
 	errFmtAdoptAmbiguous = "adoptExistingByName: %d security groups are named %q; set vpcID or the crossplane.io/external-name annotation"
@@ -61,6 +62,13 @@ var revokeBackoff = []time.Duration{time.Second, 2 * time.Second, 4 * time.Secon
 
 type hooks struct {
 	client Client
+	// tags are the tags Observe saw: the late-init update replaces the
+	// status before Update runs.
+	tags     []*svcapitypes.Tag
+	observed bool
+	// tagKeysChanged makes Observe report a late-init so that the runtime
+	// persists the managed tag keys.
+	tagKeysChanged bool
 }
 
 // groupName returns the name of the group: spec.forProvider.groupName,
@@ -77,10 +85,11 @@ func preObserve(_ context.Context, cr *svcapitypes.SecurityGroup, obj *svcsdk.De
 	return nil
 }
 
-func postObserve(_ context.Context, cr *svcapitypes.SecurityGroup, _ *svcsdk.DescribeSecurityGroupsOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
+func (h *hooks) postObserve(_ context.Context, cr *svcapitypes.SecurityGroup, _ *svcsdk.DescribeSecurityGroupsOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
 	if err != nil {
 		return obs, err
 	}
+	obs.ResourceLateInitialized = obs.ResourceLateInitialized || h.tagKeysChanged
 	cr.SetConditions(xpv2.Available())
 	return obs, nil
 }
@@ -94,7 +103,7 @@ func lateInitialize(spec *svcapitypes.SecurityGroupParameters, resp *svcsdk.Desc
 
 // isUpToDate returns an error for differences AWS can't change in place: the
 // name, description and VPC of a group are fixed. Only tags are updated.
-func isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroup, resp *svcsdk.DescribeSecurityGroupsOutput) (bool, string, error) {
+func (h *hooks) isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroup, resp *svcsdk.DescribeSecurityGroupsOutput) (bool, string, error) {
 	g := resp.SecurityGroups[0]
 	p := cr.Spec.ForProvider
 	for _, f := range []struct {
@@ -109,16 +118,21 @@ func isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroup, resp *svcsdk.D
 			return false, "", errors.Errorf(errFmtImmutable, f.name, pointer.StringValue(f.actual), *f.desired)
 		}
 	}
-	add, remove := svcutils.DiffTags(svcutils.DesiredTags(cr, p.Tags), svcutils.FromSDK(g.Tags))
-	if len(add)+len(remove) > 0 {
+	h.tags, h.observed = svcutils.FromSDK(g.Tags), true
+	upToDate, changed := svcutils.ObserveTags(cr, svcutils.DesiredTags(cr, p.Tags), h.tags)
+	h.tagKeysChanged = changed
+	if !upToDate {
 		return false, compare.Message([]string{"tags"}), nil
 	}
 	return true, "", nil
 }
 
 func (h *hooks) update(ctx context.Context, cr *svcapitypes.SecurityGroup) (managed.ExternalUpdate, error) {
-	// Observe ran in the same reconcile and stored the current tags.
-	return managed.ExternalUpdate{}, svcutils.UpdateTags(ctx, h.client, meta.GetExternalName(cr), svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), cr.Status.AtProvider.Tags)
+	current := cr.Status.AtProvider.Tags
+	if h.observed {
+		current = h.tags
+	}
+	return managed.ExternalUpdate{}, svcutils.UpdateTags(ctx, h.client, cr, meta.GetExternalName(cr), svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), current)
 }
 
 func preCreate(_ context.Context, cr *svcapitypes.SecurityGroup, obj *svcsdk.CreateSecurityGroupInput) error {
@@ -135,7 +149,11 @@ func (h *hooks) postCreate(ctx context.Context, cr *svcapitypes.SecurityGroup, r
 	if err != nil {
 		return cre, err
 	}
-	id := pointer.StringValue(resp.GroupId)
+	// Without the AWS-assigned ID the group can't be found again.
+	if resp == nil || resp.GroupId == nil {
+		return cre, errors.New(errNoGroupID)
+	}
+	id := *resp.GroupId
 	meta.SetExternalName(cr, id)
 
 	if err := h.revokeDefaultEgress(ctx, id); err != nil {
@@ -257,9 +275,9 @@ func adoptingWrapper(rec event.Recorder) func(*external) managed.TypedExternalCl
 func setupExternal(e *external) {
 	h := &hooks{client: e.client}
 	e.preObserve = preObserve
-	e.postObserve = postObserve
+	e.postObserve = h.postObserve
 	e.lateInitialize = lateInitialize
-	e.isUpToDate = isUpToDate
+	e.isUpToDate = h.isUpToDate
 	e.update = h.update
 	e.preCreate = preCreate
 	e.postCreate = h.postCreate

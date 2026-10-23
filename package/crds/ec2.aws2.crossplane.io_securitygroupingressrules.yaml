@@ -198,6 +198,9 @@ spec:
                     description: Region is which region the SecurityGroupIngressRule
                       will be created.
                     type: string
+                    x-kubernetes-validations:
+                    - message: region is immutable
+                      rule: self == oldSelf
                   securityGroupID:
                     description: SecurityGroupID is the ID of the security group the
                       rule belongs to.

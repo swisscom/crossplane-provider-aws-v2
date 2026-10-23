@@ -50,6 +50,13 @@ const reasonAdopted event.Reason = "AdoptedExistingSecurityGroupRule"
 
 type hooks struct {
 	client Client
+	// tags are the tags Observe saw: the late-init update replaces the
+	// status before Update runs.
+	tags     []*svcapitypes.Tag
+	observed bool
+	// tagKeysChanged makes Observe report a late-init so that the runtime
+	// persists the managed tag keys.
+	tagKeysChanged bool
 }
 
 func ruleOf(cr *svcapitypes.SecurityGroupEgressRule) svcutils.Rule {
@@ -72,10 +79,11 @@ func preObserve(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, obj 
 	return nil
 }
 
-func postObserve(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, resp *svcsdk.DescribeSecurityGroupRulesOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
+func (h *hooks) postObserve(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, resp *svcsdk.DescribeSecurityGroupRulesOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
 	if err != nil {
 		return obs, err
 	}
+	obs.ResourceLateInitialized = obs.ResourceLateInitialized || h.tagKeysChanged
 	r := resp.SecurityGroupRules[0]
 	cr.Status.AtProvider.SecurityGroupRuleID = r.SecurityGroupRuleId
 	cr.Status.AtProvider.SecurityGroupRuleARN = r.SecurityGroupRuleArn
@@ -85,14 +93,16 @@ func postObserve(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, res
 	return obs, nil
 }
 
-func isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, resp *svcsdk.DescribeSecurityGroupRulesOutput) (bool, string, error) {
+func (h *hooks) isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, resp *svcsdk.DescribeSecurityGroupRulesOutput) (bool, string, error) {
 	r := resp.SecurityGroupRules[0]
 	diff, err := ruleOf(cr).Diff(r, egress)
 	if err != nil {
 		return false, "", err
 	}
-	add, remove := svcutils.DiffTags(svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), svcutils.FromSDK(r.Tags))
-	if len(add)+len(remove) > 0 {
+	h.tags, h.observed = svcutils.FromSDK(r.Tags), true
+	tagsUpToDate, changed := svcutils.ObserveTags(cr, svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), h.tags)
+	h.tagKeysChanged = changed
+	if !tagsUpToDate {
 		diff = append(diff, "tags")
 	}
 	return len(diff) == 0, compare.Message(diff), nil
@@ -116,7 +126,8 @@ func postCreate(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, resp
 	if err != nil {
 		return cre, err
 	}
-	if len(resp.SecurityGroupRules) == 0 {
+	// Without the AWS-assigned rule ID the rule can't be found again.
+	if resp == nil || len(resp.SecurityGroupRules) == 0 || resp.SecurityGroupRules[0].SecurityGroupRuleId == nil {
 		return cre, errors.New(errNoRuleCreated)
 	}
 	meta.SetExternalName(cr, *resp.SecurityGroupRules[0].SecurityGroupRuleId)
@@ -137,8 +148,11 @@ func (h *hooks) postUpdate(ctx context.Context, cr *svcapitypes.SecurityGroupEgr
 	if err != nil {
 		return upd, err
 	}
-	// Observe ran in the same reconcile and stored the current tags.
-	return upd, svcutils.UpdateTags(ctx, h.client, meta.GetExternalName(cr), svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), cr.Status.AtProvider.Tags)
+	current := cr.Status.AtProvider.Tags
+	if h.observed {
+		current = h.tags
+	}
+	return upd, svcutils.UpdateTags(ctx, h.client, cr, meta.GetExternalName(cr), svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), current)
 }
 
 func preDelete(_ context.Context, cr *svcapitypes.SecurityGroupEgressRule, obj *svcsdk.RevokeSecurityGroupEgressInput) (bool, error) {
@@ -194,8 +208,8 @@ func adoptingWrapper(rec event.Recorder) func(*external) managed.TypedExternalCl
 func setupExternal(e *external) {
 	h := &hooks{client: e.client}
 	e.preObserve = preObserve
-	e.postObserve = postObserve
-	e.isUpToDate = isUpToDate
+	e.postObserve = h.postObserve
+	e.isUpToDate = h.isUpToDate
 	e.preCreate = preCreate
 	e.postCreate = postCreate
 	e.preUpdate = preUpdate

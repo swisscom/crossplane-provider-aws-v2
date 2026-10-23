@@ -44,11 +44,13 @@ import (
 )
 
 const (
-	errCreateConfig = "cannot create AWS config"
-	errCreate       = "cannot create DBCluster in AWS"
-	errUpdate       = "cannot update DBCluster in AWS"
-	errDescribe     = "failed to describe DBCluster"
-	errDelete       = "failed to delete DBCluster"
+	errCreateConfig  = "cannot create AWS config"
+	errCreate        = "cannot create DBCluster in AWS"
+	errUpdate        = "cannot update DBCluster in AWS"
+	errDescribe      = "failed to describe DBCluster"
+	errDelete        = "failed to delete DBCluster"
+	errEmptyDescribe = "AWS returned an empty DBCluster description"
+	errMultipleFound = "found %d DBCluster resources with external name %q, expected one"
 
 	// Used by hand-written code imported from provider-aws.
 	errUnexpectedObject = "managed resource is not an DBCluster resource"
@@ -89,6 +91,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		}),
 		managed.WithLogger(o.Logger.WithValues("controller", name)),
 		managed.WithPollInterval(o.PollInterval),
+		//lint:ignore SA1019 crossplane-runtime's event recorder still needs the old events API
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	}
 	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
@@ -174,15 +177,26 @@ func (e *external) Observe(ctx context.Context, cr *svcapitypes.DBCluster) (mana
 	if err != nil {
 		return managed.ExternalObservation{ResourceExists: false}, awsclient.Wrap(cpresource.Ignore(IsNotFound, err), errDescribe)
 	}
+	if resp == nil {
+		// Not "doesn't exist": that would create a duplicate.
+		return managed.ExternalObservation{}, errors.New(errEmptyDescribe)
+	}
 	resp = e.filterList(cr, resp)
-	if len(resp.DBClusters) == 0 {
+	switch n := len(resp.DBClusters); {
+	case n == 0:
 		return managed.ExternalObservation{ResourceExists: false}, nil
+	case n > 1:
+		// Never pick one of several: it may belong to someone else.
+		return managed.ExternalObservation{}, errors.Errorf(errMultipleFound, n, meta.GetExternalName(cr))
 	}
 	currentSpec := cr.Spec.ForProvider.DeepCopy()
 	if err := e.lateInitialize(&cr.Spec.ForProvider, resp); err != nil {
 		return managed.ExternalObservation{}, errors.Wrap(err, "late-init failed")
 	}
-	GenerateDBCluster(resp).Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	observed := GenerateDBCluster(resp).Status.AtProvider
+	// Hooks own the custom fields; postObserve refreshes them.
+	observed.CustomDBClusterObservation = cr.Status.AtProvider.CustomDBClusterObservation
+	observed.DeepCopyInto(&cr.Status.AtProvider)
 	upToDate := true
 	diff := ""
 	if !meta.WasDeleted(cr) { // There is no need to run isUpToDate if the resource is deleted
@@ -212,257 +226,263 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBCluster) (manag
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// A nil response leaves status to the next observe.
+	if resp != nil && resp.DBCluster != nil {
+		// Only status: spec is the user's desired state and is never rewritten.
+		ko := cr.DeepCopy()
 
-	if resp.DBCluster.AssociatedRoles != nil {
-		f0 := []*svcapitypes.DBClusterRole{}
-		for _, f0iter := range resp.DBCluster.AssociatedRoles {
-			f0elem := &svcapitypes.DBClusterRole{}
-			if f0iter.RoleArn != nil {
-				f0elem.RoleARN = f0iter.RoleArn
+		if resp.DBCluster.AssociatedRoles != nil {
+			f0 := []*svcapitypes.DBClusterRole{}
+			for _, f0iter := range resp.DBCluster.AssociatedRoles {
+				f0elem := &svcapitypes.DBClusterRole{}
+				if f0iter.RoleArn != nil {
+					f0elem.RoleARN = f0iter.RoleArn
+				}
+				if f0iter.Status != nil {
+					f0elem.Status = f0iter.Status
+				}
+				f0 = append(f0, f0elem)
 			}
-			if f0iter.Status != nil {
-				f0elem.Status = f0iter.Status
+			ko.Status.AtProvider.AssociatedRoles = f0
+		} else {
+			ko.Status.AtProvider.AssociatedRoles = nil
+		}
+		if resp.DBCluster.AvailabilityZones != nil {
+			ko.Spec.ForProvider.AvailabilityZones = aws.StringSlice(resp.DBCluster.AvailabilityZones)
+		} else {
+			ko.Spec.ForProvider.AvailabilityZones = nil
+		}
+		if resp.DBCluster.BackupRetentionPeriod != nil {
+			backupRetentionPeriodCopy := int64(*resp.DBCluster.BackupRetentionPeriod)
+			ko.Spec.ForProvider.BackupRetentionPeriod = &backupRetentionPeriodCopy
+		} else {
+			ko.Spec.ForProvider.BackupRetentionPeriod = nil
+		}
+		if resp.DBCluster.CloneGroupId != nil {
+			ko.Status.AtProvider.CloneGroupID = resp.DBCluster.CloneGroupId
+		} else {
+			ko.Status.AtProvider.CloneGroupID = nil
+		}
+		if resp.DBCluster.ClusterCreateTime != nil {
+			ko.Status.AtProvider.ClusterCreateTime = &metav1.Time{Time: *resp.DBCluster.ClusterCreateTime}
+		} else {
+			ko.Status.AtProvider.ClusterCreateTime = nil
+		}
+		if resp.DBCluster.CopyTagsToSnapshot != nil {
+			ko.Spec.ForProvider.CopyTagsToSnapshot = resp.DBCluster.CopyTagsToSnapshot
+		} else {
+			ko.Spec.ForProvider.CopyTagsToSnapshot = nil
+		}
+		if resp.DBCluster.DBClusterArn != nil {
+			ko.Status.AtProvider.DBClusterARN = resp.DBCluster.DBClusterArn
+		} else {
+			ko.Status.AtProvider.DBClusterARN = nil
+		}
+		if resp.DBCluster.DBClusterIdentifier != nil {
+			ko.Status.AtProvider.DBClusterIdentifier = resp.DBCluster.DBClusterIdentifier
+		} else {
+			ko.Status.AtProvider.DBClusterIdentifier = nil
+		}
+		if resp.DBCluster.DBClusterMembers != nil {
+			f8 := []*svcapitypes.DBClusterMember{}
+			for _, f8iter := range resp.DBCluster.DBClusterMembers {
+				f8elem := &svcapitypes.DBClusterMember{}
+				if f8iter.DBClusterParameterGroupStatus != nil {
+					f8elem.DBClusterParameterGroupStatus = f8iter.DBClusterParameterGroupStatus
+				}
+				if f8iter.DBInstanceIdentifier != nil {
+					f8elem.DBInstanceIdentifier = f8iter.DBInstanceIdentifier
+				}
+				if f8iter.IsClusterWriter != nil {
+					f8elem.IsClusterWriter = f8iter.IsClusterWriter
+				}
+				if f8iter.PromotionTier != nil {
+					promotionTierCopy := int64(*f8iter.PromotionTier)
+					f8elem.PromotionTier = &promotionTierCopy
+				}
+				f8 = append(f8, f8elem)
 			}
-			f0 = append(f0, f0elem)
+			ko.Status.AtProvider.DBClusterMembers = f8
+		} else {
+			ko.Status.AtProvider.DBClusterMembers = nil
 		}
-		cr.Status.AtProvider.AssociatedRoles = f0
-	} else {
-		cr.Status.AtProvider.AssociatedRoles = nil
-	}
-	if resp.DBCluster.AvailabilityZones != nil {
-		cr.Spec.ForProvider.AvailabilityZones = aws.StringSlice(resp.DBCluster.AvailabilityZones)
-	} else {
-		cr.Spec.ForProvider.AvailabilityZones = nil
-	}
-	if resp.DBCluster.BackupRetentionPeriod != nil {
-		backupRetentionPeriodCopy := int64(*resp.DBCluster.BackupRetentionPeriod)
-		cr.Spec.ForProvider.BackupRetentionPeriod = &backupRetentionPeriodCopy
-	} else {
-		cr.Spec.ForProvider.BackupRetentionPeriod = nil
-	}
-	if resp.DBCluster.CloneGroupId != nil {
-		cr.Status.AtProvider.CloneGroupID = resp.DBCluster.CloneGroupId
-	} else {
-		cr.Status.AtProvider.CloneGroupID = nil
-	}
-	if resp.DBCluster.ClusterCreateTime != nil {
-		cr.Status.AtProvider.ClusterCreateTime = &metav1.Time{Time: *resp.DBCluster.ClusterCreateTime}
-	} else {
-		cr.Status.AtProvider.ClusterCreateTime = nil
-	}
-	if resp.DBCluster.CopyTagsToSnapshot != nil {
-		cr.Spec.ForProvider.CopyTagsToSnapshot = resp.DBCluster.CopyTagsToSnapshot
-	} else {
-		cr.Spec.ForProvider.CopyTagsToSnapshot = nil
-	}
-	if resp.DBCluster.DBClusterArn != nil {
-		cr.Status.AtProvider.DBClusterARN = resp.DBCluster.DBClusterArn
-	} else {
-		cr.Status.AtProvider.DBClusterARN = nil
-	}
-	if resp.DBCluster.DBClusterIdentifier != nil {
-		cr.Status.AtProvider.DBClusterIdentifier = resp.DBCluster.DBClusterIdentifier
-	} else {
-		cr.Status.AtProvider.DBClusterIdentifier = nil
-	}
-	if resp.DBCluster.DBClusterMembers != nil {
-		f8 := []*svcapitypes.DBClusterMember{}
-		for _, f8iter := range resp.DBCluster.DBClusterMembers {
-			f8elem := &svcapitypes.DBClusterMember{}
-			if f8iter.DBClusterParameterGroupStatus != nil {
-				f8elem.DBClusterParameterGroupStatus = f8iter.DBClusterParameterGroupStatus
+		if resp.DBCluster.DBClusterParameterGroup != nil {
+			ko.Status.AtProvider.DBClusterParameterGroup = resp.DBCluster.DBClusterParameterGroup
+		} else {
+			ko.Status.AtProvider.DBClusterParameterGroup = nil
+		}
+		if resp.DBCluster.DBSubnetGroup != nil {
+			ko.Status.AtProvider.DBSubnetGroup = resp.DBCluster.DBSubnetGroup
+		} else {
+			ko.Status.AtProvider.DBSubnetGroup = nil
+		}
+		if resp.DBCluster.DbClusterResourceId != nil {
+			ko.Status.AtProvider.DBClusterResourceID = resp.DBCluster.DbClusterResourceId
+		} else {
+			ko.Status.AtProvider.DBClusterResourceID = nil
+		}
+		if resp.DBCluster.DeletionProtection != nil {
+			ko.Spec.ForProvider.DeletionProtection = resp.DBCluster.DeletionProtection
+		} else {
+			ko.Spec.ForProvider.DeletionProtection = nil
+		}
+		if resp.DBCluster.EarliestRestorableTime != nil {
+			ko.Status.AtProvider.EarliestRestorableTime = &metav1.Time{Time: *resp.DBCluster.EarliestRestorableTime}
+		} else {
+			ko.Status.AtProvider.EarliestRestorableTime = nil
+		}
+		if resp.DBCluster.EnabledCloudwatchLogsExports != nil {
+			ko.Status.AtProvider.EnabledCloudwatchLogsExports = aws.StringSlice(resp.DBCluster.EnabledCloudwatchLogsExports)
+		} else {
+			ko.Status.AtProvider.EnabledCloudwatchLogsExports = nil
+		}
+		if resp.DBCluster.Endpoint != nil {
+			ko.Status.AtProvider.Endpoint = resp.DBCluster.Endpoint
+		} else {
+			ko.Status.AtProvider.Endpoint = nil
+		}
+		if resp.DBCluster.Engine != nil {
+			ko.Spec.ForProvider.Engine = resp.DBCluster.Engine
+		} else {
+			ko.Spec.ForProvider.Engine = nil
+		}
+		if resp.DBCluster.EngineVersion != nil {
+			ko.Spec.ForProvider.EngineVersion = resp.DBCluster.EngineVersion
+		} else {
+			ko.Spec.ForProvider.EngineVersion = nil
+		}
+		if resp.DBCluster.HostedZoneId != nil {
+			ko.Status.AtProvider.HostedZoneID = resp.DBCluster.HostedZoneId
+		} else {
+			ko.Status.AtProvider.HostedZoneID = nil
+		}
+		if resp.DBCluster.IOOptimizedNextAllowedModificationTime != nil {
+			ko.Status.AtProvider.IOOptimizedNextAllowedModificationTime = &metav1.Time{Time: *resp.DBCluster.IOOptimizedNextAllowedModificationTime}
+		} else {
+			ko.Status.AtProvider.IOOptimizedNextAllowedModificationTime = nil
+		}
+		if resp.DBCluster.KmsKeyId != nil {
+			ko.Spec.ForProvider.KMSKeyID = resp.DBCluster.KmsKeyId
+		} else {
+			ko.Spec.ForProvider.KMSKeyID = nil
+		}
+		if resp.DBCluster.LatestRestorableTime != nil {
+			ko.Status.AtProvider.LatestRestorableTime = &metav1.Time{Time: *resp.DBCluster.LatestRestorableTime}
+		} else {
+			ko.Status.AtProvider.LatestRestorableTime = nil
+		}
+		if resp.DBCluster.MasterUserSecret != nil {
+			f22 := &svcapitypes.ClusterMasterUserSecret{}
+			if resp.DBCluster.MasterUserSecret.KmsKeyId != nil {
+				f22.KMSKeyID = resp.DBCluster.MasterUserSecret.KmsKeyId
 			}
-			if f8iter.DBInstanceIdentifier != nil {
-				f8elem.DBInstanceIdentifier = f8iter.DBInstanceIdentifier
+			if resp.DBCluster.MasterUserSecret.SecretArn != nil {
+				f22.SecretARN = resp.DBCluster.MasterUserSecret.SecretArn
 			}
-			if f8iter.IsClusterWriter != nil {
-				f8elem.IsClusterWriter = f8iter.IsClusterWriter
+			if resp.DBCluster.MasterUserSecret.SecretStatus != nil {
+				f22.SecretStatus = resp.DBCluster.MasterUserSecret.SecretStatus
 			}
-			if f8iter.PromotionTier != nil {
-				promotionTierCopy := int64(*f8iter.PromotionTier)
-				f8elem.PromotionTier = &promotionTierCopy
+			ko.Status.AtProvider.MasterUserSecret = f22
+		} else {
+			ko.Status.AtProvider.MasterUserSecret = nil
+		}
+		if resp.DBCluster.MasterUsername != nil {
+			ko.Spec.ForProvider.MasterUsername = resp.DBCluster.MasterUsername
+		} else {
+			ko.Spec.ForProvider.MasterUsername = nil
+		}
+		if resp.DBCluster.MultiAZ != nil {
+			ko.Status.AtProvider.MultiAZ = resp.DBCluster.MultiAZ
+		} else {
+			ko.Status.AtProvider.MultiAZ = nil
+		}
+		if resp.DBCluster.NetworkType != nil {
+			ko.Spec.ForProvider.NetworkType = resp.DBCluster.NetworkType
+		} else {
+			ko.Spec.ForProvider.NetworkType = nil
+		}
+		if resp.DBCluster.PercentProgress != nil {
+			ko.Status.AtProvider.PercentProgress = resp.DBCluster.PercentProgress
+		} else {
+			ko.Status.AtProvider.PercentProgress = nil
+		}
+		if resp.DBCluster.Port != nil {
+			portCopy := int64(*resp.DBCluster.Port)
+			ko.Spec.ForProvider.Port = &portCopy
+		} else {
+			ko.Spec.ForProvider.Port = nil
+		}
+		if resp.DBCluster.PreferredBackupWindow != nil {
+			ko.Spec.ForProvider.PreferredBackupWindow = resp.DBCluster.PreferredBackupWindow
+		} else {
+			ko.Spec.ForProvider.PreferredBackupWindow = nil
+		}
+		if resp.DBCluster.PreferredMaintenanceWindow != nil {
+			ko.Spec.ForProvider.PreferredMaintenanceWindow = resp.DBCluster.PreferredMaintenanceWindow
+		} else {
+			ko.Spec.ForProvider.PreferredMaintenanceWindow = nil
+		}
+		if resp.DBCluster.ReadReplicaIdentifiers != nil {
+			ko.Status.AtProvider.ReadReplicaIdentifiers = aws.StringSlice(resp.DBCluster.ReadReplicaIdentifiers)
+		} else {
+			ko.Status.AtProvider.ReadReplicaIdentifiers = nil
+		}
+		if resp.DBCluster.ReaderEndpoint != nil {
+			ko.Status.AtProvider.ReaderEndpoint = resp.DBCluster.ReaderEndpoint
+		} else {
+			ko.Status.AtProvider.ReaderEndpoint = nil
+		}
+		if resp.DBCluster.ReplicationSourceIdentifier != nil {
+			ko.Status.AtProvider.ReplicationSourceIdentifier = resp.DBCluster.ReplicationSourceIdentifier
+		} else {
+			ko.Status.AtProvider.ReplicationSourceIdentifier = nil
+		}
+		if resp.DBCluster.ServerlessV2ScalingConfiguration != nil {
+			f33 := &svcapitypes.ServerlessV2ScalingConfiguration{}
+			if resp.DBCluster.ServerlessV2ScalingConfiguration.MaxCapacity != nil {
+				f33.MaxCapacity = resp.DBCluster.ServerlessV2ScalingConfiguration.MaxCapacity
 			}
-			f8 = append(f8, f8elem)
-		}
-		cr.Status.AtProvider.DBClusterMembers = f8
-	} else {
-		cr.Status.AtProvider.DBClusterMembers = nil
-	}
-	if resp.DBCluster.DBClusterParameterGroup != nil {
-		cr.Status.AtProvider.DBClusterParameterGroup = resp.DBCluster.DBClusterParameterGroup
-	} else {
-		cr.Status.AtProvider.DBClusterParameterGroup = nil
-	}
-	if resp.DBCluster.DBSubnetGroup != nil {
-		cr.Status.AtProvider.DBSubnetGroup = resp.DBCluster.DBSubnetGroup
-	} else {
-		cr.Status.AtProvider.DBSubnetGroup = nil
-	}
-	if resp.DBCluster.DbClusterResourceId != nil {
-		cr.Status.AtProvider.DBClusterResourceID = resp.DBCluster.DbClusterResourceId
-	} else {
-		cr.Status.AtProvider.DBClusterResourceID = nil
-	}
-	if resp.DBCluster.DeletionProtection != nil {
-		cr.Spec.ForProvider.DeletionProtection = resp.DBCluster.DeletionProtection
-	} else {
-		cr.Spec.ForProvider.DeletionProtection = nil
-	}
-	if resp.DBCluster.EarliestRestorableTime != nil {
-		cr.Status.AtProvider.EarliestRestorableTime = &metav1.Time{Time: *resp.DBCluster.EarliestRestorableTime}
-	} else {
-		cr.Status.AtProvider.EarliestRestorableTime = nil
-	}
-	if resp.DBCluster.EnabledCloudwatchLogsExports != nil {
-		cr.Status.AtProvider.EnabledCloudwatchLogsExports = aws.StringSlice(resp.DBCluster.EnabledCloudwatchLogsExports)
-	} else {
-		cr.Status.AtProvider.EnabledCloudwatchLogsExports = nil
-	}
-	if resp.DBCluster.Endpoint != nil {
-		cr.Status.AtProvider.Endpoint = resp.DBCluster.Endpoint
-	} else {
-		cr.Status.AtProvider.Endpoint = nil
-	}
-	if resp.DBCluster.Engine != nil {
-		cr.Spec.ForProvider.Engine = resp.DBCluster.Engine
-	} else {
-		cr.Spec.ForProvider.Engine = nil
-	}
-	if resp.DBCluster.EngineVersion != nil {
-		cr.Spec.ForProvider.EngineVersion = resp.DBCluster.EngineVersion
-	} else {
-		cr.Spec.ForProvider.EngineVersion = nil
-	}
-	if resp.DBCluster.HostedZoneId != nil {
-		cr.Status.AtProvider.HostedZoneID = resp.DBCluster.HostedZoneId
-	} else {
-		cr.Status.AtProvider.HostedZoneID = nil
-	}
-	if resp.DBCluster.IOOptimizedNextAllowedModificationTime != nil {
-		cr.Status.AtProvider.IOOptimizedNextAllowedModificationTime = &metav1.Time{Time: *resp.DBCluster.IOOptimizedNextAllowedModificationTime}
-	} else {
-		cr.Status.AtProvider.IOOptimizedNextAllowedModificationTime = nil
-	}
-	if resp.DBCluster.KmsKeyId != nil {
-		cr.Spec.ForProvider.KMSKeyID = resp.DBCluster.KmsKeyId
-	} else {
-		cr.Spec.ForProvider.KMSKeyID = nil
-	}
-	if resp.DBCluster.LatestRestorableTime != nil {
-		cr.Status.AtProvider.LatestRestorableTime = &metav1.Time{Time: *resp.DBCluster.LatestRestorableTime}
-	} else {
-		cr.Status.AtProvider.LatestRestorableTime = nil
-	}
-	if resp.DBCluster.MasterUserSecret != nil {
-		f22 := &svcapitypes.ClusterMasterUserSecret{}
-		if resp.DBCluster.MasterUserSecret.KmsKeyId != nil {
-			f22.KMSKeyID = resp.DBCluster.MasterUserSecret.KmsKeyId
-		}
-		if resp.DBCluster.MasterUserSecret.SecretArn != nil {
-			f22.SecretARN = resp.DBCluster.MasterUserSecret.SecretArn
-		}
-		if resp.DBCluster.MasterUserSecret.SecretStatus != nil {
-			f22.SecretStatus = resp.DBCluster.MasterUserSecret.SecretStatus
-		}
-		cr.Status.AtProvider.MasterUserSecret = f22
-	} else {
-		cr.Status.AtProvider.MasterUserSecret = nil
-	}
-	if resp.DBCluster.MasterUsername != nil {
-		cr.Spec.ForProvider.MasterUsername = resp.DBCluster.MasterUsername
-	} else {
-		cr.Spec.ForProvider.MasterUsername = nil
-	}
-	if resp.DBCluster.MultiAZ != nil {
-		cr.Status.AtProvider.MultiAZ = resp.DBCluster.MultiAZ
-	} else {
-		cr.Status.AtProvider.MultiAZ = nil
-	}
-	if resp.DBCluster.NetworkType != nil {
-		cr.Spec.ForProvider.NetworkType = resp.DBCluster.NetworkType
-	} else {
-		cr.Spec.ForProvider.NetworkType = nil
-	}
-	if resp.DBCluster.PercentProgress != nil {
-		cr.Status.AtProvider.PercentProgress = resp.DBCluster.PercentProgress
-	} else {
-		cr.Status.AtProvider.PercentProgress = nil
-	}
-	if resp.DBCluster.Port != nil {
-		portCopy := int64(*resp.DBCluster.Port)
-		cr.Spec.ForProvider.Port = &portCopy
-	} else {
-		cr.Spec.ForProvider.Port = nil
-	}
-	if resp.DBCluster.PreferredBackupWindow != nil {
-		cr.Spec.ForProvider.PreferredBackupWindow = resp.DBCluster.PreferredBackupWindow
-	} else {
-		cr.Spec.ForProvider.PreferredBackupWindow = nil
-	}
-	if resp.DBCluster.PreferredMaintenanceWindow != nil {
-		cr.Spec.ForProvider.PreferredMaintenanceWindow = resp.DBCluster.PreferredMaintenanceWindow
-	} else {
-		cr.Spec.ForProvider.PreferredMaintenanceWindow = nil
-	}
-	if resp.DBCluster.ReadReplicaIdentifiers != nil {
-		cr.Status.AtProvider.ReadReplicaIdentifiers = aws.StringSlice(resp.DBCluster.ReadReplicaIdentifiers)
-	} else {
-		cr.Status.AtProvider.ReadReplicaIdentifiers = nil
-	}
-	if resp.DBCluster.ReaderEndpoint != nil {
-		cr.Status.AtProvider.ReaderEndpoint = resp.DBCluster.ReaderEndpoint
-	} else {
-		cr.Status.AtProvider.ReaderEndpoint = nil
-	}
-	if resp.DBCluster.ReplicationSourceIdentifier != nil {
-		cr.Status.AtProvider.ReplicationSourceIdentifier = resp.DBCluster.ReplicationSourceIdentifier
-	} else {
-		cr.Status.AtProvider.ReplicationSourceIdentifier = nil
-	}
-	if resp.DBCluster.ServerlessV2ScalingConfiguration != nil {
-		f33 := &svcapitypes.ServerlessV2ScalingConfiguration{}
-		if resp.DBCluster.ServerlessV2ScalingConfiguration.MaxCapacity != nil {
-			f33.MaxCapacity = resp.DBCluster.ServerlessV2ScalingConfiguration.MaxCapacity
-		}
-		if resp.DBCluster.ServerlessV2ScalingConfiguration.MinCapacity != nil {
-			f33.MinCapacity = resp.DBCluster.ServerlessV2ScalingConfiguration.MinCapacity
-		}
-		cr.Spec.ForProvider.ServerlessV2ScalingConfiguration = f33
-	} else {
-		cr.Spec.ForProvider.ServerlessV2ScalingConfiguration = nil
-	}
-	if resp.DBCluster.Status != nil {
-		cr.Status.AtProvider.Status = resp.DBCluster.Status
-	} else {
-		cr.Status.AtProvider.Status = nil
-	}
-	if resp.DBCluster.StorageEncrypted != nil {
-		cr.Spec.ForProvider.StorageEncrypted = resp.DBCluster.StorageEncrypted
-	} else {
-		cr.Spec.ForProvider.StorageEncrypted = nil
-	}
-	if resp.DBCluster.StorageType != nil {
-		cr.Spec.ForProvider.StorageType = resp.DBCluster.StorageType
-	} else {
-		cr.Spec.ForProvider.StorageType = nil
-	}
-	if resp.DBCluster.VpcSecurityGroups != nil {
-		f37 := []*svcapitypes.VPCSecurityGroupMembership{}
-		for _, f37iter := range resp.DBCluster.VpcSecurityGroups {
-			f37elem := &svcapitypes.VPCSecurityGroupMembership{}
-			if f37iter.Status != nil {
-				f37elem.Status = f37iter.Status
+			if resp.DBCluster.ServerlessV2ScalingConfiguration.MinCapacity != nil {
+				f33.MinCapacity = resp.DBCluster.ServerlessV2ScalingConfiguration.MinCapacity
 			}
-			if f37iter.VpcSecurityGroupId != nil {
-				f37elem.VPCSecurityGroupID = f37iter.VpcSecurityGroupId
-			}
-			f37 = append(f37, f37elem)
+			ko.Spec.ForProvider.ServerlessV2ScalingConfiguration = f33
+		} else {
+			ko.Spec.ForProvider.ServerlessV2ScalingConfiguration = nil
 		}
-		cr.Status.AtProvider.VPCSecurityGroups = f37
-	} else {
-		cr.Status.AtProvider.VPCSecurityGroups = nil
-	}
+		if resp.DBCluster.Status != nil {
+			ko.Status.AtProvider.Status = resp.DBCluster.Status
+		} else {
+			ko.Status.AtProvider.Status = nil
+		}
+		if resp.DBCluster.StorageEncrypted != nil {
+			ko.Spec.ForProvider.StorageEncrypted = resp.DBCluster.StorageEncrypted
+		} else {
+			ko.Spec.ForProvider.StorageEncrypted = nil
+		}
+		if resp.DBCluster.StorageType != nil {
+			ko.Spec.ForProvider.StorageType = resp.DBCluster.StorageType
+		} else {
+			ko.Spec.ForProvider.StorageType = nil
+		}
+		if resp.DBCluster.VpcSecurityGroups != nil {
+			f37 := []*svcapitypes.VPCSecurityGroupMembership{}
+			for _, f37iter := range resp.DBCluster.VpcSecurityGroups {
+				f37elem := &svcapitypes.VPCSecurityGroupMembership{}
+				if f37iter.Status != nil {
+					f37elem.Status = f37iter.Status
+				}
+				if f37iter.VpcSecurityGroupId != nil {
+					f37elem.VPCSecurityGroupID = f37iter.VpcSecurityGroupId
+				}
+				f37 = append(f37, f37elem)
+			}
+			ko.Status.AtProvider.VPCSecurityGroups = f37
+		} else {
+			ko.Status.AtProvider.VPCSecurityGroups = nil
+		}
 
+		ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
+	}
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 
@@ -510,7 +530,7 @@ func newExternal(kube client.Client, client Client, opts []option) *external {
 		postObserve:    nopPostObserve,
 		lateInitialize: nopLateInitialize,
 		isUpToDate:     isUpToDateUpdatable,
-		filterList:     nopFilterList,
+		filterList:     filterByExternalName,
 		preCreate:      nopPreCreate,
 		postCreate:     nopPostCreate,
 		preDelete:      nopPreDelete,
@@ -560,7 +580,20 @@ func isUpToDateUpdatable(_ context.Context, cr *svcapitypes.DBCluster, resp *svc
 	return len(diff) == 0, compare.Message(diff), nil
 }
 
-func nopFilterList(_ *svcapitypes.DBCluster, list *svcsdk.DescribeDBClustersOutput) *svcsdk.DescribeDBClustersOutput {
+// filterByExternalName keeps only the resources whose identifier is the
+// external name, because a describe call may return other resources too.
+func filterByExternalName(cr *svcapitypes.DBCluster, list *svcsdk.DescribeDBClustersOutput) *svcsdk.DescribeDBClustersOutput {
+	if list == nil {
+		return list
+	}
+	name := meta.GetExternalName(cr)
+	kept := list.DBClusters[:0]
+	for _, elem := range list.DBClusters {
+		if aws.ToString(elem.DBClusterIdentifier) == name {
+			kept = append(kept, elem)
+		}
+	}
+	list.DBClusters = kept
 	return list
 }
 

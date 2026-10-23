@@ -19,11 +19,13 @@ package dbsubnetgroup
 import (
 	"context"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/docdb"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/docdb/types"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
+	cpresource "github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,6 +39,28 @@ import (
 type hooks struct {
 	client Client
 	kube   client.Client
+	// arn is cached by Observe: the late-init update replaces the status
+	// before Update runs.
+	arn *string
+	// tagKeysChanged makes Observe report a late-init so that the runtime
+	// persists the managed tag keys.
+	tagKeysChanged bool
+}
+
+// observeTags records the ARN and the managed tag keys for Update.
+func (e *hooks) observeTags(ctx context.Context, mg cpresource.Managed, spec []*svcapitypes.Tag, arn *string) (bool, error) {
+	e.arn = arn
+	upToDate, changed, err := svcutils.ObserveTags(ctx, e.client, mg, spec, arn)
+	e.tagKeysChanged = changed
+	return upToDate, err
+}
+
+// tagARN prefers the ARN of this reconcile's Observe.
+func (e *hooks) tagARN(status *string) *string {
+	if e.arn != nil {
+		return e.arn
+	}
+	return status
 }
 
 func preObserve(_ context.Context, cr *svcapitypes.DBSubnetGroup, obj *svcsdk.DescribeDBSubnetGroupsInput) error {
@@ -44,10 +68,11 @@ func preObserve(_ context.Context, cr *svcapitypes.DBSubnetGroup, obj *svcsdk.De
 	return nil
 }
 
-func postObserve(_ context.Context, cr *svcapitypes.DBSubnetGroup, _ *svcsdk.DescribeDBSubnetGroupsOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
+func (e *hooks) postObserve(_ context.Context, cr *svcapitypes.DBSubnetGroup, _ *svcsdk.DescribeDBSubnetGroupsOutput, obs managed.ExternalObservation, err error) (managed.ExternalObservation, error) {
 	if err != nil {
 		return obs, err
 	}
+	obs.ResourceLateInitialized = obs.ResourceLateInitialized || e.tagKeysChanged
 
 	cr.SetConditions(xpv2.Available())
 	return obs, nil
@@ -60,15 +85,15 @@ func (e *hooks) isUpToDate(ctx context.Context, cr *svcapitypes.DBSubnetGroup, r
 	if !areSubnetsEqual(cr.Spec.ForProvider.SubnetIDs, group.Subnets) {
 		diff = append(diff, "subnetIDs")
 	}
-	if len(diff) > 0 {
-		return false, compare.Message(diff), nil
+	// Always, so new spec keys are recorded before Update adds them.
+	tagsUpToDate, err := e.observeTags(ctx, cr, cr.Spec.ForProvider.Tags, group.DBSubnetGroupArn)
+	if err != nil {
+		return false, "", err
 	}
-
-	areTagsUpToDate, err := svcutils.AreTagsUpToDate(ctx, e.client, cr.Spec.ForProvider.Tags, group.DBSubnetGroupArn)
-	if err != nil || !areTagsUpToDate {
-		return false, compare.Message([]string{"tags"}), err
+	if !tagsUpToDate {
+		diff = append(diff, "tags")
 	}
-	return true, "", nil
+	return len(diff) == 0, compare.Message(diff), nil
 }
 
 // areSubnetsEqual reports whether the subnet group consists of exactly the
@@ -104,7 +129,11 @@ func (e *hooks) postUpdate(ctx context.Context, cr *svcapitypes.DBSubnetGroup, r
 	}
 
 	cr.Status.SetConditions(xpv2.Available())
-	return upd, svcutils.UpdateTagsForResource(ctx, e.client, cr.Spec.ForProvider.Tags, resp.DBSubnetGroup.DBSubnetGroupArn)
+	var arn *string
+	if resp != nil && resp.DBSubnetGroup != nil {
+		arn = resp.DBSubnetGroup.DBSubnetGroupArn
+	}
+	return upd, svcutils.UpdateTagsForResource(ctx, e.client, cr, cr.Spec.ForProvider.Tags, e.tagARN(arn))
 }
 
 func preCreate(_ context.Context, cr *svcapitypes.DBSubnetGroup, obj *svcsdk.CreateDBSubnetGroupInput) error {
@@ -121,7 +150,7 @@ func preDelete(_ context.Context, cr *svcapitypes.DBSubnetGroup, obj *svcsdk.Del
 func filterList(cr *svcapitypes.DBSubnetGroup, list *svcsdk.DescribeDBSubnetGroupsOutput) *svcsdk.DescribeDBSubnetGroupsOutput {
 	name := meta.GetExternalName(cr)
 	for _, group := range list.DBSubnetGroups {
-		if pointer.StringValue(group.DBSubnetGroupName) == name {
+		if compare.IdentifierEqual(aws.ToString(group.DBSubnetGroupName), name) {
 			return &svcsdk.DescribeDBSubnetGroupsOutput{
 				Marker:         list.Marker,
 				DBSubnetGroups: []svcsdktypes.DBSubnetGroup{group},
@@ -138,7 +167,7 @@ func filterList(cr *svcapitypes.DBSubnetGroup, list *svcsdk.DescribeDBSubnetGrou
 func setupExternal(e *external) {
 	h := &hooks{client: e.client, kube: e.kube}
 	e.preObserve = preObserve
-	e.postObserve = postObserve
+	e.postObserve = h.postObserve
 	e.isUpToDate = h.isUpToDate
 	e.preUpdate = preUpdate
 	e.postUpdate = h.postUpdate

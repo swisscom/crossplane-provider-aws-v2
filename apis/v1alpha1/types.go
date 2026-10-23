@@ -93,7 +93,10 @@ type AssumeRoleWithWebIdentityOptions struct {
 
 // EndpointConfig overrides the AWS API endpoint, e.g. for LocalStack.
 type EndpointConfig struct {
-	// URL used as the base endpoint for every AWS service client.
+	// URL used as the base endpoint for every AWS service client. STS calls
+	// never use it.
+	// +kubebuilder:validation:MaxLength=2048
+	// +kubebuilder:validation:Pattern=`^https?://([A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?(/[^?#@\s]*)?$`
 	URL string `json:"url"`
 }
 

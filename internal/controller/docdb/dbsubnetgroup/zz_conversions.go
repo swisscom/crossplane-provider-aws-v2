@@ -25,6 +25,7 @@ import (
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/docdb"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/docdb/types"
 	"github.com/aws/smithy-go"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
@@ -35,6 +36,10 @@ import (
 func GenerateDescribeDBSubnetGroupsInput(cr *svcapitypes.DBSubnetGroup) (*svcsdk.DescribeDBSubnetGroupsInput, error) {
 	res := &svcsdk.DescribeDBSubnetGroupsInput{}
 
+	// The external name identifies the resource; status may be empty or stale.
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBSubnetGroupName = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -43,7 +48,8 @@ func GenerateDBSubnetGroup(resp *svcsdk.DescribeDBSubnetGroupsOutput) *svcapityp
 	cr := &svcapitypes.DBSubnetGroup{}
 
 	found := false
-	for _, elem := range resp.DBSubnetGroups {
+	if len(resp.DBSubnetGroups) > 0 {
+		elem := resp.DBSubnetGroups[0]
 		if elem.DBSubnetGroupArn != nil {
 			cr.Status.AtProvider.DBSubnetGroupARN = elem.DBSubnetGroupArn
 		} else {
@@ -98,7 +104,6 @@ func GenerateDBSubnetGroup(resp *svcsdk.DescribeDBSubnetGroupsOutput) *svcapityp
 			cr.Status.AtProvider.VPCID = nil
 		}
 		found = true
-		break
 	}
 	if !found {
 		return cr
@@ -140,6 +145,9 @@ func GenerateModifyDBSubnetGroupInput(cr *svcapitypes.DBSubnetGroup) (*svcsdk.Mo
 		res.DBSubnetGroupDescription = cr.Spec.ForProvider.DBSubnetGroupDescription
 	}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBSubnetGroupName = aws.String(name)
+	}
 	return res, nil
 }
 
@@ -160,6 +168,9 @@ func DiffUpdatableParameters(desired, observed *svcapitypes.DBSubnetGroupParamet
 func GenerateDeleteDBSubnetGroupInput(cr *svcapitypes.DBSubnetGroup) (*svcsdk.DeleteDBSubnetGroupInput, error) {
 	res := &svcsdk.DeleteDBSubnetGroupInput{}
 
+	if name := meta.GetExternalName(cr); name != "" {
+		res.DBSubnetGroupName = aws.String(name)
+	}
 	return res, nil
 }
 

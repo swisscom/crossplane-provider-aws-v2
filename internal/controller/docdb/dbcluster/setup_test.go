@@ -34,13 +34,16 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	v1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
 	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
 	fake "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/docdb/fake"
+	svcutils "github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb/utils"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/compare"
 	pointer "github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
@@ -297,6 +300,13 @@ func withTags(values ...*svcapitypes.Tag) docDBModifier {
 	}
 }
 
+// withManagedTagKeys records keys as tags the provider set.
+func withManagedTagKeys(keys string) docDBModifier {
+	return func(o *svcapitypes.DBCluster) {
+		meta.AddAnnotations(o, map[string]string{svcutils.AnnotationManagedTagKeys: keys})
+	}
+}
+
 func withSkipFinalSnapshot(value bool) docDBModifier {
 	return func(o *svcapitypes.DBCluster) {
 		o.Spec.ForProvider.SkipFinalSnapshot = pointer.ToOrNilIfZeroValue(value)
@@ -331,9 +341,11 @@ func generateConnectionDetails(username, password, readerEndpoint, endpoint stri
 
 	mcd := managed.ConnectionDetails{
 		awsclient.ResourceCredentialsSecretEndpointKey: []byte(endpoint),
-		awsclient.ResourceCredentialsSecretPortKey:     []byte(strconv.Itoa(port)),
 		awsclient.ResourceCredentialsSecretUserKey:     []byte(username),
 		"readerEndpoint": []byte(readerEndpoint),
+	}
+	if port != 0 {
+		mcd[awsclient.ResourceCredentialsSecretPortKey] = []byte(strconv.Itoa(port))
 	}
 	if password != "" {
 		mcd[awsclient.ResourceCredentialsSecretPasswordKey] = []byte(password)
@@ -374,6 +386,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:   pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									BackupRetentionPeriod: pointer.ToIntAsInt32(testBackupRetentionPeriod),
@@ -405,12 +418,11 @@ func TestObserve(t *testing.T) {
 					Diff:                    "spec.forProvider fields differ from the observed state: backupRetentionPeriod",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -423,6 +435,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:   pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									BackupRetentionPeriod: pointer.ToIntAsInt32(testBackupRetentionPeriod),
@@ -461,9 +474,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -481,6 +492,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:   pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									BackupRetentionPeriod: pointer.ToIntAsInt32(testBackupRetentionPeriod),
@@ -518,9 +530,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -538,6 +548,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 								},
@@ -573,9 +584,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -593,6 +602,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                  pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:     pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                  pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									DBClusterParameterGroup: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
@@ -625,12 +635,11 @@ func TestObserve(t *testing.T) {
 					Diff:                    "spec.forProvider fields differ from the observed state: dbClusterParameterGroupName",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -643,6 +652,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                  pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:     pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                  pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									DBClusterParameterGroup: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
@@ -682,9 +692,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -702,6 +710,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                  pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:     pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                  pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									DBClusterParameterGroup: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
@@ -740,9 +749,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -760,6 +767,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									DeletionProtection:  pointer.ToOrNilIfZeroValue(true),
@@ -791,12 +799,11 @@ func TestObserve(t *testing.T) {
 					Diff:                    "spec.forProvider fields differ from the observed state: deletionProtection",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -809,6 +816,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									DeletionProtection:  pointer.ToOrNilIfZeroValue(true),
@@ -847,9 +855,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -867,6 +873,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									DeletionProtection:  pointer.ToOrNilIfZeroValue(true),
@@ -904,9 +911,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -924,6 +929,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									EnabledCloudwatchLogsExports: []string{
@@ -967,12 +973,11 @@ func TestObserve(t *testing.T) {
 					Diff:                    "spec.forProvider fields differ from the observed state: enableCloudwatchLogsExports",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -985,6 +990,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									EnabledCloudwatchLogsExports: []string{
@@ -1027,12 +1033,11 @@ func TestObserve(t *testing.T) {
 					Diff:                    "spec.forProvider fields differ from the observed state: enableCloudwatchLogsExports",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -1045,6 +1050,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									EnabledCloudwatchLogsExports: []string{
@@ -1096,9 +1102,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1116,6 +1120,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									EnabledCloudwatchLogsExports: []string{
@@ -1167,9 +1172,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1187,6 +1190,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									EnabledCloudwatchLogsExports: []string{
@@ -1234,9 +1238,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1254,6 +1256,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									EngineVersion:       pointer.ToOrNilIfZeroValue(testEngineVersion),
@@ -1286,12 +1289,11 @@ func TestObserve(t *testing.T) {
 					Diff:                    "spec.forProvider fields differ from the observed state: engineVersion",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -1304,6 +1306,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									EngineVersion:       pointer.ToOrNilIfZeroValue(testEngineVersion),
@@ -1343,9 +1346,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1356,6 +1357,7 @@ func TestObserve(t *testing.T) {
 				},
 			},
 		},
+		// The secret shows the port AWS listens on until the change is applied.
 		"AvailableState_and_changed_Port_should_not_be_UpToDate": {
 			args: args{
 				docdb: &fake.MockDocDBClient{
@@ -1363,6 +1365,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									Port:                pointer.ToIntAsInt32(testPort),
@@ -1390,16 +1393,15 @@ func TestObserve(t *testing.T) {
 					ResourceExists:          true,
 					ResourceUpToDate:        false,
 					ResourceLateInitialized: true,
-					ConnectionDetails:       generateConnectionDetails("", "", "", "", testOtherPort),
+					ConnectionDetails:       generateConnectionDetails("", "", "", "", testPort),
 					Diff:                    "spec.forProvider fields differ from the observed state: port",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -1412,6 +1414,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									Port:                pointer.ToIntAsInt32(testPort),
@@ -1450,9 +1453,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1470,6 +1471,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:              pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									Port:                pointer.ToIntAsInt32(testPort),
@@ -1507,9 +1509,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1527,6 +1527,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:   pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									PreferredBackupWindow: pointer.ToOrNilIfZeroValue(testPreferredBackupWindow),
@@ -1558,12 +1559,11 @@ func TestObserve(t *testing.T) {
 					Diff:                    "spec.forProvider fields differ from the observed state: preferredBackupWindow",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -1576,6 +1576,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:   pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									PreferredBackupWindow: pointer.ToOrNilIfZeroValue(testPreferredBackupWindow),
@@ -1614,9 +1615,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1634,6 +1633,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:   pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									PreferredBackupWindow: pointer.ToOrNilIfZeroValue(testPreferredBackupWindow),
@@ -1671,9 +1671,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1691,6 +1689,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                     pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:        pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                     pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									PreferredMaintenanceWindow: pointer.ToOrNilIfZeroValue(testPreferredMaintenanceWindow),
@@ -1722,12 +1721,11 @@ func TestObserve(t *testing.T) {
 					Diff:                    "spec.forProvider fields differ from the observed state: preferredMaintenanceWindow",
 				},
 				docdb: fake.MockDocDBClientCall{
+					ListTagsForResource: []*fake.CallListTagsForResource{{I: &docdb.ListTagsForResourceInput{}}},
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -1740,6 +1738,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                     pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:        pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                     pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									PreferredMaintenanceWindow: pointer.ToOrNilIfZeroValue(testPreferredMaintenanceWindow),
@@ -1778,9 +1777,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1798,6 +1795,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                     pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:        pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                     pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									PreferredMaintenanceWindow: pointer.ToOrNilIfZeroValue(testPreferredMaintenanceWindow),
@@ -1835,9 +1833,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -1855,6 +1851,7 @@ func TestObserve(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                     pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:        pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									Status:                     pointer.ToOrNilIfZeroValue(svcapitypes.DocDBInstanceStateAvailable),
 									PreferredMaintenanceWindow: pointer.ToOrNilIfZeroValue(testPreferredMaintenanceWindow),
@@ -1895,9 +1892,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -1930,9 +1925,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -1964,9 +1957,7 @@ func TestObserve(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 				},
@@ -2010,15 +2001,7 @@ func TestCreate(t *testing.T) {
 	}{
 		"SuccessfulCreate": {
 			args: args{
-				kube: &test.MockClient{
-					MockGet: func(ctx context.Context, key client.ObjectKey, obj client.Object) error {
-						s := obj.(*v1.Secret)
-						s.Data = map[string][]byte{
-							testMasterPasswordSecretKey: []byte(testMasterUserPassword),
-						}
-						return nil
-					},
-				},
+				kube: passwordKube(testMasterUserPassword, ""),
 				docdb: &fake.MockDocDBClient{
 					MockCreateDBCluster: func(c context.Context, cdpgi *docdb.CreateDBClusterInput, o ...func(*docdb.Options)) (*docdb.CreateDBClusterOutput, error) {
 						return &docdb.CreateDBClusterOutput{
@@ -2722,6 +2705,7 @@ func TestUpdate(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                  pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:     pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									DBClusterParameterGroup: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
 									EngineVersion:           pointer.ToOrNilIfZeroValue(testEngineVersion),
@@ -2749,6 +2733,7 @@ func TestUpdate(t *testing.T) {
 				cr: instance(
 					withDBClusterIdentifier(testDBClusterIdentifier),
 					withExternalName(testDBClusterIdentifier),
+					withManagedTagKeys(testOtherOtherTagKey),
 					withAvailabilityZones(
 						testAvailabilityZone,
 						testOtherAvailabilityZone,
@@ -2780,6 +2765,7 @@ func TestUpdate(t *testing.T) {
 				cr: instance(
 					withDBClusterIdentifier(testDBClusterIdentifier),
 					withExternalName(testDBClusterIdentifier),
+					withManagedTagKeys(testOtherOtherTagKey),
 					withAvailabilityZones(
 						testAvailabilityZone,
 						testOtherAvailabilityZone,
@@ -2833,9 +2819,7 @@ func TestUpdate(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -2884,6 +2868,7 @@ func TestUpdate(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:                  pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier:     pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 									DBClusterParameterGroup: pointer.ToOrNilIfZeroValue(testDBClusterParameterGroupName),
 									EngineVersion:           pointer.ToOrNilIfZeroValue(testEngineVersion),
@@ -2911,6 +2896,7 @@ func TestUpdate(t *testing.T) {
 				cr: instance(
 					withDBClusterIdentifier(testDBClusterIdentifier),
 					withExternalName(testDBClusterIdentifier),
+					withManagedTagKeys(testOtherOtherTagKey),
 					withAvailabilityZones(
 						testAvailabilityZone,
 						testOtherAvailabilityZone,
@@ -2943,6 +2929,7 @@ func TestUpdate(t *testing.T) {
 				cr: instance(
 					withDBClusterIdentifier(testDBClusterIdentifier),
 					withExternalName(testDBClusterIdentifier),
+					withManagedTagKeys(testOtherOtherTagKey),
 					withAvailabilityZones(
 						testAvailabilityZone,
 						testOtherAvailabilityZone,
@@ -3007,9 +2994,7 @@ func TestUpdate(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 
@@ -3059,6 +3044,7 @@ func TestUpdate(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 								},
 							},
@@ -3107,9 +3093,7 @@ func TestUpdate(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -3137,6 +3121,7 @@ func TestUpdate(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 								},
 							},
@@ -3184,9 +3169,7 @@ func TestUpdate(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -3214,6 +3197,7 @@ func TestUpdate(t *testing.T) {
 						return &docdb.DescribeDBClustersOutput{
 							DBClusters: []docdbtypes.DBCluster{
 								{
+									Engine:              pointer.ToOrNilIfZeroValue(svcapitypes.EngineDocDB),
 									DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
 								},
 							},
@@ -3267,9 +3251,7 @@ func TestUpdate(t *testing.T) {
 					DescribeDBClusters: []*fake.CallDescribeDBClusters{
 						{
 							Ctx: context.Background(),
-							I: &docdb.DescribeDBClustersInput{
-								DBClusterIdentifier: pointer.ToOrNilIfZeroValue(testDBClusterIdentifier),
-							},
+							I:   describeInput(testDBClusterIdentifier),
 						},
 					},
 					ListTagsForResource: []*fake.CallListTagsForResource{
@@ -3340,6 +3322,14 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+// describeInput is the DescribeDBClusters input for id, with the engine filter.
+func describeInput(id string) *docdb.DescribeDBClustersInput {
+	return &docdb.DescribeDBClustersInput{
+		DBClusterIdentifier: pointer.ToOrNilIfZeroValue(id),
+		Filters:             []docdbtypes.Filter{{Name: ptr.To("engine"), Values: []string{svcapitypes.EngineDocDB}}},
+	}
+}
+
 type args struct {
 	docdb *fake.MockDocDBClient
 	kube  client.Client
@@ -3361,6 +3351,9 @@ func TestGetPasswordFromRefUsesNamespaceOfDBCluster(t *testing.T) {
 		MockGet: func(_ context.Context, key client.ObjectKey, obj client.Object) error {
 			got = append(got, key)
 			s := obj.(*v1.Secret)
+			if key.Name == stateSecretName(cr) {
+				return kerrors.NewNotFound(schema.GroupResource{Resource: "secrets"}, key.Name)
+			}
 			if key.Name == testMasterPasswordSecretName {
 				s.Data = map[string][]byte{testMasterPasswordSecretKey: []byte("new")}
 			} else {
@@ -3370,15 +3363,16 @@ func TestGetPasswordFromRefUsesNamespaceOfDBCluster(t *testing.T) {
 		},
 	}
 	h := &hooks{kube: kube}
-	pw, changed, err := h.getPasswordFromRef(context.Background(), cr)
+	pw, changed, err := h.desiredPassword(context.Background(), cr)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if pw != "new" || !changed {
-		t.Errorf("getPasswordFromRef() = %q, %v; want %q, true", pw, changed, "new")
+		t.Errorf("desiredPassword() = %q, %v; want %q, true", pw, changed, "new")
 	}
 	want := []client.ObjectKey{
 		{Namespace: "team-a", Name: testMasterPasswordSecretName},
+		{Namespace: "team-a", Name: stateSecretName(cr)},
 		{Namespace: "team-a", Name: "conn"},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
@@ -3467,6 +3461,7 @@ func TestDiffParameters(t *testing.T) {
 func TestLateInitializeServerlessV2ScalingConfiguration(t *testing.T) {
 	p := &svcapitypes.DBClusterParameters{}
 	out := &docdb.DescribeDBClustersOutput{DBClusters: []docdbtypes.DBCluster{{
+		Engine:                           ptr.To(svcapitypes.EngineDocDB),
 		ServerlessV2ScalingConfiguration: &docdbtypes.ServerlessV2ScalingConfigurationInfo{MaxCapacity: ptr.To[float64](4), MinCapacity: ptr.To[float64](0.5)},
 	}}}
 	if err := lateInitialize(p, out); err != nil {
@@ -3479,19 +3474,12 @@ func TestLateInitializeServerlessV2ScalingConfiguration(t *testing.T) {
 }
 
 // passwordKube returns the master password secret with desired and the
-// connection secret with published as password.
+// connection secret with published as password, and no password state.
 func passwordKube(desired, published string) *test.MockClient {
-	return &test.MockClient{
-		MockGet: func(_ context.Context, key client.ObjectKey, obj client.Object) error {
-			s := obj.(*v1.Secret)
-			if key.Name == testMasterPasswordSecretName {
-				s.Data = map[string][]byte{testMasterPasswordSecretKey: []byte(desired)}
-			} else {
-				s.Data = map[string][]byte{awsclient.ResourceCredentialsSecretPasswordKey: []byte(published)}
-			}
-			return nil
-		},
-	}
+	store := secretStore{}
+	store.put(testMasterPasswordSecretName, map[string][]byte{testMasterPasswordSecretKey: []byte(desired)})
+	store.put("conn", map[string][]byte{awsclient.ResourceCredentialsSecretPasswordKey: []byte(published)})
+	return store.kube()
 }
 
 func passwordCluster(m ...docDBModifier) *svcapitypes.DBCluster {
@@ -3583,7 +3571,7 @@ func TestPreUpdateManageMasterUserPassword(t *testing.T) {
 		"SwitchOff": {
 			manage:   ptr.To(false),
 			observed: managedSecret,
-			want:     &docdb.ModifyDBClusterInput{ManageMasterUserPassword: ptr.To(false), MasterUserPassword: ptr.To("pw")},
+			want:     &docdb.ModifyDBClusterInput{ManageMasterUserPassword: ptr.To(false), MasterUserPassword: ptr.To("pw"), ApplyImmediately: ptr.To(true)},
 		},
 	}
 	for name, tc := range cases {

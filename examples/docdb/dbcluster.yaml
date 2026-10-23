@@ -30,7 +30,9 @@ spec:
     masterUsername: docdbadmin
     # Read from the Secret above, in the namespace of the DBCluster. With
     # autogeneratePassword: true and an empty or missing secret, the
-    # provider generates a password and writes it to this secret.
+    # provider generates a password and writes it to this secret. A changed
+    # password is applied immediately; the provider records a digest of the
+    # applied one in the Secret docdb-dbcluster.<uid>.password-state.
     masterUserPasswordSecretRef:
       name: example-docdb-master-password
       key: password
@@ -43,8 +45,9 @@ spec:
       - eu-central-1a
       - eu-central-1b
       - eu-central-1c
-    # References resolve in the namespace of the DBCluster; alternatively set
-    # dbSubnetGroupName, or select with dbSubnetGroupNameSelector.
+    # References resolve in the namespace of the DBCluster unless namespace is
+    # set on the reference; alternatively set dbSubnetGroupName, or select
+    # with dbSubnetGroupNameSelector.
     dbSubnetGroupNameRef:
       name: example-docdb-subnet-group
     vpcSecurityGroupIDs:
@@ -68,6 +71,8 @@ spec:
     applyImmediately: true
     skipFinalSnapshot: false
     finalDBSnapshotIdentifier: example-docdb-cluster-final
+    # The provider removes only tags it set; tags added by AWS Backup, tag
+    # policies or the console stay.
     tags:
       - key: environment
         value: example

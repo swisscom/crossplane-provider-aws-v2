@@ -10,3 +10,17 @@ clientOperations:
   SecurityGroupIngressRule:
   - CreateTags
   - DeleteTags
+kinds:
+  # AWS assigns the group ID (sg-…), which postCreate stores as the external
+  # name; the name is not unique across VPCs.
+  SecurityGroup:
+    identifier: GroupId
+    identifierInput: GroupIds
+  # AWS assigns the rule ID (sgr-…), which postCreate stores as the external
+  # name.
+  SecurityGroupEgressRule:
+    identifier: SecurityGroupRuleId
+    identifierInput: SecurityGroupRuleIds
+  SecurityGroupIngressRule:
+    identifier: SecurityGroupRuleId
+    identifierInput: SecurityGroupRuleIds

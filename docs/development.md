@@ -123,6 +123,67 @@ Links to examples/<svc>/.
 Rows in "History" are behavior changes, newest first; refactorings without
 behavior change don't need a row.
 
+## Releasing
+
+Provider versions are [SemVer](https://semver.org/) git tags `vX.Y.Z`
+([ADR 0010](adr/0010-release-branches-and-tags.md)). They version the
+package: binary, behavior, flags. Each kind's schema has its own API version
+(`v1alpha1`, …) with the
+[Kubernetes rules](https://kubernetes.io/docs/reference/using-api/#api-versioning):
+
+| API version | Changes allowed in a provider release |
+|-------------|---------------------------------------|
+| `v1alpha1` (all kinds today) | Incompatible changes in a minor release, with migration notes in `CHANGELOG.md` |
+| `v1beta1` and later | Compatible changes only; an incompatible one needs a new API version |
+
+Patch releases have no incompatible changes.
+
+```mermaid
+gitGraph
+  commit
+  commit id: "changelog 0.1.0"
+  branch release-0.1
+  commit tag: "v0.1.0"
+  checkout main
+  commit id: "fix"
+  checkout release-0.1
+  cherry-pick id: "fix" tag: "v0.1.1"
+  checkout main
+  commit id: "feature"
+```
+
+| Branch | What lands there |
+|--------|------------------|
+| `main` | All development, through pull requests with green CI |
+| `release-X.Y` | Cut from `main` for each minor release; only backported fixes |
+
+### Minor release (`vX.Y.0`)
+
+1. PR to `main`: in `CHANGELOG.md`, rename "Unreleased" to
+   `## [X.Y.0] - <date>` and add its link at the bottom. The next change
+   after the release starts a new "Unreleased" section.
+2. After merge, with CI green on that commit, cut the branch:
+   `git switch -c release-X.Y origin/main && git push origin release-X.Y`.
+3. Tag the branch head: run the **Tag** workflow (Actions → Tag, branch
+   `release-X.Y`, version `vX.Y.0`), or
+   `git tag -s -a vX.Y.0 -m vX.Y.0 && git push origin vX.Y.0`.
+4. Create the GitHub release from the tag with the changelog section as
+   notes: `gh release create vX.Y.0 --verify-tag --title vX.Y.0 --notes-file <section.md>`.
+5. Build the package from the tag and push it to your registry
+   ([README](../README.md#installing)). GitHub CI doesn't publish images yet.
+
+### Patch release (`vX.Y.Z`)
+
+1. Fix on `main` first (PR with a changelog entry under "Unreleased").
+2. Backport: label the PR `backport release-X.Y` before merging, or comment
+   `/backport release-X.Y` afterwards; a bot opens the backport PR.
+   Fixes that only apply to the old version go to `release-X.Y` directly.
+3. PR to `release-X.Y`: move the backported entries to
+   `## [X.Y.Z] - <date>`; then tag `vX.Y.Z` on `release-X.Y` and create the
+   GitHub release as above.
+4. PR to `main` that adds the same `[X.Y.Z]` section, so `main`'s changelog
+   lists every release.
+
 ## Definition of done
 
 - [ ] `make services` and `make generate` produce no diff.

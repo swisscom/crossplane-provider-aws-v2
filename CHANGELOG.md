@@ -1,50 +1,31 @@
 # Changelog
 
 User-visible changes of provider-aws-v2. Format:
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/). There are no
-releases yet; everything is under "Unreleased". Per-kind details are in
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), provider versions
+follow [Semantic Versioning](https://semver.org/). Kinds have their own API
+version; `v1alpha1` kinds may change incompatibly in a minor release, with
+migration notes here
+([versioning](docs/development.md#releasing)). Per-kind details are in
 `internal/controller/<service>/<kind>/README.md`.
 
-## [Unreleased]
+## [0.1.0] - 2026-10-27
+
+First release (proof of concept). Details per kind are in its README.
 
 ### Added
 
-- ec2: `SecurityGroup`, `SecurityGroupIngressRule` and
-  `SecurityGroupEgressRule`, generated from scratch (one resource per rule,
-  AWS IDs as external names). New groups have no default egress;
-  `adoptExistingByName` (opt-in) adopts an existing group by name
-  and reports it with an event; `adoptExisting` (opt-in) adopts an existing
-  rule with the same content. Rules can change in place, except their
-  group and source type (AWS).
-- codegen: `generate --list-kinds` prints the kinds of a service and their
-  AWS model names.
-
-- docdb: `DBSubnetGroup` and `DBClusterParameterGroup`, imported from
-  provider-aws; all their updatable fields are compared. `DBCluster` can
-  reference them (`dbSubnetGroupNameRef`, `dbClusterParameterGroupNameRef`
-  and selectors).
-- docdb: `DBCluster` and `DBInstance`, imported from provider-aws, including
-  restore from snapshot / point in time and `serverlessV2ScalingConfiguration`.
-- rds: `DBInstance`, imported from provider-aws, including read replicas,
-  restores (S3, snapshot, point in time) and fields new in AWS SDK v2.
-- Drift detection of all updatable fields for generated kinds
-  (`DiffUpdatableParameters`).
-- `float64` fields are allowed in CRDs.
+- Native Crossplane v2 provider for AWS: AWS SDK for Go v2,
+  namespaced managed resources only, API groups `*.aws2.crossplane.io`.
+- Managed resources:
+  - rds: `DBInstance`
+  - docdb: `DBCluster`, `DBInstance`, `DBSubnetGroup`,
+    `DBClusterParameterGroup`
+  - ec2: `SecurityGroup`, `SecurityGroupIngressRule`,
+    `SecurityGroupEgressRule`
+- Drift detection and update of all updatable fields.
 - `ProviderConfig` (namespaced) and `ClusterProviderConfig` with `Secret`,
-  `IRSA`, `PodIdentity` and `WebIdentity` credentials, `assumeRole` and
-  `endpoint.url`.
-- Code generator (`codegen/cmd/generate`) and importer (`codegen/cmd/import`).
+  `IRSA`, `PodIdentity` and `WebIdentity` credentials and role assumption.
+- Code generator and importer to add kinds from AWS API models or from
+  crossplane-contrib/provider-aws.
 
-### Fixed
-
-- codegen: `ignore.resource_names` written by the importer uses AWS model
-  names (e.g. `Vpc`), so kinds renamed by the generator (`VPC`) are
-  ignored.
-- AWS errors keep their code through wrapping (`errors.As` finds the
-  `smithy.APIError`), so hooks can check it.
-- docdb/DBCluster: changes of any updatable field are applied (previously a
-  hand-picked subset); restore no longer calls `CreateDBCluster`; a changed
-  master password is sent to AWS.
-- docdb/DBInstance: changes of any updatable field are applied.
-- rds/DBInstance: `monitoringInterval: 0` no longer causes a
-  `ModifyDBInstance` every poll when enhanced monitoring is off.
+[0.1.0]: https://github.com/swisscom/crossplane-provider-aws-v2/releases/tag/v0.1.0

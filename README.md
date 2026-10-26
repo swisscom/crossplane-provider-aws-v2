@@ -10,6 +10,26 @@ Status: **proof of concept**.
   `ProviderConfig` or a cluster-wide `ClusterProviderConfig`
 - API groups: `aws2.crossplane.io` (provider configs), `<service>.aws2.crossplane.io` (MRs)
 
+## Installing
+
+Releases are git tags (`vX.Y.Z`, see [CHANGELOG.md](CHANGELOG.md) and
+[Releases](https://github.com/swisscom/crossplane-provider-aws-v2/releases)).
+No package is published to a public registry yet; build it from a tag and
+push it to your own registry:
+
+```shell
+git clone https://github.com/swisscom/crossplane-provider-aws-v2 && cd crossplane-provider-aws-v2
+git checkout v0.1.0 && make submodules
+make build.all       # package: _output/xpkg/<platform>/provider-aws-v2-v0.1.0.xpkg
+crossplane xpkg push \
+  --package-files _output/xpkg/linux_amd64/provider-aws-v2-v0.1.0.xpkg \
+  --package-files _output/xpkg/linux_arm64/provider-aws-v2-v0.1.0.xpkg \
+  <registry>/provider-aws-v2:v0.1.0
+```
+
+The version comes from `git describe --tags`, so build from a clone with
+tags and full history (in CI: no shallow clone).
+
 ## Project layout
 
 ```

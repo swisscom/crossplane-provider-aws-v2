@@ -82,6 +82,9 @@ compiles after `make generate`.
 - Files start with the Apache 2.0 license header (see `codegen/templates/boilerplate.go.tpl`).
 - Commit subjects are scoped: `docdb/dbcluster: …`, `codegen: …`, `importer: …`,
   `docs: …`; sign off with `git commit -s`.
+- Changes reach `main` through pull requests, not direct pushes. Fixes for a
+  released version are backported to `release-X.Y`; releases are tags
+  ([docs/development.md#releasing](docs/development.md#releasing)).
 - Definition of done: `docs/development.md#definition-of-done`.
 
 ## Don'ts

@@ -30,6 +30,21 @@ commands it is given, with switch-heavy AST walkers.
 
 `make` pins `GOTOOLCHAIN` to the Go version of `go.mod`.
 
+## CI and versions
+
+GitHub Actions (`.github/workflows/ci.yml`) runs lint, `make check-diff`
+(generated code up to date), unit tests and `make build.all` on pull
+requests, `main` and `release-*`, and uploads `_output` as a workflow
+artifact. It publishes nothing: the `make publish` step only runs with
+registry credentials, which aren't configured
+([ADR 0010](../adr/0010-release-branches-and-tags.md)). The **Tag** workflow
+creates release tags; **Backport** opens backport PRs to `release-X.Y`.
+
+`VERSION` comes from `git describe --tags` (`v0.1.0` on a tag,
+`v0.1.0-3.gabc1234` three commits after it, `v0.0.0-…` without tags) and is linked into
+the binary (`internal/version`) and the package file name. Release steps:
+[development.md](../development.md#releasing).
+
 ## Layout
 
 | Path | Content |

@@ -16,6 +16,7 @@ deliberate.
 | [0007](0007-generated-drift-detection.md) | Generated drift detection of updatable fields | Accepted |
 | [0008](0008-kind-readme-and-changelog.md) | Per-kind README and a root changelog for history | Accepted |
 | [0009](0009-ec2-security-group-model.md) | Security groups and their rules are separate kinds | Accepted |
+| [0010](0010-release-branches-and-tags.md) | Releases are tags on release branches; no published package yet | Accepted |
 
 ## Writing an ADR
 

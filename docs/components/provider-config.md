@@ -10,8 +10,10 @@ references one with `spec.providerConfigRef` (`kind` + `name`).
 ## Why
 
 - Crossplane v2 separates tenants by namespace: a team gets a namespaced
-  `ProviderConfig` and can't use another team's credentials
-  ([ADR 0002](../adr/0002-namespaced-resources-only.md)).
+  `ProviderConfig`. A `Secret` source can only use a Secret of that
+  namespace. The pod identity sources are not limited, so isolation depends
+  on RBAC (see Pitfalls and
+  [ADR 0011](../adr/0011-credentials-sources.md)).
 - Platform teams still need one shared config: `ClusterProviderConfig`.
 
 ## How it is used
@@ -59,5 +61,11 @@ stored there too. Connection details go only to
 
 - A namespaced `ProviderConfig` may only use a Secret in its own namespace;
   `GetConfig` enforces this.
+- `IRSA`, `PodIdentity` and `WebIdentity` are allowed in a namespaced
+  `ProviderConfig` too, and they use the **provider pod's** identity (and
+  `WebIdentity` a token path from the spec). Don't let tenants create or
+  edit `ProviderConfig`s unless they may act as the provider. Any MR can
+  reference any `ClusterProviderConfig`; restrict that with an admission
+  policy if needed ([ADR 0011](../adr/0011-credentials-sources.md)).
 - `endpoint.url` overrides the endpoint for **all** services of the config
   (meant for LocalStack and tests).

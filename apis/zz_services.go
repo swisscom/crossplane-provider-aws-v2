@@ -21,6 +21,7 @@ package apis
 import (
 	docdbv1alpha1 "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
 	ec2v1alpha1 "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
+	opensearchv1alpha1 "github.com/swisscom/crossplane-provider-aws-v2/apis/opensearch/v1alpha1"
 	rdsv1alpha1 "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
 )
 
@@ -28,6 +29,7 @@ func init() {
 	AddToSchemes = append(AddToSchemes,
 		docdbv1alpha1.SchemeBuilder.AddToScheme,
 		ec2v1alpha1.SchemeBuilder.AddToScheme,
+		opensearchv1alpha1.SchemeBuilder.AddToScheme,
 		rdsv1alpha1.SchemeBuilder.AddToScheme,
 	)
 }

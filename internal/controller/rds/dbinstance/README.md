@@ -5,8 +5,9 @@ standalone, read replica, restored, or a member of an Aurora cluster.
 
 ## Origin
 
-Imported from provider-aws (`swisscom/provider-aws`, revision not recorded;
-the importer records revisions since docdb), ported by hand in `75acc8b`.
+Imported from provider-aws (`crossplane-contrib/provider-aws`, revision not
+recorded; the importer records revisions since docdb), ported by hand in
+`75acc8b`.
 
 ## Behavior
 

@@ -53,5 +53,6 @@ Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
 | Date | Commit | Change |
 |------|--------|--------|
 | 2026-11-04 | | Create no longer copies the AWS response into `spec.forProvider` (status only) |
+| 2026-11-04 | | Tags starting with `aws:` are ignored instead of being removed ([ADR 0011](../../../../docs/adr/0011-only-spec-tags.md)) |
 | 2026-10-09 | `1a8d835` | Compare all updatable fields |
 | 2026-10-09 | `2362ae0` | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced secrets |

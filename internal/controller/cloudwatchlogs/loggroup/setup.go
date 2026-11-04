@@ -19,7 +19,6 @@ package loggroup
 import (
 	"context"
 	"sort"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -28,7 +27,6 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/meta"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
-	cpresource "github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 	xpv2 "github.com/crossplane/crossplane/apis/v2/core/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 
@@ -39,9 +37,6 @@ import (
 )
 
 const (
-	// awsTagPrefix marks tags reserved by AWS; they can't be changed.
-	awsTagPrefix = "aws:"
-
 	errNotObserved        = "the log group was not observed before the update"
 	errPutRetention       = "cannot set the retention"
 	errDeleteRetention    = "cannot remove the retention"
@@ -132,11 +127,13 @@ func diffLogGroup(p *svcapitypes.LogGroupParameters, lg *svcsdktypes.LogGroup) [
 	return diff
 }
 
-// desiredTags returns the spec tags plus the external tags Crossplane sets on
-// every resource (crossplane-kind, crossplane-name, crossplane-providerconfig).
-// Spec tags win.
+// desiredTags returns the spec tags: the tags the log group should have,
+// besides those AWS sets.
 func desiredTags(cr *svcapitypes.LogGroup) map[string]string {
-	tags := cpresource.GetExternalTags(cr)
+	if len(cr.Spec.ForProvider.Tags) == 0 {
+		return nil
+	}
+	tags := make(map[string]string, len(cr.Spec.ForProvider.Tags))
 	for k, v := range cr.Spec.ForProvider.Tags {
 		tags[k] = pointer.StringValue(v)
 	}
@@ -153,7 +150,7 @@ func diffTags(desired, current map[string]string) (add map[string]string, remove
 		}
 	}
 	for k := range current {
-		if _, ok := desired[k]; !ok && !strings.HasPrefix(k, awsTagPrefix) {
+		if _, ok := desired[k]; !ok && !awsclient.IsAWSTag(k) {
 			remove = append(remove, k)
 		}
 	}

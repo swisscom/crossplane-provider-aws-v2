@@ -109,7 +109,7 @@ func isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroup, resp *svcsdk.D
 			return false, "", errors.Errorf(errFmtImmutable, f.name, pointer.StringValue(f.actual), *f.desired)
 		}
 	}
-	add, remove := svcutils.DiffTags(svcutils.DesiredTags(cr, p.Tags), svcutils.FromSDK(g.Tags))
+	add, remove := svcutils.DiffTags(svcutils.SpecTags(p.Tags), svcutils.FromSDK(g.Tags))
 	if len(add)+len(remove) > 0 {
 		return false, compare.Message([]string{"tags"}), nil
 	}
@@ -118,12 +118,12 @@ func isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroup, resp *svcsdk.D
 
 func (h *hooks) update(ctx context.Context, cr *svcapitypes.SecurityGroup) (managed.ExternalUpdate, error) {
 	// Observe ran in the same reconcile and stored the current tags.
-	return managed.ExternalUpdate{}, svcutils.UpdateTags(ctx, h.client, meta.GetExternalName(cr), svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), cr.Status.AtProvider.Tags)
+	return managed.ExternalUpdate{}, svcutils.UpdateTags(ctx, h.client, meta.GetExternalName(cr), svcutils.SpecTags(cr.Spec.ForProvider.Tags), cr.Status.AtProvider.Tags)
 }
 
 func preCreate(_ context.Context, cr *svcapitypes.SecurityGroup, obj *svcsdk.CreateSecurityGroupInput) error {
 	obj.GroupName = aws.String(groupName(cr))
-	obj.TagSpecifications = svcutils.TagSpecifications(svcsdktypes.ResourceTypeSecurityGroup, svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags))
+	obj.TagSpecifications = svcutils.TagSpecifications(svcsdktypes.ResourceTypeSecurityGroup, svcutils.SpecTags(cr.Spec.ForProvider.Tags))
 	return nil
 }
 

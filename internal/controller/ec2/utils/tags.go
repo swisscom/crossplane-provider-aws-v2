@@ -20,12 +20,10 @@ package utils
 import (
 	"context"
 	"sort"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/ec2"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
@@ -35,9 +33,6 @@ import (
 const (
 	errCreateTags = "cannot create tags"
 	errDeleteTags = "cannot delete tags"
-
-	// awsTagPrefix marks tags reserved by AWS; they can't be changed.
-	awsTagPrefix = "aws:"
 )
 
 // TagClient is the part of the EC2 API used to manage tags.
@@ -46,11 +41,10 @@ type TagClient interface {
 	DeleteTags(context.Context, *svcsdk.DeleteTagsInput, ...func(*svcsdk.Options)) (*svcsdk.DeleteTagsOutput, error)
 }
 
-// DesiredTags returns the spec tags plus the external tags Crossplane sets on
-// every resource (crossplane-kind, crossplane-name, crossplane-providerconfig).
-// Spec tags win.
-func DesiredTags(mg resource.Managed, spec []*svcapitypes.Tag) map[string]string {
-	tags := resource.GetExternalTags(mg)
+// SpecTags returns the spec tags as a map: the tags the resource should
+// have, besides those AWS sets.
+func SpecTags(spec []*svcapitypes.Tag) map[string]string {
+	tags := make(map[string]string, len(spec))
 	for _, t := range spec {
 		tags[pointer.StringValue(t.Key)] = pointer.StringValue(t.Value)
 	}
@@ -71,7 +65,7 @@ func DiffTags(desired map[string]string, current []*svcapitypes.Tag) (add []svcs
 	cur := make(map[string]string, len(current))
 	for _, t := range current {
 		k := pointer.StringValue(t.Key)
-		if strings.HasPrefix(k, awsTagPrefix) {
+		if awsclient.IsAWSTag(k) {
 			continue
 		}
 		cur[k] = pointer.StringValue(t.Value)

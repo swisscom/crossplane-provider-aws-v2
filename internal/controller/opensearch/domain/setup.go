@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/opensearch"
@@ -47,8 +46,6 @@ const (
 	// vpcEndpointKey is the key of the endpoint of a VPC domain in
 	// DomainStatus.Endpoints; such domains have no DomainStatus.Endpoint.
 	vpcEndpointKey = "vpc"
-	// awsTagPrefix marks tags reserved by AWS; they can't be changed.
-	awsTagPrefix = "aws:"
 
 	errGetPasswordSecret   = "cannot get the secret of masterUserPasswordSecretRef"
 	errGetConnectionSecret = "cannot get the connection secret"
@@ -265,11 +262,10 @@ func encryptionUpToDate(desired, observed *svcapitypes.EncryptionAtRestOptions) 
 	return observed != nil && compare.KMSKeyIDEqual(*desired.KMSKeyID, pointer.StringValue(observed.KMSKeyID))
 }
 
-// desiredTags returns the spec tags plus the external tags Crossplane sets on
-// every resource (crossplane-kind, crossplane-name, crossplane-providerconfig).
-// Spec tags win.
+// desiredTags returns the spec tags: the tags the domain should have,
+// besides those AWS sets.
 func desiredTags(cr *svcapitypes.Domain) map[string]string {
-	tags := cpresource.GetExternalTags(cr)
+	tags := make(map[string]string, len(cr.Spec.ForProvider.Tags))
 	for _, t := range cr.Spec.ForProvider.Tags {
 		tags[pointer.StringValue(t.Key)] = pointer.StringValue(t.Value)
 	}
@@ -281,7 +277,7 @@ func desiredTags(cr *svcapitypes.Domain) map[string]string {
 func diffTags(desired map[string]string, current []svcsdktypes.Tag) (add []svcsdktypes.Tag, remove []string) {
 	cur := make(map[string]string, len(current))
 	for _, t := range current {
-		if k := pointer.StringValue(t.Key); !strings.HasPrefix(k, awsTagPrefix) {
+		if k := pointer.StringValue(t.Key); !awsclient.IsAWSTag(k) {
 			cur[k] = pointer.StringValue(t.Value)
 		}
 	}

@@ -19,8 +19,21 @@ migration notes here
   and the account-level `ResourcePolicy`. Examples:
   `examples/cloudwatchlogs/`.
 
+### Changed
+
+- ec2: `SecurityGroup`, `SecurityGroupIngressRule` and
+  `SecurityGroupEgressRule` apply only the tags in the spec. They no
+  longer add the `crossplane-kind`, `crossplane-name`,
+  `crossplane-namespace` and `crossplane-providerconfig` tags, and remove
+  them from existing resources on the next reconcile. Add them to
+  `spec.forProvider.tags` to keep them
+  ([ADR 0011](docs/adr/0011-only-spec-tags.md)).
+
 ### Fixed
 
+- docdb: tags starting with `aws:`, which AWS sets and which can't be
+  changed, are ignored. Before, the provider tried to remove them and the
+  resource never became up to date.
 - rds, docdb: creating a resource no longer replaces `spec.forProvider`
   with the values AWS returns. Set fields keep the user's value and are no
   longer cleared when the create response leaves them empty.

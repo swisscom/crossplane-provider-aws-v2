@@ -13,8 +13,8 @@ Generated from scratch on 2026-11-04 (`apis/opensearch/generator-config.yaml`,
 - **External name**: the domain name, by default `metadata.name` (3 to 28
   characters, lowercase letters, numbers, hyphens). Set the
   `crossplane.io/external-name` annotation to manage an existing domain.
-- **Create**: `CreateDomain` with the spec, tags (spec tags plus
-  Crossplane's `crossplane-*` tags) and the master user's password from
+- **Create**: `CreateDomain` with the spec, including its tags (no others
+  are added), and the master user's password from
   `masterUserPasswordSecretRef` (a Secret in the namespace of the Domain).
 - **Drift**: all fields `UpdateDomainConfig` can change, plus:
   - `accessPolicies` compared as JSON; a list with one element equals the

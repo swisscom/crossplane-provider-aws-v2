@@ -77,6 +77,9 @@ func observed(f ...func(*svcsdktypes.LogGroup)) svcsdktypes.LogGroup {
 	return lg
 }
 
+// specTags are the tags of logGroup() in AWS form.
+func specTags() map[string]string { return map[string]string{"team": "search"} }
+
 // mock returns a client that describes the given log groups and lists the
 // given tags; nil tags are the desired tags of logGroup().
 func mock(tags map[string]string, groups ...svcsdktypes.LogGroup) *fake.MockClient {
@@ -197,14 +200,10 @@ func TestCreate(t *testing.T) {
 		LogGroupName:              aws.String(testGroup),
 		LogGroupClass:             svcsdktypes.LogGroupClassInfrequentAccess,
 		DeletionProtectionEnabled: aws.Bool(true),
-		Tags:                      desiredTags(cr),
+		Tags:                      specTags(), // only the spec tags
 	}
 	if diff := cmp.Diff(want, m.Calls["CreateLogGroup"][0], ignoreUnexported); diff != "" {
 		t.Errorf("CreateLogGroup input: -want, +got:\n%s", diff)
-	}
-	got := m.Calls["CreateLogGroup"][0].(*svcsdk.CreateLogGroupInput) //nolint:forcetypeassert // recorded by the mock
-	if got.Tags["crossplane-kind"] == "" || got.Tags["team"] != "search" {
-		t.Errorf("CreateLogGroup tags = %v, want the spec and the external tags", got.Tags)
 	}
 	if n := len(m.Calls) - 1; n != 0 {
 		t.Errorf("Create(...) made %d calls besides CreateLogGroup: %v", n, m.Calls)
@@ -247,11 +246,11 @@ func TestUpdate(t *testing.T) {
 		"Tags": {
 			cr:       logGroup(),
 			observed: observed(),
-			tags:     map[string]string{"team": "other", "old": "x"},
+			// crossplane-kind: added by earlier provider versions
+			tags: map[string]string{"team": "other", "old": "x", "crossplane-kind": "loggroup.cloudwatchlogs.aws2.crossplane.io", "aws:cloudformation:stack-name": "s"},
 			want: map[string][]any{
-				"UntagResource": {&svcsdk.UntagResourceInput{ResourceArn: aws.String(testARN), TagKeys: []string{"old"}}},
-				// team changes, the external tags are new
-				"TagResource": {&svcsdk.TagResourceInput{ResourceArn: aws.String(testARN), Tags: desiredTags(logGroup())}},
+				"UntagResource": {&svcsdk.UntagResourceInput{ResourceArn: aws.String(testARN), TagKeys: []string{"crossplane-kind", "old"}}},
+				"TagResource":   {&svcsdk.TagResourceInput{ResourceArn: aws.String(testARN), Tags: specTags()}},
 			},
 		},
 	}

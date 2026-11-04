@@ -127,7 +127,7 @@ type Client interface {
 	{{ $readOp.ExportedName }}(context.Context, *svcsdk.{{ $readOp.InputRef.Shape.ShapeName }}, ...func(*svcsdk.Options)) (*svcsdk.{{ $readOp.OutputRef.Shape.ShapeName }}, error)
 {{- end }}
 	{{ .CRD.Ops.Create.ExportedName }}(context.Context, *svcsdk.{{ .CRD.Ops.Create.InputRef.Shape.ShapeName }}, ...func(*svcsdk.Options)) (*svcsdk.{{ .CRD.Ops.Create.OutputRef.Shape.ShapeName }}, error)
-{{- if .CRD.Ops.Update }}
+{{- if and .CRD.Ops.Update (ne .CRD.Ops.Update.ExportedName .CRD.Ops.Create.ExportedName) }}
 	{{ .CRD.Ops.Update.ExportedName }}(context.Context, *svcsdk.{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}, ...func(*svcsdk.Options)) (*svcsdk.{{ .CRD.Ops.Update.OutputRef.Shape.ShapeName }}, error)
 {{- end }}
 {{- if .CRD.Ops.Delete }}

@@ -1,0 +1,101 @@
+# OpenSearch domain in a VPC with fine-grained access control: an internal
+# master user whose password is read from the Secret below, in the namespace
+# of the Domain. Keep writeConnectionSecretToRef: a changed password is only
+# detected by comparing with the password in the connection secret.
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: default
+  name: example-opensearch-master-password
+type: Opaque
+stringData:
+  # 8 to 128 characters with an uppercase and a lowercase letter, a number
+  # and a special character.
+  password: REPLACE_ME-change-me-1234
+---
+apiVersion: opensearch.aws2.crossplane.io/v1alpha1
+kind: Domain
+metadata:
+  namespace: default
+  # The domain name in AWS (external name): 3 to 28 characters, lowercase
+  # letters, numbers and hyphens.
+  name: example-opensearch
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  # endpoint, port, username and password.
+  writeConnectionSecretToRef:
+    name: example-opensearch-conn
+  forProvider:
+    region: eu-central-1
+    # Changing it upgrades the domain (UpgradeDomain) once no other change
+    # is pending; downgrades are rejected by AWS.
+    engineVersion: OpenSearch_2.19
+    clusterConfig:
+      instanceType: r6g.large.search
+      instanceCount: 3
+      dedicatedMasterEnabled: true
+      dedicatedMasterType: m6g.large.search
+      dedicatedMasterCount: 3
+      zoneAwarenessEnabled: true
+      zoneAwarenessConfig:
+        availabilityZoneCount: 3
+    ebsOptions:
+      ebsEnabled: true
+      volumeType: gp3
+      volumeSize: 100
+    # Can't be changed after creation.
+    vpcOptions:
+      subnetIDs:
+        - subnet-0123456789abcdef0
+        - subnet-0123456789abcdef1
+        - subnet-0123456789abcdef2
+      securityGroupIDs:
+        - sg-0123456789abcdef0
+    encryptionAtRestOptions:
+      enabled: true
+      kmsKeyID: arn:aws:kms:eu-central-1:123456789012:key/REPLACE_ME
+    nodeToNodeEncryptionOptions:
+      enabled: true
+    domainEndpointOptions:
+      enforceHTTPS: true
+      tlsSecurityPolicy: Policy-Min-TLS-1-2-PFS-2023-10
+    advancedSecurityOptions:
+      enabled: true
+      internalUserDatabaseEnabled: true
+      masterUserOptions:
+        masterUserName: admin
+    masterUserPasswordSecretRef:
+      name: example-opensearch-master-password
+      key: password
+    # IAM policy document (JSON); compared as JSON, not as text.
+    accessPolicies: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Effect": "Allow",
+          "Principal": {"AWS": "*"},
+          "Action": "es:ESHttp*",
+          "Resource": "arn:aws:es:eu-central-1:123456789012:domain/example-opensearch/*"
+        }]
+      }
+    # Only the listed keys are managed; AWS adds others with defaults.
+    advancedOptions:
+      indices.fielddata.cache.size: "20"
+    # Keyed by log type: INDEX_SLOW_LOGS, SEARCH_SLOW_LOGS,
+    # ES_APPLICATION_LOGS, AUDIT_LOGS.
+    logPublishingOptions:
+      ES_APPLICATION_LOGS:
+        enabled: true
+        cloudWatchLogsLogGroupARN: arn:aws:logs:eu-central-1:123456789012:log-group:/aws/opensearch/example-opensearch
+    autoTuneOptions:
+      desiredState: ENABLED
+      useOffPeakWindow: true
+    offPeakWindowOptions:
+      enabled: true
+    softwareUpdateOptions:
+      autoSoftwareUpdateEnabled: true
+    tags:
+      - key: team
+        value: search

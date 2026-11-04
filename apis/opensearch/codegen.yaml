@@ -1,0 +1,7 @@
+# provider-aws-v2 codegen settings of this service, see docs/architecture.md.
+clientOperations:
+  Domain:
+  - AddTags
+  - ListTags
+  - RemoveTags
+  - UpgradeDomain

@@ -10,6 +10,12 @@ migration notes here
 
 ## [Unreleased]
 
+### Added
+
+- opensearch: `Domain`, including its access policy (`accessPolicies`),
+  tags, engine upgrades and the master user password from a Secret. Example:
+  `examples/opensearch/domain.yaml`.
+
 ### Fixed
 
 - rds, docdb: creating a resource no longer replaces `spec.forProvider`

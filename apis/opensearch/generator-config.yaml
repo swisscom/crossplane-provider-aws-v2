@@ -1,0 +1,40 @@
+# ACK generator config of opensearch, see docs/components/ack-code-generator.md.
+# List all kinds with `cd codegen && go run ./cmd/generate --service opensearch --list-kinds`.
+operations:
+    UpdateDomainConfig:
+        resource_name: Domain
+        operation_type: Update
+ignore:
+    resource_names:
+        - Application
+        - Index
+        - OutboundConnection
+        - Package
+        - VpcEndpoint
+    field_paths:
+        # the domain name is the external name
+        - CreateDomainInput.DomainName
+        - DescribeDomainInput.DomainName
+        - UpdateDomainConfigInput.DomainName
+        - DeleteDomainInput.DomainName
+        # masterUserPasswordSecretRef instead (custom_types.go)
+        - CreateDomainInput.AdvancedSecurityOptions.MasterUserOptions.MasterUserPassword
+        # spec.autoTuneOptions has the shape of the update input, which has
+        # rollbackOnDisable; preCreate converts it
+        - CreateDomainInput.AutoTuneOptions
+resources:
+    Domain:
+        fields:
+            AutoTuneOptions:
+                from:
+                    operation: UpdateDomainConfig
+                    path: AutoTuneOptions
+        renames:
+            operations:
+                CreateDomain:
+                    input_fields:
+                        TagList: Tags
+        exceptions:
+            errors:
+                404:
+                    code: ResourceNotFoundException

@@ -1,0 +1,11 @@
+# provider-aws-v2 codegen settings of this service, see docs/architecture.md.
+clientOperations:
+  LogGroup:
+  - AssociateKmsKey
+  - DeleteRetentionPolicy
+  - DisassociateKmsKey
+  - ListTagsForResource
+  - PutLogGroupDeletionProtection
+  - PutRetentionPolicy
+  - TagResource
+  - UntagResource

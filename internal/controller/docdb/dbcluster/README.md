@@ -78,6 +78,7 @@ Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-11-04 | | Create no longer copies the AWS response into `spec.forProvider` (status only) |
 | 2026-10-15 | `0bc1dd7` | References to DBSubnetGroup and DBClusterParameterGroup |
 | 2026-10-09 | `1a8d835` | Compare all updatable fields; restore without CreateDBCluster; password change applied before it is published |
 | 2026-10-09 | `3adf7eb` | `serverlessV2ScalingConfiguration` supported (float fields allowed) |

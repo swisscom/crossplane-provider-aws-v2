@@ -46,4 +46,5 @@ Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-11-04 | | Create no longer copies the AWS response into `spec.forProvider` (status only) |
 | 2026-10-15 | `0bc1dd7` | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced |

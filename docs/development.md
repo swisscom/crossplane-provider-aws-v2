@@ -73,6 +73,12 @@ coding agents follow.
   `importer: …`, `docs: …`. Body explains why. Sign off (`git commit -s`,
   [DCO](../DCO)). One logical change per commit; generated files go in the
   same commit as their cause.
+- **Write for outside readers**: commit messages, docs and code comments
+  must make sense to someone who sees only the repository (the project is
+  public). State what changed and why; don't refer to chats, review
+  requests, internal tickets, repositories or teams, and don't list
+  rejected alternatives or what isn't included unless users would expect
+  it otherwise.
 
 ## Documentation
 

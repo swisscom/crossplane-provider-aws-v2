@@ -97,7 +97,9 @@ sequenceDiagram
 
 Create, Update and Delete follow the same pattern
 (`pre<Verb>` → SDK call → `post<Verb>`). `preDelete` can return `true` to
-skip the delete call (e.g. already deleting).
+skip the delete call (e.g. already deleting). Like Observe, Create copies
+only `status.atProvider` from the response, never the spec: the spec stays
+what the user wrote.
 
 ### Hook defaults
 

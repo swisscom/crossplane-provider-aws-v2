@@ -209,26 +209,29 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBSubnetGroup) (m
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// Like Observe, take only the status from the output: copying it into
+	// the spec would replace desired values with what AWS returns.
+	ko := cr.DeepCopy()
 
 	if resp.DBSubnetGroup.DBSubnetGroupArn != nil {
-		cr.Status.AtProvider.DBSubnetGroupARN = resp.DBSubnetGroup.DBSubnetGroupArn
+		ko.Status.AtProvider.DBSubnetGroupARN = resp.DBSubnetGroup.DBSubnetGroupArn
 	} else {
-		cr.Status.AtProvider.DBSubnetGroupARN = nil
+		ko.Status.AtProvider.DBSubnetGroupARN = nil
 	}
 	if resp.DBSubnetGroup.DBSubnetGroupDescription != nil {
-		cr.Spec.ForProvider.DBSubnetGroupDescription = resp.DBSubnetGroup.DBSubnetGroupDescription
+		ko.Spec.ForProvider.DBSubnetGroupDescription = resp.DBSubnetGroup.DBSubnetGroupDescription
 	} else {
-		cr.Spec.ForProvider.DBSubnetGroupDescription = nil
+		ko.Spec.ForProvider.DBSubnetGroupDescription = nil
 	}
 	if resp.DBSubnetGroup.DBSubnetGroupName != nil {
-		cr.Status.AtProvider.DBSubnetGroupName = resp.DBSubnetGroup.DBSubnetGroupName
+		ko.Status.AtProvider.DBSubnetGroupName = resp.DBSubnetGroup.DBSubnetGroupName
 	} else {
-		cr.Status.AtProvider.DBSubnetGroupName = nil
+		ko.Status.AtProvider.DBSubnetGroupName = nil
 	}
 	if resp.DBSubnetGroup.SubnetGroupStatus != nil {
-		cr.Status.AtProvider.SubnetGroupStatus = resp.DBSubnetGroup.SubnetGroupStatus
+		ko.Status.AtProvider.SubnetGroupStatus = resp.DBSubnetGroup.SubnetGroupStatus
 	} else {
-		cr.Status.AtProvider.SubnetGroupStatus = nil
+		ko.Status.AtProvider.SubnetGroupStatus = nil
 	}
 	if resp.DBSubnetGroup.Subnets != nil {
 		f4 := []*svcapitypes.Subnet{}
@@ -249,21 +252,22 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBSubnetGroup) (m
 			}
 			f4 = append(f4, f4elem)
 		}
-		cr.Status.AtProvider.Subnets = f4
+		ko.Status.AtProvider.Subnets = f4
 	} else {
-		cr.Status.AtProvider.Subnets = nil
+		ko.Status.AtProvider.Subnets = nil
 	}
 	if resp.DBSubnetGroup.SupportedNetworkTypes != nil {
-		cr.Status.AtProvider.SupportedNetworkTypes = aws.StringSlice(resp.DBSubnetGroup.SupportedNetworkTypes)
+		ko.Status.AtProvider.SupportedNetworkTypes = aws.StringSlice(resp.DBSubnetGroup.SupportedNetworkTypes)
 	} else {
-		cr.Status.AtProvider.SupportedNetworkTypes = nil
+		ko.Status.AtProvider.SupportedNetworkTypes = nil
 	}
 	if resp.DBSubnetGroup.VpcId != nil {
-		cr.Status.AtProvider.VPCID = resp.DBSubnetGroup.VpcId
+		ko.Status.AtProvider.VPCID = resp.DBSubnetGroup.VpcId
 	} else {
-		cr.Status.AtProvider.VPCID = nil
+		ko.Status.AtProvider.VPCID = nil
 	}
 
+	ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 

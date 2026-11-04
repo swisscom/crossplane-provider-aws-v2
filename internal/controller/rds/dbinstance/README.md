@@ -57,6 +57,7 @@ replica, restore.
 
 | Date | Commit | Change |
 |------|--------|--------|
+| 2026-11-04 | | Create no longer copies the AWS response into `spec.forProvider` (status only) |
 | 2026-10-19 | | Fix update loop with `monitoringInterval: 0` (monitoring off) |
 | 2026-10-07 | `6a1364d` | Drift detection for fields new in SDK v2 (database insights, network type, …); additional storage volumes; managed password toggling |
 | 2026-10-06 | `68972b4` | Comprehensive examples |

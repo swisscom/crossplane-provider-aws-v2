@@ -209,28 +209,32 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBClusterParamete
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// Like Observe, take only the status from the output: copying it into
+	// the spec would replace desired values with what AWS returns.
+	ko := cr.DeepCopy()
 
 	if resp.DBClusterParameterGroup.DBClusterParameterGroupArn != nil {
-		cr.Status.AtProvider.DBClusterParameterGroupARN = resp.DBClusterParameterGroup.DBClusterParameterGroupArn
+		ko.Status.AtProvider.DBClusterParameterGroupARN = resp.DBClusterParameterGroup.DBClusterParameterGroupArn
 	} else {
-		cr.Status.AtProvider.DBClusterParameterGroupARN = nil
+		ko.Status.AtProvider.DBClusterParameterGroupARN = nil
 	}
 	if resp.DBClusterParameterGroup.DBClusterParameterGroupName != nil {
-		cr.Status.AtProvider.DBClusterParameterGroupName = resp.DBClusterParameterGroup.DBClusterParameterGroupName
+		ko.Status.AtProvider.DBClusterParameterGroupName = resp.DBClusterParameterGroup.DBClusterParameterGroupName
 	} else {
-		cr.Status.AtProvider.DBClusterParameterGroupName = nil
+		ko.Status.AtProvider.DBClusterParameterGroupName = nil
 	}
 	if resp.DBClusterParameterGroup.DBParameterGroupFamily != nil {
-		cr.Spec.ForProvider.DBParameterGroupFamily = resp.DBClusterParameterGroup.DBParameterGroupFamily
+		ko.Spec.ForProvider.DBParameterGroupFamily = resp.DBClusterParameterGroup.DBParameterGroupFamily
 	} else {
-		cr.Spec.ForProvider.DBParameterGroupFamily = nil
+		ko.Spec.ForProvider.DBParameterGroupFamily = nil
 	}
 	if resp.DBClusterParameterGroup.Description != nil {
-		cr.Spec.ForProvider.Description = resp.DBClusterParameterGroup.Description
+		ko.Spec.ForProvider.Description = resp.DBClusterParameterGroup.Description
 	} else {
-		cr.Spec.ForProvider.Description = nil
+		ko.Spec.ForProvider.Description = nil
 	}
 
+	ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 

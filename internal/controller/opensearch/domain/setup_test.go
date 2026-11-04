@@ -117,7 +117,7 @@ func withMasterUserStatus(ds *svcsdktypes.DomainStatus) {
 	ds.AdvancedSecurityOptions = &svcsdktypes.AdvancedSecurityOptions{Enabled: aws.Bool(true), InternalUserDatabaseEnabled: aws.Bool(true)}
 }
 
-// tags returns the tags of a domain created from cr: spec and Crossplane tags.
+// tags returns the tags of a domain created from cr: its spec tags.
 func tags(cr *svcapitypes.Domain, extra ...svcsdktypes.Tag) []svcsdktypes.Tag {
 	return append(sdkTags(desiredTags(cr)), extra...)
 }
@@ -505,7 +505,9 @@ func TestCreate(t *testing.T) {
 	if got := aws.ToString(in.DomainName); got != testName {
 		t.Errorf("CreateDomainInput.DomainName = %q, want %q", got, testName)
 	}
-	if diff := cmp.Diff(tags(cr), in.TagList, ignoreUnexported); diff != "" {
+	// Only the spec tags.
+	wantTags := []svcsdktypes.Tag{{Key: aws.String("team"), Value: aws.String("search")}}
+	if diff := cmp.Diff(wantTags, in.TagList, ignoreUnexported); diff != "" {
 		t.Errorf("CreateDomainInput.TagList: -want, +got:\n%s", diff)
 	}
 	wantAutoTune := &svcsdktypes.AutoTuneOptionsInput{DesiredState: svcsdktypes.AutoTuneDesiredStateEnabled, UseOffPeakWindow: aws.Bool(true)}
@@ -591,11 +593,13 @@ func TestUpdate(t *testing.T) {
 			ds: status(),
 			tags: append(tags(domain()),
 				svcsdktypes.Tag{Key: aws.String("old"), Value: aws.String("x")},
+				// added by earlier provider versions
+				svcsdktypes.Tag{Key: aws.String("crossplane-kind"), Value: aws.String("domain.opensearch.aws2.crossplane.io")},
 				svcsdktypes.Tag{Key: aws.String("aws:cloudformation:stack-name"), Value: aws.String("x")}),
 			want: want{
 				calls:  []string{"RemoveTags", "AddTags"},
 				add:    []svcsdktypes.Tag{{Key: aws.String("team"), Value: aws.String("other")}},
-				remove: []string{"old"},
+				remove: []string{"crossplane-kind", "old"},
 			},
 		},
 		"ConfigBeforeUpgrade": {

@@ -17,8 +17,8 @@ Generated from scratch on 2026-11-04 (`apis/cloudwatchlogs/generator-config.yaml
   group with exactly that name. `ListLogGroups` isn't used: it doesn't return
   the retention.
 - **Create**: `CreateLogGroup` with the class, KMS key, deletion protection
-  and tags (spec tags plus Crossplane's `crossplane-*` tags). AWS can't set
-  the retention on creation; the first update sets it.
+  and the spec tags (no others are added). AWS can't set the retention on
+  creation; the first update sets it.
 - **Drift**: unset fields aren't managed.
   - `retentionInDays`; `0` (keep forever) equals no retention in AWS.
   - `kmsKeyID`: a key ID equals its ARN.

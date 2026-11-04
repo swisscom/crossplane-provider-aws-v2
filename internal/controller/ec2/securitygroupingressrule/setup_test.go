@@ -41,6 +41,10 @@ const (
 	testRule  = "sgr-1"
 )
 
+// leftoverTag is a tag the spec doesn't have, e.g. one earlier provider
+// versions added; it is removed.
+var leftoverTag = svcsdktypes.Tag{Key: aws.String("crossplane-kind"), Value: aws.String("securitygroupingressrule.ec2.aws2.crossplane.io")}
+
 func apiErr(code string) error { return &smithy.GenericAPIError{Code: code} }
 
 func rule(f ...func(*svcapitypes.SecurityGroupIngressRule)) *svcapitypes.SecurityGroupIngressRule {
@@ -64,11 +68,8 @@ func observedRule(f ...func(*svcsdktypes.SecurityGroupRule)) func(context.Contex
 	r := svcsdktypes.SecurityGroupRule{
 		SecurityGroupRuleId: aws.String(testRule), SecurityGroupRuleArn: aws.String("arn:sgr"), GroupId: aws.String(testGroup), GroupOwnerId: aws.String("123"),
 		IsEgress: aws.Bool(false), IpProtocol: aws.String("tcp"), FromPort: aws.Int32(443), ToPort: aws.Int32(443), CidrIpv4: aws.String("10.0.0.0/8"),
-		Tags: []svcsdktypes.Tag{
-			{Key: aws.String("crossplane-kind"), Value: aws.String("securitygroupingressrule.ec2.aws2.crossplane.io")},
-			{Key: aws.String("crossplane-name"), Value: aws.String("https")},
-			{Key: aws.String("crossplane-namespace"), Value: aws.String("ns")},
-		},
+		// set by AWS, ignored
+		Tags: []svcsdktypes.Tag{{Key: aws.String("aws:cloudformation:stack-name"), Value: aws.String("x")}},
 	}
 	for _, fn := range f {
 		fn(&r)
@@ -100,7 +101,7 @@ func TestObserve(t *testing.T) {
 		},
 		"UpToDate":     {cr: rule(withExternalName), describe: observedRule(), exists: true, upToDate: true},
 		"PortsChanged": {cr: rule(withExternalName), describe: observedRule(func(r *svcsdktypes.SecurityGroupRule) { r.FromPort, r.ToPort = aws.Int32(80), aws.Int32(80) }), exists: true},
-		"TagsChanged":  {cr: rule(withExternalName), describe: observedRule(func(r *svcsdktypes.SecurityGroupRule) { r.Tags = nil }), exists: true},
+		"TagsChanged":  {cr: rule(withExternalName), describe: observedRule(func(r *svcsdktypes.SecurityGroupRule) { r.Tags = append(r.Tags, leftoverTag) }), exists: true},
 		"EgressRule":   {cr: rule(withExternalName), describe: observedRule(func(r *svcsdktypes.SecurityGroupRule) { r.IsEgress = aws.Bool(true) }), isErr: true},
 		"PrefixListChanged": {
 			cr: rule(withExternalName, func(cr *svcapitypes.SecurityGroupIngressRule) {
@@ -148,7 +149,9 @@ func TestCreate(t *testing.T) {
 		wantErr bool
 	}{
 		"IPv4": {
-			cr: rule(),
+			cr: rule(func(cr *svcapitypes.SecurityGroupIngressRule) {
+				cr.Spec.ForProvider.Tags = []*svcapitypes.Tag{{Key: aws.String("team"), Value: aws.String("a")}}
+			}),
 			wantIn: &svcsdk.AuthorizeSecurityGroupIngressInput{
 				GroupId: aws.String(testGroup),
 				IpPermissions: []svcsdktypes.IpPermission{{
@@ -196,8 +199,10 @@ func TestCreate(t *testing.T) {
 				t.Errorf("external name = %q, want %q", got, testRule)
 			}
 			in := m.Calls["AuthorizeSecurityGroupIngress"][0].(*svcsdk.AuthorizeSecurityGroupIngressInput)
-			if len(in.TagSpecifications) != 1 || in.TagSpecifications[0].ResourceType != svcsdktypes.ResourceTypeSecurityGroupRule {
-				t.Errorf("TagSpecifications = %+v", in.TagSpecifications)
+			// Only the spec tags, if any.
+			if tags := tc.cr.Spec.ForProvider.Tags; len(tags) == 0 && in.TagSpecifications != nil ||
+				len(tags) > 0 && (len(in.TagSpecifications) != 1 || in.TagSpecifications[0].ResourceType != svcsdktypes.ResourceTypeSecurityGroupRule || len(in.TagSpecifications[0].Tags) != len(tags)) {
+				t.Errorf("TagSpecifications = %+v, want the spec tags %v", in.TagSpecifications, tags)
 			}
 			in.TagSpecifications = nil
 			opt := cmpopts.IgnoreUnexported(svcsdk.AuthorizeSecurityGroupIngressInput{}, svcsdktypes.IpPermission{}, svcsdktypes.IpRange{}, svcsdktypes.UserIdGroupPair{})
@@ -227,8 +232,8 @@ func TestUpdate(t *testing.T) {
 	if diff := cmp.Diff(want, m.Calls["ModifySecurityGroupRules"][0], opt); diff != "" {
 		t.Errorf("ModifySecurityGroupRulesInput -want +got:\n%s", diff)
 	}
-	if len(m.Calls["CreateTags"]) != 1 {
-		t.Errorf("expected the Crossplane tags to be created, calls: %v", m.Calls)
+	if len(m.Calls["CreateTags"])+len(m.Calls["DeleteTags"]) != 0 {
+		t.Errorf("expected no tag changes without spec tags, calls: %v", m.Calls)
 	}
 }
 
@@ -346,19 +351,15 @@ func TestAdoptExisting(t *testing.T) {
 		"Adopts": {
 			cr:    rule(withAdopt),
 			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{otherDirection, otherPorts, awsRule(testRule)}},
-			want: want{exists: true, upToDate: false, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
+			want: want{exists: true, upToDate: true, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
 				events: []event.Event{adopted}},
 		},
-		"AdoptsUpToDateWithCrossplaneTags": {
+		"AdoptsWithTagsNotInSpec": {
 			cr: rule(withAdopt),
 			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule, func(r *svcsdktypes.SecurityGroupRule) {
-				r.Tags = []svcsdktypes.Tag{
-					{Key: aws.String("crossplane-kind"), Value: aws.String("securitygroupingressrule.ec2.aws2.crossplane.io")},
-					{Key: aws.String("crossplane-name"), Value: aws.String("https")},
-					{Key: aws.String("crossplane-namespace"), Value: aws.String("ns")},
-				}
+				r.Tags = []svcsdktypes.Tag{leftoverTag}
 			})}},
-			want: want{exists: true, upToDate: true, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
+			want: want{exists: true, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
 				events: []event.Event{adopted}},
 		},
 		"AdoptsWithOtherDescription": {
@@ -370,7 +371,7 @@ func TestAdoptExisting(t *testing.T) {
 		"AdoptsProtocolNumber": {
 			cr:    rule(withAdopt, func(cr *svcapitypes.SecurityGroupIngressRule) { cr.Spec.ForProvider.IPProtocol = aws.String("6") }),
 			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
-			want: want{exists: true, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
+			want: want{exists: true, upToDate: true, lateInit: true, externalName: testRule, lookups: 1, byID: []string{testRule},
 				events: []event.Event{adopted}},
 		},
 		"NoMatchCreates": {
@@ -401,7 +402,7 @@ func TestAdoptExisting(t *testing.T) {
 		"ExternalNameWins": {
 			cr:    rule(withAdopt, withExternalName),
 			rules: groupRules{rules: []svcsdktypes.SecurityGroupRule{awsRule(testRule)}},
-			want:  want{exists: true, externalName: testRule, byID: []string{testRule}},
+			want:  want{exists: true, upToDate: true, externalName: testRule, byID: []string{testRule}},
 		},
 		"ExternalNameGoneCreatesWithoutLookup": {
 			cr:    rule(withAdopt, func(cr *svcapitypes.SecurityGroupIngressRule) { meta.SetExternalName(cr, "sgr-gone") }),

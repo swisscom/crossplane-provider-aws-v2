@@ -165,6 +165,11 @@ It returns the JSON names of fields that differ. A field is compared if
 2. the **read** operation's output has it (so `Generate<Kind>` fills it), and
 3. it isn't excluded by `compare.is_ignored` or `resources.<Kind>.compare.ignore`.
 
+The read output is the resource shape, found like ACK's `SetResource`: the
+list element for ReadMany (`DescribeDBClustersOutput.DBClusters[]`), and for
+ReadOne the only member when it is a structure
+(`DescribeDomainOutput.DomainStatus`).
+
 The field list is computed at generation time
 (`codegen/internal/generator/compare.go`). Comparison uses
 `internal/utils/compare.IsSubset`: unset desired fields are unmanaged,

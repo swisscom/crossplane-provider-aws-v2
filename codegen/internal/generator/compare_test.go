@@ -46,6 +46,10 @@ func TestDiffUpdatableParameters(t *testing.T) {
 				notWant: []string{"availabilityZone", "engine"},
 			},
 		},
+		// PutResourcePolicy is the create and the update operation.
+		"cloudwatchlogs": {
+			"resourcepolicy": {want: []string{"policyDocument"}},
+		},
 		// ReadOne whose output wraps the resource in its only member
 		// (DescribeDomainOutput.DomainStatus).
 		"opensearch": {

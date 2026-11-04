@@ -22,6 +22,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/cloudwatchlogs"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/ec2"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/opensearch"
@@ -30,6 +31,7 @@ import (
 
 // serviceSetups are the SetupGated functions of all services.
 var serviceSetups = []func(ctrl.Manager, controller.Options) error{
+	cloudwatchlogs.SetupGated,
 	docdb.SetupGated,
 	ec2.SetupGated,
 	opensearch.SetupGated,

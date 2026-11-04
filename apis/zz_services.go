@@ -19,6 +19,7 @@ limitations under the License.
 package apis
 
 import (
+	cloudwatchlogsv1alpha1 "github.com/swisscom/crossplane-provider-aws-v2/apis/cloudwatchlogs/v1alpha1"
 	docdbv1alpha1 "github.com/swisscom/crossplane-provider-aws-v2/apis/docdb/v1alpha1"
 	ec2v1alpha1 "github.com/swisscom/crossplane-provider-aws-v2/apis/ec2/v1alpha1"
 	opensearchv1alpha1 "github.com/swisscom/crossplane-provider-aws-v2/apis/opensearch/v1alpha1"
@@ -27,6 +28,7 @@ import (
 
 func init() {
 	AddToSchemes = append(AddToSchemes,
+		cloudwatchlogsv1alpha1.SchemeBuilder.AddToScheme,
 		docdbv1alpha1.SchemeBuilder.AddToScheme,
 		ec2v1alpha1.SchemeBuilder.AddToScheme,
 		opensearchv1alpha1.SchemeBuilder.AddToScheme,

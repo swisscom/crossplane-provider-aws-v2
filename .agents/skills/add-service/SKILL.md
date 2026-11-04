@@ -30,6 +30,8 @@ and `apis/rds/generator-config.yaml` as an example. Typically:
 
 Look at the AWS API model of the service to choose Create/Read/Update/Delete
 operations; ACK infers them from operation names (`Create<Kind>`, `Describe<Kind>s`, ...).
+Other names need `operations:` (cloudwatchlogs `PutResourcePolicy` is both
+`Create` and `Update`; see `apis/cloudwatchlogs/generator-config.yaml`).
 
 ## 2. Generate
 

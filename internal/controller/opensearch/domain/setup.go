@@ -19,7 +19,6 @@ package domain
 import (
 	"context"
 	"encoding/json"
-	"reflect"
 	"slices"
 	"sort"
 	"strings"
@@ -167,7 +166,7 @@ func diffConfig(desired *svcapitypes.DomainParameters, resp *svcsdk.DescribeDoma
 		name     string
 		upToDate bool
 	}{
-		{fieldAccessPolicies, policyEqual(desired.AccessPolicies, observed.AccessPolicies)},
+		{fieldAccessPolicies, compare.PolicyEqual(desired.AccessPolicies, observed.AccessPolicies)},
 		{fieldAdvancedOptions, mapSubset(desired.AdvancedOptions, observed.AdvancedOptions)},
 		{fieldAdvancedSecurity, advancedSecurityUpToDate(desired.AdvancedSecurityOptions, observed.AdvancedSecurityOptions)},
 		{fieldAutoTune, autoTuneUpToDate(desired.AutoTuneOptions, observed.AutoTuneOptions, ds.AutoTuneOptions)},
@@ -180,41 +179,6 @@ func diffConfig(desired *svcapitypes.DomainParameters, resp *svcsdk.DescribeDoma
 		}
 	}
 	return diff
-}
-
-// policyEqual compares two IAM policy documents as JSON, where a single value
-// equals a list with only that value. Documents that aren't JSON are compared
-// as strings.
-func policyEqual(desired, observed *string) bool {
-	if desired == nil {
-		return true
-	}
-	o := pointer.StringValue(observed)
-	if *desired == o {
-		return true
-	}
-	var d, ob any
-	if json.Unmarshal([]byte(*desired), &d) != nil || json.Unmarshal([]byte(o), &ob) != nil {
-		return false
-	}
-	return reflect.DeepEqual(normalizePolicy(d), normalizePolicy(ob))
-}
-
-func normalizePolicy(v any) any {
-	switch t := v.(type) {
-	case []any:
-		if len(t) == 1 {
-			return normalizePolicy(t[0])
-		}
-		for i := range t {
-			t[i] = normalizePolicy(t[i])
-		}
-	case map[string]any:
-		for k := range t {
-			t[k] = normalizePolicy(t[k])
-		}
-	}
-	return v
 }
 
 // mapSubset reports whether observed has the desired value of every desired

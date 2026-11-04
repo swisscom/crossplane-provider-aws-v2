@@ -483,28 +483,6 @@ func TestIsUpToDate(t *testing.T) {
 	}
 }
 
-func TestPolicyEqual(t *testing.T) {
-	cases := map[string]struct {
-		desired, observed *string
-		want              bool
-	}{
-		"NoDesired":         {observed: aws.String(testPolicy), want: true},
-		"Same":              {desired: aws.String(testPolicy), observed: aws.String(testPolicy), want: true},
-		"FormattedByAWS":    {desired: aws.String(testPolicy), observed: aws.String(testPolicyAWS), want: true},
-		"NotObserved":       {desired: aws.String(testPolicy), want: false},
-		"Different":         {desired: aws.String(testPolicy), observed: aws.String(`{"Version":"2012-10-17","Statement":[]}`), want: false},
-		"NotJSON":           {desired: aws.String("x"), observed: aws.String("y"), want: false},
-		"ListOfTwoNotEqual": {desired: aws.String(`{"a":["x","y"]}`), observed: aws.String(`{"a":"x"}`), want: false},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			if got := policyEqual(tc.desired, tc.observed); got != tc.want {
-				t.Errorf("policyEqual(...) = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestCreate(t *testing.T) {
 	cr := domain(withMasterUser, func(cr *svcapitypes.Domain) {
 		cr.Spec.ForProvider.AutoTuneOptions = &svcapitypes.AutoTuneOptions{DesiredState: aws.String("ENABLED"), UseOffPeakWindow: aws.Bool(true)}

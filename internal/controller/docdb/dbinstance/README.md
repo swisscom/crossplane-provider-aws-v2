@@ -5,7 +5,7 @@ Manages an instance of an Amazon DocumentDB cluster
 
 ## Origin
 
-Imported from provider-aws `swisscom/provider-aws@ad8ac93` (clean;
+Imported from provider-aws `crossplane-contrib/provider-aws@ad8ac93` (clean;
 `apis/docdb/import.yaml`), ported by hand in `2362ae0`.
 
 ## Behavior

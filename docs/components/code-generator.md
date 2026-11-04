@@ -109,6 +109,11 @@ what the user wrote.
 | `isUpToDate` | `isUpToDateUpdatable`, or always up to date if the kind has no update or read operation |
 | `preCreate`/`postCreate`, `preUpdate`/`postUpdate`, `preDelete`/`postDelete` | no-op |
 
+**Kinds whose create operation also updates** (cloudwatchlogs
+`ResourcePolicy`: `PutResourcePolicy` with `operation_type: [Create, Update]`)
+get one `Generate<Op>Input` and one `Client` method; `preCreate` and
+`preUpdate` both run on that input.
+
 **Kinds without an update operation** (e.g. ec2 `SecurityGroup`: AWS has
 no "modify security group"): `Update` calls a single `update` hook (default:
 do nothing) instead of `preUpdate` → SDK call → `postUpdate`, and

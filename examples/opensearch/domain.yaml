@@ -69,7 +69,8 @@ spec:
     masterUserPasswordSecretRef:
       name: example-opensearch-master-password
       key: password
-    # IAM policy document (JSON); compared as JSON, not as text.
+    # IAM policy document (JSON); compared as JSON, not as text. Multi-line
+    # is fine: it's sent to AWS compacted to one line.
     accessPolicies: |
       {
         "Version": "2012-10-17",

@@ -12,8 +12,9 @@ migration notes here
 
 ### Added
 
-- opensearch: `Domain`, including its access policy (`accessPolicies`),
-  tags, engine upgrades and the master user password from a Secret. Example:
+- opensearch: `Domain`, including its access policy (`accessPolicies`, also
+  as multi-line JSON), tags, engine upgrades and the master user password
+  from a Secret. Example:
   `examples/opensearch/domain.yaml`.
 - cloudwatchlogs: `LogGroup` (retention, KMS key, deletion protection, tags)
   and the account-level `ResourcePolicy`. Examples:

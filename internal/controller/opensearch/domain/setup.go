@@ -311,6 +311,7 @@ func sdkTags(tags map[string]string) []svcsdktypes.Tag {
 func (h *hooks) preCreate(ctx context.Context, cr *svcapitypes.Domain, obj *svcsdk.CreateDomainInput) error {
 	obj.DomainName = aws.String(meta.GetExternalName(cr))
 	obj.TagList = sdkTags(desiredTags(cr))
+	obj.AccessPolicies = compare.CompactPolicy(obj.AccessPolicies)
 
 	// spec.autoTuneOptions has the shape of the update input.
 	if cr.Spec.ForProvider.AutoTuneOptions != nil {
@@ -370,6 +371,7 @@ func (h *hooks) preUpdate(_ context.Context, cr *svcapitypes.Domain, obj *svcsdk
 	}
 	*obj = *in //nolint:govet // copies the SDK's unexported serde marker, which has no state
 	obj.DomainName = aws.String(meta.GetExternalName(cr))
+	obj.AccessPolicies = compare.CompactPolicy(obj.AccessPolicies)
 	if aso := obj.AdvancedSecurityOptions; aso != nil {
 		if !h.passwordChanged {
 			// The master user can only be sent with its password.

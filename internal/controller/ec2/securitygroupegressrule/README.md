@@ -89,9 +89,9 @@ set the external name instead.
 
 ## History
 
-| Date | Commit | Change |
+| Date | PR | Change |
 |------|--------|--------|
-| 2026-10-19 | — | Generated from scratch |
-| 2026-10-20 | | A source type change is an error instead of a modify AWS rejects; prefix lists validated against AWS |
-| 2026-10-20 | | `adoptExisting` |
-| 2026-11-04 | | Only the spec tags are applied; the `crossplane-*` tags are no longer added and are removed ([ADR 0011](../../../../docs/adr/0011-only-spec-tags.md)) |
+| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Only the spec tags are applied; the `crossplane-*` tags are no longer added and are removed ([ADR 0011](../../../../docs/adr/0011-only-spec-tags.md)) |
+| 2026-10-20 | `a041c65` | `adoptExisting` |
+| 2026-10-20 | `fe24dbc` | A source type change is an error instead of a modify AWS rejects; prefix lists validated against AWS |
+| 2026-10-19 | `6f158be` | Generated from scratch |

@@ -56,6 +56,6 @@ Generated from scratch on 2026-11-04 (`apis/cloudwatchlogs/generator-config.yaml
 
 ## History
 
-| Date | Commit | Change |
+| Date | PR | Change |
 |------|--------|--------|
-| 2026-11-04 | — | Generated from scratch |
+| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Generated from scratch |

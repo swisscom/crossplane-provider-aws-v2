@@ -48,12 +48,14 @@ Generated from scratch on 2026-11-04 (`apis/opensearch/generator-config.yaml`,
   `domainID`, `processing`, `changeProgressDetails`, … read only.
 - **Conditions**: Creating until the domain is created and has an endpoint;
   Available afterwards, also while changes are processed (blue/green
-  deployments keep the domain serving); Deleting while AWS deletes it.
+  deployments keep the domain serving); Unavailable while AWS has isolated
+  the domain (`domainProcessingStatus` `Isolated`, e.g. its KMS key is
+  disabled); Deleting while AWS deletes it.
 
 | Hook | Why |
 |------|-----|
 | `preObserve`, `preDelete` | domain name from the external name; skip delete while deleting |
-| `postObserve` | VPC endpoint, conditions, connection details |
+| `postObserve` | VPC endpoint, conditions (incl. isolated domains), connection details |
 | `isUpToDate` | fields compared differently (above), engine version, tags, password; no changes while processing |
 | `preCreate` | domain name, tags, Auto-Tune input shape, master password, compact access policy |
 | `postCreate`, `postUpdate` | connection details with the (new) password |
@@ -94,5 +96,6 @@ Generated from scratch on 2026-11-04 (`apis/opensearch/generator-config.yaml`,
 
 | Date | PR | Change |
 |------|--------|--------|
+| 2026-11-06 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Not ready (Unavailable) while AWS has isolated the domain |
 | 2026-11-06 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Multi-line `accessPolicies` sent compacted; AWS rejected line breaks |
 | 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Generated from scratch |

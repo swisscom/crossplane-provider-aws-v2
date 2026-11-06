@@ -237,6 +237,17 @@ func TestObserve(t *testing.T) {
 				endpoint:  testEndpoint,
 			},
 		},
+		"Isolated": {
+			cr: domain(),
+			ds: status(func(ds *svcsdktypes.DomainStatus) {
+				ds.DomainProcessingStatus = svcsdktypes.DomainProcessingStatusTypeIsolated
+			}),
+			want: want{
+				obs:       managed.ExternalObservation{ResourceExists: true, ResourceUpToDate: true, ConnectionDetails: managed.ConnectionDetails{keyEndpoint: []byte(testEndpoint), keyPort: []byte("443")}},
+				condition: xpv2.Unavailable().WithMessage(msgIsolated),
+				endpoint:  testEndpoint,
+			},
+		},
 		"Deleted": {
 			cr: domain(),
 			ds: status(func(ds *svcsdktypes.DomainStatus) { ds.Deleted = aws.Bool(true) }),

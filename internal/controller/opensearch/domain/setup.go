@@ -47,6 +47,8 @@ const (
 	// DomainStatus.Endpoints; such domains have no DomainStatus.Endpoint.
 	vpcEndpointKey = "vpc"
 
+	msgIsolated = "AWS isolated the domain (domainProcessingStatus Isolated), e.g. because its KMS key is disabled; it doesn't serve requests"
+
 	errGetPasswordSecret   = "cannot get the secret of masterUserPasswordSecretRef"
 	errGetConnectionSecret = "cannot get the connection secret"
 	errFmtEmptyPassword    = "key %q of the secret of masterUserPasswordSecretRef is empty"
@@ -108,6 +110,8 @@ func (h *hooks) postObserve(_ context.Context, cr *svcapitypes.Domain, resp *svc
 		cr.SetConditions(xpv2.Deleting())
 	case !aws.ToBool(ds.Created) || pointer.StringValue(cr.Status.AtProvider.Endpoint) == "":
 		cr.SetConditions(xpv2.Creating())
+	case ds.DomainProcessingStatus == svcsdktypes.DomainProcessingStatusTypeIsolated:
+		cr.SetConditions(xpv2.Unavailable().WithMessage(msgIsolated))
 	default:
 		// Also while a configuration change is processed: the domain
 		// keeps serving requests during blue/green deployments.

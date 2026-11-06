@@ -71,6 +71,10 @@ tests against real AWS.
 Optional `spec.assumeRole` assumes a role on top of any source.
 Optional `spec.endpoint.url` overrides the AWS endpoint (e.g. LocalStack).
 See [examples/provider/config.yaml](examples/provider/config.yaml).
+Pod identity sources are allowed in namespaced `ProviderConfig`s as well;
+restrict who may create them with RBAC
+([ADR 0011](docs/adr/0011-credentials-sources.md), which also maps the
+provider-aws v1 sources).
 
 ## Developing
 

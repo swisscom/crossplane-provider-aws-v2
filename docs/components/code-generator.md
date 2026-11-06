@@ -242,3 +242,8 @@ cd codegen && go run ./cmd/generate --registries-only --output ..   # after remo
   an input field. If AWS assigns the ID (`sg-…`), set it in `postCreate`
   with `meta.SetExternalName` and disable the default initializer
   (`managed.WithInitializers()`), which would use `metadata.name`.
+- Generated conversions send JSON policy strings as they are. If the AWS
+  model validates the field with `pattern: ".*"` (opensearch
+  `PolicyDocument`), AWS rejects multi-line policies, as users write them
+  in YAML; compact them in `preCreate`/`preUpdate` with
+  `compare.CompactPolicy` (opensearch `Domain`).

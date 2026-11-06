@@ -49,3 +49,23 @@ func TestPolicyEqual(t *testing.T) {
 		})
 	}
 }
+
+func TestCompactPolicy(t *testing.T) {
+	cases := map[string]struct {
+		policy, want *string
+	}{
+		"Nil":                      {},
+		"MultiLine":                {policy: aws.String("{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [{\"Action\": \"es:*\"}]\n}\n"), want: aws.String(`{"Version":"2012-10-17","Statement":[{"Action":"es:*"}]}`)},
+		"Compact":                  {policy: aws.String(`{"Version":"2012-10-17"}`), want: aws.String(`{"Version":"2012-10-17"}`)},
+		"KeepsWhitespaceInStrings": {policy: aws.String(`{ "Sid": "a b\nc" }`), want: aws.String(`{"Sid":"a b\nc"}`)},
+		"NotJSON":                  {policy: aws.String("{\n  not json\n}"), want: aws.String("{\n  not json\n}")},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := CompactPolicy(tc.policy)
+			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+				t.Errorf("CompactPolicy(...) = %v, want %v", aws.ToString(got), aws.ToString(tc.want))
+			}
+		})
+	}
+}

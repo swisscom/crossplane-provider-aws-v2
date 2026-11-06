@@ -17,9 +17,27 @@ limitations under the License.
 package compare
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 )
+
+// CompactPolicy returns the policy document without insignificant
+// whitespace, so that it has no line breaks: some AWS APIs (e.g. OpenSearch)
+// validate policies with the pattern ".*", which doesn't match them.
+// Documents that aren't JSON are returned unchanged, for AWS to report the
+// error.
+func CompactPolicy(policy *string) *string {
+	if policy == nil {
+		return nil
+	}
+	var b bytes.Buffer
+	if json.Compact(&b, []byte(*policy)) != nil {
+		return policy
+	}
+	s := b.String()
+	return &s
+}
 
 // PolicyEqual reports whether the observed IAM policy document equals the
 // desired one. Both are compared as JSON, where a single value equals a list

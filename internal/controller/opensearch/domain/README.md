@@ -16,6 +16,10 @@ Generated from scratch on 2026-11-04 (`apis/opensearch/generator-config.yaml`,
 - **Create**: `CreateDomain` with the spec, including its tags (no others
   are added), and the master user's password from
   `masterUserPasswordSecretRef` (a Secret in the namespace of the Domain).
+- **Access policy**: `accessPolicies` may be multi-line JSON (e.g. YAML
+  `accessPolicies: |`); it's sent to AWS compacted to one line, on create
+  and update, because AWS rejects line breaks in it. Invalid JSON is sent
+  as is, for AWS to report the error.
 - **Drift**: all fields `UpdateDomainConfig` can change, plus:
   - `accessPolicies` compared as JSON; a list with one element equals the
     element, as AWS returns it.
@@ -51,9 +55,9 @@ Generated from scratch on 2026-11-04 (`apis/opensearch/generator-config.yaml`,
 | `preObserve`, `preDelete` | domain name from the external name; skip delete while deleting |
 | `postObserve` | VPC endpoint, conditions, connection details |
 | `isUpToDate` | fields compared differently (above), engine version, tags, password; no changes while processing |
-| `preCreate` | domain name, tags, Auto-Tune input shape, master password |
+| `preCreate` | domain name, tags, Auto-Tune input shape, master password, compact access policy |
 | `postCreate`, `postUpdate` | connection details with the (new) password |
-| `preUpdate` | send only the differing fields; master user only with its password |
+| `preUpdate` | send only the differing fields; master user only with its password; compact access policy |
 | `wrapExternal` (`domainExternal.Update`) | tags and `UpgradeDomain`, which `UpdateDomainConfig` can't change |
 
 ## Limitations
@@ -91,3 +95,4 @@ Generated from scratch on 2026-11-04 (`apis/opensearch/generator-config.yaml`,
 | Date | Commit | Change |
 |------|--------|--------|
 | 2026-11-04 | — | Generated from scratch |
+| 2026-11-06 | — | Multi-line `accessPolicies` sent compacted; AWS rejected line breaks |

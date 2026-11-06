@@ -57,6 +57,17 @@ const (
 	// testPolicyAWS is testPolicy as AWS returns it: other formatting, and
 	// lists with one element replaced by the element.
 	testPolicyAWS = `{"Statement": {"Action": ["es:*"], "Effect": "Allow", "Principal": {"AWS": "*"}, "Resource": "` + testARN + `/*"}, "Version": "2012-10-17"}`
+	// testPolicyMultiLine is testPolicy as users write it in YAML.
+	testPolicyMultiLine = `{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"AWS": "*"},
+    "Action": "es:*",
+    "Resource": "` + testARN + `/*"
+  }]
+}
+`
 )
 
 var ignoreUnexported = cmp.FilterPath(func(p cmp.Path) bool {
@@ -324,6 +335,10 @@ func TestIsUpToDate(t *testing.T) {
 			ds:   status(),
 			want: []string{"accessPolicies"},
 		},
+		"MultiLineAccessPoliciesUpToDate": {
+			cr: domain(func(cr *svcapitypes.Domain) { cr.Spec.ForProvider.AccessPolicies = aws.String(testPolicyMultiLine) }),
+			ds: status(),
+		},
 		"AdvancedOptions": {
 			cr: domain(func(cr *svcapitypes.Domain) {
 				cr.Spec.ForProvider.AdvancedOptions = map[string]*string{"rest.action.multi.allow_explicit_index": aws.String("false")}
@@ -486,6 +501,7 @@ func TestIsUpToDate(t *testing.T) {
 func TestCreate(t *testing.T) {
 	cr := domain(withMasterUser, func(cr *svcapitypes.Domain) {
 		cr.Spec.ForProvider.AutoTuneOptions = &svcapitypes.AutoTuneOptions{DesiredState: aws.String("ENABLED"), UseOffPeakWindow: aws.Bool(true)}
+		cr.Spec.ForProvider.AccessPolicies = aws.String(testPolicyMultiLine)
 	})
 	want := cr.DeepCopy()
 	m := &fake.MockOpenSearchClient{
@@ -518,6 +534,7 @@ func TestCreate(t *testing.T) {
 	if diff := cmp.Diff(wantMaster, in.AdvancedSecurityOptions.MasterUserOptions, ignoreUnexported); diff != "" {
 		t.Errorf("CreateDomainInput.AdvancedSecurityOptions.MasterUserOptions: -want, +got:\n%s", diff)
 	}
+	// Compacted: AWS rejects line breaks.
 	if aws.ToString(in.AccessPolicies) != testPolicy {
 		t.Errorf("CreateDomainInput.AccessPolicies = %q, want %q", aws.ToString(in.AccessPolicies), testPolicy)
 	}
@@ -605,13 +622,14 @@ func TestUpdate(t *testing.T) {
 		"ConfigBeforeUpgrade": {
 			cr: domain(func(cr *svcapitypes.Domain) {
 				cr.Spec.ForProvider.EngineVersion = aws.String("OpenSearch_2.15")
-				cr.Spec.ForProvider.AccessPolicies = aws.String(`{"Version":"2012-10-17","Statement":[]}`)
+				cr.Spec.ForProvider.AccessPolicies = aws.String("{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": []\n}\n")
 			}),
 			ds: status(),
 			want: want{
 				calls: []string{"UpdateDomainConfig"},
 				update: &svcsdk.UpdateDomainConfigInput{
-					DomainName:     aws.String(testName),
+					DomainName: aws.String(testName),
+					// Compacted: AWS rejects line breaks.
 					AccessPolicies: aws.String(`{"Version":"2012-10-17","Statement":[]}`),
 				},
 			},

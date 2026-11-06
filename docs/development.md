@@ -126,11 +126,16 @@ Fields AWS can't change after creation, unsupported features, known issues.
 Links to examples/<svc>/.
 
 ## History
-| Date | Commit | Change |
+| Date | PR | Change |
 ```
 
 Rows in "History" are behavior changes, newest first; refactorings without
-behavior change don't need a row.
+behavior change don't need a row. "PR" links the pull request that made the
+change, e.g. `[#12](https://github.com/swisscom/crossplane-provider-aws-v2/pull/12)`
+(a plain `#12` isn't linked in files). Add the row with an empty PR cell and
+fill it in once the PR is open, in the same PR. Commit hashes aren't used:
+they change on rebase and squash merge. Rows from before pull requests were
+used show the commit on `main` instead.
 
 ## Releasing
 

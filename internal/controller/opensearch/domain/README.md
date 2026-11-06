@@ -92,7 +92,7 @@ Generated from scratch on 2026-11-04 (`apis/opensearch/generator-config.yaml`,
 
 ## History
 
-| Date | Commit | Change |
+| Date | PR | Change |
 |------|--------|--------|
-| 2026-11-04 | — | Generated from scratch |
-| 2026-11-06 | — | Multi-line `accessPolicies` sent compacted; AWS rejected line breaks |
+| 2026-11-06 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Multi-line `accessPolicies` sent compacted; AWS rejected line breaks |
+| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Generated from scratch |

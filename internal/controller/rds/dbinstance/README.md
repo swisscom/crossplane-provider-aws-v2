@@ -56,10 +56,10 @@ replica, restore.
 
 ## History
 
-| Date | Commit | Change |
+| Date | PR | Change |
 |------|--------|--------|
-| 2026-11-04 | | Create no longer copies the AWS response into `spec.forProvider` (status only) |
-| 2026-10-19 | | Fix update loop with `monitoringInterval: 0` (monitoring off) |
-| 2026-10-07 | `6a1364d` | Drift detection for fields new in SDK v2 (database insights, network type, …); additional storage volumes; managed password toggling |
-| 2026-10-06 | `68972b4` | Comprehensive examples |
-| 2026-10-05 | `75acc8b` | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced secrets |
+| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Create no longer copies the AWS response into `spec.forProvider` (status only) |
+| 2026-10-19 | `bea5e9f` | Fix update loop with `monitoringInterval: 0` (monitoring off) |
+| 2026-10-07 | `9e2ab6c` | Drift detection for fields new in SDK v2 (database insights, network type, …); additional storage volumes; managed password toggling |
+| 2026-10-06 | `344c433` | Comprehensive examples |
+| 2026-10-05 | `e43afb1` | Imported from provider-aws and ported to runtime v2, SDK v2, namespaced secrets |

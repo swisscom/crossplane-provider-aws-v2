@@ -31,13 +31,14 @@ import (
 	{{- template "sdk_find_read_many" . }}
 {{- end }}
 
-// Generate{{ .CRD.Ops.Create.InputRef.Shape.ShapeName }} returns a create input.
+{{- $updateIsCreate := and .CRD.Ops.Update (eq .CRD.Ops.Update.ExportedName .CRD.Ops.Create.ExportedName) }}
+// Generate{{ .CRD.Ops.Create.InputRef.Shape.ShapeName }} returns a create{{ if $updateIsCreate }} and update{{ end }} input.
 func Generate{{ .CRD.Ops.Create.InputRef.Shape.ShapeName }}(cr *svcapitypes.{{ .CRD.Names.Camel }}) (*svcsdk.{{ .CRD.Ops.Create.InputRef.Shape.ShapeName }}, error) {
 	res := &svcsdk.{{ .CRD.Ops.Create.InputRef.Shape.ShapeName }}{}
 {{ GoCodeSetCreateInput .CRD "cr" "res" 1 }}
 	return res, nil
 }
-{{ if .CRD.Ops.Update }}
+{{ if and .CRD.Ops.Update (not $updateIsCreate) }}
 // Generate{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }} returns an update input.
 func Generate{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}(cr *svcapitypes.{{ .CRD.Names.Camel }}) (*svcsdk.{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}, error) {
 	res := &svcsdk.{{ .CRD.Ops.Update.InputRef.Shape.ShapeName }}{}

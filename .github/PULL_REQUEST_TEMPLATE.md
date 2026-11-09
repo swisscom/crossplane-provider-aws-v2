@@ -21,7 +21,6 @@ Fixes #
 
 **Before requesting review, I confirm that I have:**
 
-- [ ] Read and followed Crossplane's [contribution process].
 - [ ] Run `make reviewable test` to ensure this PR is ready for review.
 - [ ] Validated AWS-dependent changes against live AWS resources, or explained below why validation is not applicable or feasible.
 - [ ] Updated the docs this PR makes outdated (kind README, `CHANGELOG.md`, `docs/`, `AGENTS.md`, `.agents/skills`), or checked that none are.
@@ -38,5 +37,3 @@ observed behavior before and after the change, or explain why live validation
 is not applicable or feasible. Unit tests alone may not establish actual AWS
 API behavior. How to validate: docs/components/testing.md.
 -->
-
-[contribution process]: https://git.io/fj2m9

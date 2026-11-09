@@ -200,5 +200,23 @@ config afterwards.
 - **ReadMany vs ReadOne**: with `Describe…s` (ReadMany) the generated
   observe gets a list and calls `filterList`; most AWS "describe" calls are
   ReadMany.
+- **`document` shapes** (Smithy free-form JSON, e.g. opensearch
+  `IndexSchema` of `CreateIndex`) make ACK panic. Ignore the resource or
+  the member that uses them.
+- **Nested `ignore.field_paths`** (`CreateDomainInput.AdvancedSecurityOptions.MasterUserOptions.MasterUserPassword`)
+  remove the member from the shape, which other operations may share:
+  it disappears from every spec field of that shape. Set it in a hook.
+- **A spec field from another operation**: `resources.<Kind>.fields.<Field>.from`
+  (`operation`, `path`) takes the field's shape from that operation, e.g.
+  opensearch `autoTuneOptions` from `UpdateDomainConfig`, which has
+  `rollbackOnDisable` that `CreateDomain` lacks. Convert to the create
+  input's shape in `preCreate`.
+- **`fields.<F>` keys are AWS member names** (`Arn`, `LogGroupArn`), not
+  Go names (`ARN`): with `from`, a key that differs only in case creates the
+  field, but the generated code never fills it.
+- **Several read operations**: ACK may pick a newer one that returns less
+  (cloudwatchlogs `ListLogGroups` has no retention). Pin the one you want
+  with `operations:` (`operation_type: ReadMany`) and ignore the other in
+  `ignore.operations`.
 - ACK snippets are SDK-v2 code, but types in the API stay ACK-style
   (`*int64`, `[]*string`); see [aws-sdk.md](aws-sdk.md#types-api-vs-sdk).

@@ -101,7 +101,11 @@ func UpdatableFields(r *ackmodel.CRD) ([]UpdatableField, error) {
 // ReadMany operation, found like ACK's SetResource does.
 func readOutputShape(r *ackmodel.CRD, op *awssdkmodel.Operation, readMany bool) (*awssdkmodel.Shape, error) {
 	if !readMany {
-		return r.GetOutputShape(op)
+		s, err := r.GetOutputShape(op)
+		if err != nil || r.GetOutputWrapperFieldPath(op) != nil {
+			return s, err
+		}
+		return unwrapSingleStruct(s), nil
 	}
 	if r.GetOutputWrapperFieldPath(op) != nil {
 		s, err := r.GetOutputShape(op)
@@ -122,4 +126,19 @@ func readOutputShape(r *ackmodel.CRD, op *awssdkmodel.Operation, readMany bool) 
 		}
 	}
 	return nil, nil
+}
+
+// unwrapSingleStruct returns the member of an output shape whose only member
+// is a structure, e.g. DescribeDomainOutput.DomainStatus, as ACK's
+// SetResource does without an output wrapper field path.
+func unwrapSingleStruct(s *awssdkmodel.Shape) *awssdkmodel.Shape {
+	if s == nil || !s.UsedAsOutput || len(s.MemberRefs) != 1 {
+		return s
+	}
+	for _, ref := range s.MemberRefs {
+		if ref.Shape.Type == "structure" {
+			return ref.Shape
+		}
+	}
+	return s
 }

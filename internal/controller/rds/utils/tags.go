@@ -18,15 +18,14 @@ package utils
 
 import (
 	"context"
-	"sort"
 	"strings"
 
 	svcsdk "github.com/aws/aws-sdk-go-v2/service/rds"
 	svcsdktypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
-	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
 
 	svcapitypes "github.com/swisscom/crossplane-provider-aws-v2/apis/rds/v1alpha1"
+	awsclient "github.com/swisscom/crossplane-provider-aws-v2/internal/clients/aws"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/utils/pointer"
 )
 
@@ -63,11 +62,14 @@ func ShouldIgnore(key string, rules []string) bool { // intentionally simple, no
 	return false
 }
 
-// DiffTags between spec and current
+// DiffTags between spec and current. Tags reserved by AWS (aws:) are left
+// alone: they can't be changed or removed.
 func DiffTags(spec []*svcapitypes.Tag, current []svcsdktypes.Tag) (addTags []svcsdktypes.Tag, removeTags []string) {
 	currentMap := make(map[string]string, len(current))
 	for _, t := range current {
-		currentMap[pointer.StringValue(t.Key)] = pointer.StringValue(t.Value)
+		if k := pointer.StringValue(t.Key); !awsclient.IsAWSTag(k) {
+			currentMap[k] = pointer.StringValue(t.Value)
+		}
 	}
 
 	specMap := make(map[string]string, len(spec))
@@ -91,44 +93,12 @@ func DiffTags(spec []*svcapitypes.Tag, current []svcsdktypes.Tag) (addTags []svc
 
 	for _, t := range current {
 		key := pointer.StringValue(t.Key)
-		if _, exists := specMap[key]; !exists {
+		if _, exists := specMap[key]; !exists && !awsclient.IsAWSTag(key) {
 			removeTags = append(removeTags, key)
 		}
 	}
 
 	return addTags, removeTags
-}
-
-// AddExternalTags to spec if they don't exist
-func AddExternalTags(mg resource.Managed, spec []*svcapitypes.Tag) []*svcapitypes.Tag {
-	tagMap := make(map[string]struct{}, len(spec))
-	for _, t := range spec {
-		tagMap[pointer.StringValue(t.Key)] = struct{}{}
-	}
-
-	tags := spec
-	for _, t := range GetExternalTags(mg) {
-		if _, exists := tagMap[pointer.StringValue(t.Key)]; !exists {
-			tags = append(tags, t)
-		}
-	}
-
-	return tags
-}
-
-// GetExternalTags is a wrapper around resource.GetExternalTags to return a sorted array instead of a map
-func GetExternalTags(mg resource.Managed) []*svcapitypes.Tag {
-	tags := resource.GetExternalTags(mg)
-	externalTags := make([]*svcapitypes.Tag, 0, len(tags))
-	for k, v := range tags {
-		externalTags = append(externalTags, &svcapitypes.Tag{Key: pointer.ToOrNilIfZeroValue(k), Value: pointer.ToOrNilIfZeroValue(v)})
-	}
-
-	sort.Slice(externalTags, func(i, j int) bool {
-		return pointer.StringValue(externalTags[i].Key) > pointer.StringValue(externalTags[j].Key)
-	})
-
-	return externalTags
 }
 
 // TagClient is the part of the RDS API needed to manage tags.

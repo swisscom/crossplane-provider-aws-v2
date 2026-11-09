@@ -90,3 +90,23 @@ func TestRunServiceCatalog(t *testing.T) {
 		}
 	}
 }
+
+// TestUpdateIsCreateOperation checks a kind whose create and update operation
+// is the same (cloudwatchlogs ResourcePolicy, PutResourcePolicy): the input
+// generator and the Client method must exist once.
+func TestUpdateIsCreateOperation(t *testing.T) {
+	out := generate(t, "cloudwatchlogs")
+	dir := filepath.Join(out, "internal", "controller", "cloudwatchlogs", "resourcepolicy")
+	for file, decl := range map[string]string{
+		"zz_conversions.go": "func GeneratePutResourcePolicyInput(",
+		"zz_controller.go":  "\tPutResourcePolicy(context.Context",
+	} {
+		b, err := os.ReadFile(filepath.Join(dir, file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(string(b), decl); n != 1 {
+			t.Errorf("%s: %q occurs %d times, want 1", file, decl, n)
+		}
+	}
+}

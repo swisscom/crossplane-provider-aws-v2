@@ -1,0 +1,111 @@
+# ACK generator config of cloudwatchlogs, see docs/components/ack-code-generator.md.
+# List all kinds with `cd codegen && go run ./cmd/generate --service cloudwatchlogs --list-kinds`.
+operations:
+    # ListLogGroups returns only summaries, without e.g. the retention
+    DescribeLogGroups:
+        resource_name: LogGroup
+        operation_type: ReadMany
+    PutResourcePolicy:
+        resource_name: ResourcePolicy
+        operation_type:
+            - Create
+            - Update
+    DescribeResourcePolicies:
+        resource_name: ResourcePolicy
+        operation_type: ReadMany
+    DeleteResourcePolicy:
+        resource_name: ResourcePolicy
+        operation_type: Delete
+ignore:
+    operations:
+        - ListLogGroups
+    resource_names:
+        - Delivery
+        - ExportTask
+        - ImportTask
+        - LogAnomalyDetector
+        - LogStream
+        - LookupTable
+        - ScheduledQuery
+    field_paths:
+        # the log group name is the external name
+        - CreateLogGroupInput.LogGroupName
+        - DeleteLogGroupInput.LogGroupName
+        # with a log group class, DescribeLogGroups doesn't return the
+        # retention; preObserve sets the name prefix instead
+        - DescribeLogGroupsInput.LogGroupClass
+        # the policy name is the external name
+        - PutResourcePolicyInput.PolicyName
+        - DeleteResourcePolicyInput.PolicyName
+        # only account-level policies: a policy of a log group belongs to
+        # the log group
+        - PutResourcePolicyInput.ResourceArn
+        - DeleteResourcePolicyInput.ResourceArn
+        - DescribeResourcePoliciesInput.ResourceArn
+        # without a scope, AWS returns the account-level policies
+        - DescribeResourcePoliciesInput.PolicyScope
+        - PutResourcePolicyInput.ExpectedRevisionId
+        - DeleteResourcePolicyInput.ExpectedRevisionId
+        # the status is taken from DescribeResourcePolicies (fields below)
+        - PutResourcePolicyOutput.ResourcePolicy
+        - PutResourcePolicyOutput.RevisionId
+resources:
+    LogGroup:
+        fields:
+            Arn:
+                is_read_only: true
+                from:
+                    operation: DescribeLogGroups
+                    path: LogGroups.Arn
+            LogGroupArn:
+                is_read_only: true
+                from:
+                    operation: DescribeLogGroups
+                    path: LogGroups.LogGroupArn
+            CreationTime:
+                is_read_only: true
+                from:
+                    operation: DescribeLogGroups
+                    path: LogGroups.CreationTime
+            DataProtectionStatus:
+                is_read_only: true
+                from:
+                    operation: DescribeLogGroups
+                    path: LogGroups.DataProtectionStatus
+            MetricFilterCount:
+                is_read_only: true
+                from:
+                    operation: DescribeLogGroups
+                    path: LogGroups.MetricFilterCount
+            RetentionInDays:
+                is_read_only: true
+                from:
+                    operation: DescribeLogGroups
+                    path: LogGroups.RetentionInDays
+            StoredBytes:
+                is_read_only: true
+                from:
+                    operation: DescribeLogGroups
+                    path: LogGroups.StoredBytes
+        exceptions:
+            errors:
+                404:
+                    code: ResourceNotFoundException
+    ResourcePolicy:
+        fields:
+            PolicyDocument:
+                is_required: true
+            LastUpdatedTime:
+                is_read_only: true
+                from:
+                    operation: DescribeResourcePolicies
+                    path: ResourcePolicies.LastUpdatedTime
+            PolicyScope:
+                is_read_only: true
+                from:
+                    operation: DescribeResourcePolicies
+                    path: ResourcePolicies.PolicyScope
+        exceptions:
+            errors:
+                404:
+                    code: ResourceNotFoundException

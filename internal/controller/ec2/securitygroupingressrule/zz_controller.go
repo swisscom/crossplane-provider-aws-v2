@@ -207,7 +207,11 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.SecurityGroupIngr
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// Like Observe, take only the status from the output: copying it into
+	// the spec would replace desired values with what AWS returns.
+	ko := cr.DeepCopy()
 
+	ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 

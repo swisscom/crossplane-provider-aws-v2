@@ -100,7 +100,7 @@ sequenceDiagram
   clear message (`Synced=False`) until the spec is fixed or the resource is
   recreated.
 - **Tags**: desired = the spec tags only (`svcutils.SpecTags`); `aws:`
-  tags are ignored ([ADR 0011](adr/0011-only-spec-tags.md)). The status shows the
+  tags are ignored ([ADR 0012](adr/0012-only-spec-tags.md)). The status shows the
   tags read *before* the update, so they lag one poll behind.
 - **No generated update**: EC2 has no "modify security group" operation, so
   the generator renders `Update` as a single `update` hook (default: do

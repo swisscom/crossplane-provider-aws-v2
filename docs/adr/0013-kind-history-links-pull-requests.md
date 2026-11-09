@@ -1,4 +1,4 @@
-# 0012. Kind history rows link pull requests, not commits
+# 0013. Kind history rows link pull requests, not commits
 
 - Status: Accepted
 - Date: 2026-11-06

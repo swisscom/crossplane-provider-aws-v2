@@ -79,7 +79,7 @@ Imported from provider-aws `crossplane-contrib/provider-aws@ad8ac93` (clean;
 | Date | PR | Change |
 |------|--------|--------|
 | 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Create no longer copies the AWS response into `spec.forProvider` (status only) |
-| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Tags starting with `aws:` are ignored instead of being removed ([ADR 0011](../../../../docs/adr/0011-only-spec-tags.md)) |
+| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Tags starting with `aws:` are ignored instead of being removed ([ADR 0012](../../../../docs/adr/0012-only-spec-tags.md)) |
 | 2026-10-15 | `0bc1dd7` | References to DBSubnetGroup and DBClusterParameterGroup |
 | 2026-10-09 | `b74da45` | Compare all updatable fields; restore without CreateDBCluster; password change applied before it is published |
 | 2026-10-09 | `11ef368` | `serverlessV2ScalingConfiguration` supported (float fields allowed) |

@@ -28,7 +28,7 @@ migration notes here
   `crossplane-namespace` and `crossplane-providerconfig` tags, and remove
   them from existing resources on the next reconcile. Add them to
   `spec.forProvider.tags` to keep them
-  ([ADR 0011](docs/adr/0011-only-spec-tags.md)).
+  ([ADR 0012](docs/adr/0012-only-spec-tags.md)).
 
 ### Fixed
 

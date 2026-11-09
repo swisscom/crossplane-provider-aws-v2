@@ -14,11 +14,12 @@ deliberate.
 | [0005](0005-aws-sdk-go-v2-model-from-go-mod.md) | AWS SDK for Go v2 only; model version follows `go.mod` | Accepted |
 | [0006](0006-allow-float-fields.md) | Allow `float64` fields in CRDs | Accepted |
 | [0007](0007-generated-drift-detection.md) | Generated drift detection of updatable fields | Accepted |
-| [0008](0008-kind-readme-and-changelog.md) | Per-kind README and a root changelog for history | Accepted; history column superseded by 0012 |
+| [0008](0008-kind-readme-and-changelog.md) | Per-kind README and a root changelog for history | Accepted; history column superseded by 0013 |
 | [0009](0009-ec2-security-group-model.md) | Security groups and their rules are separate kinds | Accepted |
 | [0010](0010-release-branches-and-tags.md) | Releases are tags on release branches; no published package yet | Accepted |
-| [0011](0011-only-spec-tags.md) | Only spec tags are applied; AWS tags are ignored | Accepted |
-| [0012](0012-kind-history-links-pull-requests.md) | Kind history rows link pull requests, not commits | Accepted |
+| [0011](0011-credentials-sources.md) | Provider-specific credentials sources; namespace isolation by RBAC | Accepted |
+| [0012](0012-only-spec-tags.md) | Only spec tags are applied; AWS tags are ignored | Accepted |
+| [0013](0013-kind-history-links-pull-requests.md) | Kind history rows link pull requests, not commits | Accepted |
 
 ## Writing an ADR
 

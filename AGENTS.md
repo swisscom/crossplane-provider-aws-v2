@@ -81,7 +81,7 @@ compiles after `make generate`.
 - Errors: wrap with `crossplane-runtime/v2/pkg/errors`; AWS errors with
   `awsclient.Wrap`.
 - Tags: apply exactly the spec tags (never `resource.GetExternalTags`);
-  skip `aws:` keys with `awsclient.IsAWSTag` (ADR 0011).
+  skip `aws:` keys with `awsclient.IsAWSTag` (ADR 0012).
 - Files start with the Apache 2.0 license header (see `codegen/templates/boilerplate.go.tpl`).
 - Commit subjects are scoped: `docdb/dbcluster: …`, `codegen: …`, `importer: …`,
   `docs: …`; sign off with `git commit -s`.

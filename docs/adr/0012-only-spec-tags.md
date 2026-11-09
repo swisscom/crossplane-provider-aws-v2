@@ -1,4 +1,4 @@
-# 0011. Only spec tags are applied; AWS tags are ignored
+# 0012. Only spec tags are applied; AWS tags are ignored
 
 - Status: Accepted
 - Date: 2026-11-04

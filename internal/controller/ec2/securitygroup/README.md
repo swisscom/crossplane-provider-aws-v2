@@ -85,6 +85,6 @@ Otherwise set the external name.
 
 | Date | PR | Change |
 |------|--------|--------|
-| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Only the spec tags are applied; the `crossplane-*` tags are no longer added and are removed ([ADR 0011](../../../../docs/adr/0011-only-spec-tags.md)) |
+| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Only the spec tags are applied; the `crossplane-*` tags are no longer added and are removed ([ADR 0012](../../../../docs/adr/0012-only-spec-tags.md)) |
 | 2026-10-19 | `0d67c8b` | Adoption reports an event |
 | 2026-10-19 | `6f158be` | Generated from scratch |

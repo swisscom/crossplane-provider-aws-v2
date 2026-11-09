@@ -1,7 +1,7 @@
 # 0008. Per-kind README and a root changelog for history
 
 - Status: Accepted; the history table's commit column is superseded by
-  [0012](0012-kind-history-links-pull-requests.md)
+  [0013](0013-kind-history-links-pull-requests.md)
 - Date: 2026-10-09
 
 ## Context

@@ -66,7 +66,7 @@ coding agents follow.
   `awsclient.Wrap`.
 - **Tags**: apply exactly the spec tags, add no others (no
   `resource.GetExternalTags`), and leave `aws:` tags alone
-  (`awsclient.IsAWSTag`) ([ADR 0011](adr/0011-only-spec-tags.md)).
+  (`awsclient.IsAWSTag`) ([ADR 0012](adr/0012-only-spec-tags.md)).
 - **Conditions**: set `Available`/`Unavailable` in `postObserve` from the AWS
   status; the generated controller doesn't.
 - **License header** on every Go file

@@ -179,4 +179,3 @@ secret refs and references, to check the schema keeps those fields.
   ([format](../../../docs/development.md#kind-readme)).
 - Add a short entry for anything new you learned to `docs/porting-notes.md`,
   and teach the importer if the fix was mechanical.
-- Update the "Imported so far" line in `AGENTS.md`.

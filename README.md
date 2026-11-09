@@ -2,13 +2,23 @@
 
 A native (no Terraform) [Crossplane](https://crossplane.io/) provider for AWS.
 
-Status: **proof of concept**.
-
 - crossplane-runtime v2, Crossplane v2 (safe-start)
 - AWS SDK for Go v2 only
 - **namespaced managed resources only**; credentials from a namespaced
   `ProviderConfig` or a cluster-wide `ClusterProviderConfig`
 - API groups: `aws2.crossplane.io` (provider configs), `<service>.aws2.crossplane.io` (MRs)
+
+## Kinds
+
+The managed resources and their fields are listed on
+[doc.crds.dev](https://doc.crds.dev/github.com/swisscom/crossplane-provider-aws-v2)
+for each release. The behavior and limitations of a kind are described in
+[`internal/controller/<service>/<kind>/README.md`](internal/controller).
+Examples are in [`examples/`](examples).
+
+All kinds are `v1alpha1`: their API may still change incompatibly in a
+minor release, with migration notes in [CHANGELOG.md](CHANGELOG.md)
+([versioning](docs/development.md#releasing)).
 
 ## Installing
 

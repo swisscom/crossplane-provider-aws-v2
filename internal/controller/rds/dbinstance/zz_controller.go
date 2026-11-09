@@ -215,36 +215,39 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// Like Observe, take only the status from the output: copying it into
+	// the spec would replace desired values with what AWS returns.
+	ko := cr.DeepCopy()
 
 	if resp.DBInstance.ActivityStreamEngineNativeAuditFieldsIncluded != nil {
-		cr.Status.AtProvider.ActivityStreamEngineNativeAuditFieldsIncluded = resp.DBInstance.ActivityStreamEngineNativeAuditFieldsIncluded
+		ko.Status.AtProvider.ActivityStreamEngineNativeAuditFieldsIncluded = resp.DBInstance.ActivityStreamEngineNativeAuditFieldsIncluded
 	} else {
-		cr.Status.AtProvider.ActivityStreamEngineNativeAuditFieldsIncluded = nil
+		ko.Status.AtProvider.ActivityStreamEngineNativeAuditFieldsIncluded = nil
 	}
 	if resp.DBInstance.ActivityStreamKinesisStreamName != nil {
-		cr.Status.AtProvider.ActivityStreamKinesisStreamName = resp.DBInstance.ActivityStreamKinesisStreamName
+		ko.Status.AtProvider.ActivityStreamKinesisStreamName = resp.DBInstance.ActivityStreamKinesisStreamName
 	} else {
-		cr.Status.AtProvider.ActivityStreamKinesisStreamName = nil
+		ko.Status.AtProvider.ActivityStreamKinesisStreamName = nil
 	}
 	if resp.DBInstance.ActivityStreamKmsKeyId != nil {
-		cr.Status.AtProvider.ActivityStreamKMSKeyID = resp.DBInstance.ActivityStreamKmsKeyId
+		ko.Status.AtProvider.ActivityStreamKMSKeyID = resp.DBInstance.ActivityStreamKmsKeyId
 	} else {
-		cr.Status.AtProvider.ActivityStreamKMSKeyID = nil
+		ko.Status.AtProvider.ActivityStreamKMSKeyID = nil
 	}
 	if resp.DBInstance.ActivityStreamMode != "" {
-		cr.Status.AtProvider.ActivityStreamMode = aws.String(string(resp.DBInstance.ActivityStreamMode))
+		ko.Status.AtProvider.ActivityStreamMode = aws.String(string(resp.DBInstance.ActivityStreamMode))
 	} else {
-		cr.Status.AtProvider.ActivityStreamMode = nil
+		ko.Status.AtProvider.ActivityStreamMode = nil
 	}
 	if resp.DBInstance.ActivityStreamPolicyStatus != "" {
-		cr.Status.AtProvider.ActivityStreamPolicyStatus = aws.String(string(resp.DBInstance.ActivityStreamPolicyStatus))
+		ko.Status.AtProvider.ActivityStreamPolicyStatus = aws.String(string(resp.DBInstance.ActivityStreamPolicyStatus))
 	} else {
-		cr.Status.AtProvider.ActivityStreamPolicyStatus = nil
+		ko.Status.AtProvider.ActivityStreamPolicyStatus = nil
 	}
 	if resp.DBInstance.ActivityStreamStatus != "" {
-		cr.Status.AtProvider.ActivityStreamStatus = aws.String(string(resp.DBInstance.ActivityStreamStatus))
+		ko.Status.AtProvider.ActivityStreamStatus = aws.String(string(resp.DBInstance.ActivityStreamStatus))
 	} else {
-		cr.Status.AtProvider.ActivityStreamStatus = nil
+		ko.Status.AtProvider.ActivityStreamStatus = nil
 	}
 	if resp.DBInstance.AdditionalStorageVolumes != nil {
 		f6 := []*svcapitypes.AdditionalStorageVolume{}
@@ -274,15 +277,15 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f6 = append(f6, f6elem)
 		}
-		cr.Spec.ForProvider.AdditionalStorageVolumes = f6
+		ko.Spec.ForProvider.AdditionalStorageVolumes = f6
 	} else {
-		cr.Spec.ForProvider.AdditionalStorageVolumes = nil
+		ko.Spec.ForProvider.AdditionalStorageVolumes = nil
 	}
 	if resp.DBInstance.AllocatedStorage != nil {
 		allocatedStorageCopy := int64(*resp.DBInstance.AllocatedStorage)
-		cr.Spec.ForProvider.AllocatedStorage = &allocatedStorageCopy
+		ko.Spec.ForProvider.AllocatedStorage = &allocatedStorageCopy
 	} else {
-		cr.Spec.ForProvider.AllocatedStorage = nil
+		ko.Spec.ForProvider.AllocatedStorage = nil
 	}
 	if resp.DBInstance.AssociatedRoles != nil {
 		f8 := []*svcapitypes.DBInstanceRole{}
@@ -299,50 +302,50 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f8 = append(f8, f8elem)
 		}
-		cr.Status.AtProvider.AssociatedRoles = f8
+		ko.Status.AtProvider.AssociatedRoles = f8
 	} else {
-		cr.Status.AtProvider.AssociatedRoles = nil
+		ko.Status.AtProvider.AssociatedRoles = nil
 	}
 	if resp.DBInstance.AutoMinorVersionUpgrade != nil {
-		cr.Spec.ForProvider.AutoMinorVersionUpgrade = resp.DBInstance.AutoMinorVersionUpgrade
+		ko.Spec.ForProvider.AutoMinorVersionUpgrade = resp.DBInstance.AutoMinorVersionUpgrade
 	} else {
-		cr.Spec.ForProvider.AutoMinorVersionUpgrade = nil
+		ko.Spec.ForProvider.AutoMinorVersionUpgrade = nil
 	}
 	if resp.DBInstance.AutomaticRestartTime != nil {
-		cr.Status.AtProvider.AutomaticRestartTime = &metav1.Time{Time: *resp.DBInstance.AutomaticRestartTime}
+		ko.Status.AtProvider.AutomaticRestartTime = &metav1.Time{Time: *resp.DBInstance.AutomaticRestartTime}
 	} else {
-		cr.Status.AtProvider.AutomaticRestartTime = nil
+		ko.Status.AtProvider.AutomaticRestartTime = nil
 	}
 	if resp.DBInstance.AutomationMode != "" {
-		cr.Status.AtProvider.AutomationMode = aws.String(string(resp.DBInstance.AutomationMode))
+		ko.Status.AtProvider.AutomationMode = aws.String(string(resp.DBInstance.AutomationMode))
 	} else {
-		cr.Status.AtProvider.AutomationMode = nil
+		ko.Status.AtProvider.AutomationMode = nil
 	}
 	if resp.DBInstance.AvailabilityZone != nil {
-		cr.Spec.ForProvider.AvailabilityZone = resp.DBInstance.AvailabilityZone
+		ko.Spec.ForProvider.AvailabilityZone = resp.DBInstance.AvailabilityZone
 	} else {
-		cr.Spec.ForProvider.AvailabilityZone = nil
+		ko.Spec.ForProvider.AvailabilityZone = nil
 	}
 	if resp.DBInstance.AwsBackupRecoveryPointArn != nil {
-		cr.Status.AtProvider.AWSBackupRecoveryPointARN = resp.DBInstance.AwsBackupRecoveryPointArn
+		ko.Status.AtProvider.AWSBackupRecoveryPointARN = resp.DBInstance.AwsBackupRecoveryPointArn
 	} else {
-		cr.Status.AtProvider.AWSBackupRecoveryPointARN = nil
+		ko.Status.AtProvider.AWSBackupRecoveryPointARN = nil
 	}
 	if resp.DBInstance.BackupRetentionPeriod != nil {
 		backupRetentionPeriodCopy := int64(*resp.DBInstance.BackupRetentionPeriod)
-		cr.Spec.ForProvider.BackupRetentionPeriod = &backupRetentionPeriodCopy
+		ko.Spec.ForProvider.BackupRetentionPeriod = &backupRetentionPeriodCopy
 	} else {
-		cr.Spec.ForProvider.BackupRetentionPeriod = nil
+		ko.Spec.ForProvider.BackupRetentionPeriod = nil
 	}
 	if resp.DBInstance.BackupTarget != nil {
-		cr.Spec.ForProvider.BackupTarget = resp.DBInstance.BackupTarget
+		ko.Spec.ForProvider.BackupTarget = resp.DBInstance.BackupTarget
 	} else {
-		cr.Spec.ForProvider.BackupTarget = nil
+		ko.Spec.ForProvider.BackupTarget = nil
 	}
 	if resp.DBInstance.CACertificateIdentifier != nil {
-		cr.Spec.ForProvider.CACertificateIdentifier = resp.DBInstance.CACertificateIdentifier
+		ko.Spec.ForProvider.CACertificateIdentifier = resp.DBInstance.CACertificateIdentifier
 	} else {
-		cr.Spec.ForProvider.CACertificateIdentifier = nil
+		ko.Spec.ForProvider.CACertificateIdentifier = nil
 	}
 	if resp.DBInstance.CertificateDetails != nil {
 		f17 := &svcapitypes.CertificateDetails{}
@@ -352,39 +355,39 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 		if resp.DBInstance.CertificateDetails.ValidTill != nil {
 			f17.ValidTill = &metav1.Time{Time: *resp.DBInstance.CertificateDetails.ValidTill}
 		}
-		cr.Status.AtProvider.CertificateDetails = f17
+		ko.Status.AtProvider.CertificateDetails = f17
 	} else {
-		cr.Status.AtProvider.CertificateDetails = nil
+		ko.Status.AtProvider.CertificateDetails = nil
 	}
 	if resp.DBInstance.CharacterSetName != nil {
-		cr.Spec.ForProvider.CharacterSetName = resp.DBInstance.CharacterSetName
+		ko.Spec.ForProvider.CharacterSetName = resp.DBInstance.CharacterSetName
 	} else {
-		cr.Spec.ForProvider.CharacterSetName = nil
+		ko.Spec.ForProvider.CharacterSetName = nil
 	}
 	if resp.DBInstance.CopyTagsToSnapshot != nil {
-		cr.Spec.ForProvider.CopyTagsToSnapshot = resp.DBInstance.CopyTagsToSnapshot
+		ko.Spec.ForProvider.CopyTagsToSnapshot = resp.DBInstance.CopyTagsToSnapshot
 	} else {
-		cr.Spec.ForProvider.CopyTagsToSnapshot = nil
+		ko.Spec.ForProvider.CopyTagsToSnapshot = nil
 	}
 	if resp.DBInstance.CustomIamInstanceProfile != nil {
-		cr.Spec.ForProvider.CustomIAMInstanceProfile = resp.DBInstance.CustomIamInstanceProfile
+		ko.Spec.ForProvider.CustomIAMInstanceProfile = resp.DBInstance.CustomIamInstanceProfile
 	} else {
-		cr.Spec.ForProvider.CustomIAMInstanceProfile = nil
+		ko.Spec.ForProvider.CustomIAMInstanceProfile = nil
 	}
 	if resp.DBInstance.CustomerOwnedIpEnabled != nil {
-		cr.Status.AtProvider.CustomerOwnedIPEnabled = resp.DBInstance.CustomerOwnedIpEnabled
+		ko.Status.AtProvider.CustomerOwnedIPEnabled = resp.DBInstance.CustomerOwnedIpEnabled
 	} else {
-		cr.Status.AtProvider.CustomerOwnedIPEnabled = nil
+		ko.Status.AtProvider.CustomerOwnedIPEnabled = nil
 	}
 	if resp.DBInstance.DBClusterIdentifier != nil {
-		cr.Spec.ForProvider.DBClusterIdentifier = resp.DBInstance.DBClusterIdentifier
+		ko.Spec.ForProvider.DBClusterIdentifier = resp.DBInstance.DBClusterIdentifier
 	} else {
-		cr.Spec.ForProvider.DBClusterIdentifier = nil
+		ko.Spec.ForProvider.DBClusterIdentifier = nil
 	}
 	if resp.DBInstance.DBInstanceArn != nil {
-		cr.Status.AtProvider.DBInstanceARN = resp.DBInstance.DBInstanceArn
+		ko.Status.AtProvider.DBInstanceARN = resp.DBInstance.DBInstanceArn
 	} else {
-		cr.Status.AtProvider.DBInstanceARN = nil
+		ko.Status.AtProvider.DBInstanceARN = nil
 	}
 	if resp.DBInstance.DBInstanceAutomatedBackupsReplications != nil {
 		f24 := []*svcapitypes.DBInstanceAutomatedBackupsReplication{}
@@ -395,29 +398,29 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f24 = append(f24, f24elem)
 		}
-		cr.Status.AtProvider.DBInstanceAutomatedBackupsReplications = f24
+		ko.Status.AtProvider.DBInstanceAutomatedBackupsReplications = f24
 	} else {
-		cr.Status.AtProvider.DBInstanceAutomatedBackupsReplications = nil
+		ko.Status.AtProvider.DBInstanceAutomatedBackupsReplications = nil
 	}
 	if resp.DBInstance.DBInstanceClass != nil {
-		cr.Spec.ForProvider.DBInstanceClass = resp.DBInstance.DBInstanceClass
+		ko.Spec.ForProvider.DBInstanceClass = resp.DBInstance.DBInstanceClass
 	} else {
-		cr.Spec.ForProvider.DBInstanceClass = nil
+		ko.Spec.ForProvider.DBInstanceClass = nil
 	}
 	if resp.DBInstance.DBInstanceIdentifier != nil {
-		cr.Status.AtProvider.DBInstanceIdentifier = resp.DBInstance.DBInstanceIdentifier
+		ko.Status.AtProvider.DBInstanceIdentifier = resp.DBInstance.DBInstanceIdentifier
 	} else {
-		cr.Status.AtProvider.DBInstanceIdentifier = nil
+		ko.Status.AtProvider.DBInstanceIdentifier = nil
 	}
 	if resp.DBInstance.DBInstanceStatus != nil {
-		cr.Status.AtProvider.DBInstanceStatus = resp.DBInstance.DBInstanceStatus
+		ko.Status.AtProvider.DBInstanceStatus = resp.DBInstance.DBInstanceStatus
 	} else {
-		cr.Status.AtProvider.DBInstanceStatus = nil
+		ko.Status.AtProvider.DBInstanceStatus = nil
 	}
 	if resp.DBInstance.DBName != nil {
-		cr.Spec.ForProvider.DBName = resp.DBInstance.DBName
+		ko.Spec.ForProvider.DBName = resp.DBInstance.DBName
 	} else {
-		cr.Spec.ForProvider.DBName = nil
+		ko.Spec.ForProvider.DBName = nil
 	}
 	if resp.DBInstance.DBParameterGroups != nil {
 		f29 := []*svcapitypes.DBParameterGroupStatus{}
@@ -431,9 +434,9 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f29 = append(f29, f29elem)
 		}
-		cr.Status.AtProvider.DBParameterGroups = f29
+		ko.Status.AtProvider.DBParameterGroups = f29
 	} else {
-		cr.Status.AtProvider.DBParameterGroups = nil
+		ko.Status.AtProvider.DBParameterGroups = nil
 	}
 	if resp.DBInstance.DBSecurityGroups != nil {
 		f30 := []*svcapitypes.DBSecurityGroupMembership{}
@@ -447,9 +450,9 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f30 = append(f30, f30elem)
 		}
-		cr.Status.AtProvider.DBSecurityGroups = f30
+		ko.Status.AtProvider.DBSecurityGroups = f30
 	} else {
-		cr.Status.AtProvider.DBSecurityGroups = nil
+		ko.Status.AtProvider.DBSecurityGroups = nil
 	}
 	if resp.DBInstance.DBSubnetGroup != nil {
 		f31 := &svcapitypes.DBSubnetGroup{}
@@ -499,40 +502,40 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 		if resp.DBInstance.DBSubnetGroup.VpcId != nil {
 			f31.VPCID = resp.DBInstance.DBSubnetGroup.VpcId
 		}
-		cr.Status.AtProvider.DBSubnetGroup = f31
+		ko.Status.AtProvider.DBSubnetGroup = f31
 	} else {
-		cr.Status.AtProvider.DBSubnetGroup = nil
+		ko.Status.AtProvider.DBSubnetGroup = nil
 	}
 	if resp.DBInstance.DBSystemId != nil {
-		cr.Spec.ForProvider.DBSystemID = resp.DBInstance.DBSystemId
+		ko.Spec.ForProvider.DBSystemID = resp.DBInstance.DBSystemId
 	} else {
-		cr.Spec.ForProvider.DBSystemID = nil
+		ko.Spec.ForProvider.DBSystemID = nil
 	}
 	if resp.DBInstance.DatabaseInsightsMode != "" {
-		cr.Spec.ForProvider.DatabaseInsightsMode = aws.String(string(resp.DBInstance.DatabaseInsightsMode))
+		ko.Spec.ForProvider.DatabaseInsightsMode = aws.String(string(resp.DBInstance.DatabaseInsightsMode))
 	} else {
-		cr.Spec.ForProvider.DatabaseInsightsMode = nil
+		ko.Spec.ForProvider.DatabaseInsightsMode = nil
 	}
 	if resp.DBInstance.DbInstancePort != nil {
 		dbInstancePortCopy := int64(*resp.DBInstance.DbInstancePort)
-		cr.Status.AtProvider.DBInstancePort = &dbInstancePortCopy
+		ko.Status.AtProvider.DBInstancePort = &dbInstancePortCopy
 	} else {
-		cr.Status.AtProvider.DBInstancePort = nil
+		ko.Status.AtProvider.DBInstancePort = nil
 	}
 	if resp.DBInstance.DbiResourceId != nil {
-		cr.Status.AtProvider.DBIResourceID = resp.DBInstance.DbiResourceId
+		ko.Status.AtProvider.DBIResourceID = resp.DBInstance.DbiResourceId
 	} else {
-		cr.Status.AtProvider.DBIResourceID = nil
+		ko.Status.AtProvider.DBIResourceID = nil
 	}
 	if resp.DBInstance.DedicatedLogVolume != nil {
-		cr.Spec.ForProvider.DedicatedLogVolume = resp.DBInstance.DedicatedLogVolume
+		ko.Spec.ForProvider.DedicatedLogVolume = resp.DBInstance.DedicatedLogVolume
 	} else {
-		cr.Spec.ForProvider.DedicatedLogVolume = nil
+		ko.Spec.ForProvider.DedicatedLogVolume = nil
 	}
 	if resp.DBInstance.DeletionProtection != nil {
-		cr.Spec.ForProvider.DeletionProtection = resp.DBInstance.DeletionProtection
+		ko.Spec.ForProvider.DeletionProtection = resp.DBInstance.DeletionProtection
 	} else {
-		cr.Spec.ForProvider.DeletionProtection = nil
+		ko.Spec.ForProvider.DeletionProtection = nil
 	}
 	if resp.DBInstance.DomainMemberships != nil {
 		f38 := []*svcapitypes.DomainMembership{}
@@ -561,14 +564,14 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f38 = append(f38, f38elem)
 		}
-		cr.Status.AtProvider.DomainMemberships = f38
+		ko.Status.AtProvider.DomainMemberships = f38
 	} else {
-		cr.Status.AtProvider.DomainMemberships = nil
+		ko.Status.AtProvider.DomainMemberships = nil
 	}
 	if resp.DBInstance.EnabledCloudwatchLogsExports != nil {
-		cr.Status.AtProvider.EnabledCloudwatchLogsExports = aws.StringSlice(resp.DBInstance.EnabledCloudwatchLogsExports)
+		ko.Status.AtProvider.EnabledCloudwatchLogsExports = aws.StringSlice(resp.DBInstance.EnabledCloudwatchLogsExports)
 	} else {
-		cr.Status.AtProvider.EnabledCloudwatchLogsExports = nil
+		ko.Status.AtProvider.EnabledCloudwatchLogsExports = nil
 	}
 	if resp.DBInstance.Endpoint != nil {
 		f40 := &svcapitypes.Endpoint{}
@@ -582,65 +585,65 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			portCopy := int64(*resp.DBInstance.Endpoint.Port)
 			f40.Port = &portCopy
 		}
-		cr.Status.AtProvider.Endpoint = f40
+		ko.Status.AtProvider.Endpoint = f40
 	} else {
-		cr.Status.AtProvider.Endpoint = nil
+		ko.Status.AtProvider.Endpoint = nil
 	}
 	if resp.DBInstance.Engine != nil {
-		cr.Spec.ForProvider.Engine = resp.DBInstance.Engine
+		ko.Spec.ForProvider.Engine = resp.DBInstance.Engine
 	} else {
-		cr.Spec.ForProvider.Engine = nil
+		ko.Spec.ForProvider.Engine = nil
 	}
 	if resp.DBInstance.EngineLifecycleSupport != nil {
-		cr.Spec.ForProvider.EngineLifecycleSupport = resp.DBInstance.EngineLifecycleSupport
+		ko.Spec.ForProvider.EngineLifecycleSupport = resp.DBInstance.EngineLifecycleSupport
 	} else {
-		cr.Spec.ForProvider.EngineLifecycleSupport = nil
+		ko.Spec.ForProvider.EngineLifecycleSupport = nil
 	}
 	if resp.DBInstance.EngineVersion != nil {
-		cr.Status.AtProvider.EngineVersion = resp.DBInstance.EngineVersion
+		ko.Status.AtProvider.EngineVersion = resp.DBInstance.EngineVersion
 	} else {
-		cr.Status.AtProvider.EngineVersion = nil
+		ko.Status.AtProvider.EngineVersion = nil
 	}
 	if resp.DBInstance.EnhancedMonitoringResourceArn != nil {
-		cr.Status.AtProvider.EnhancedMonitoringResourceARN = resp.DBInstance.EnhancedMonitoringResourceArn
+		ko.Status.AtProvider.EnhancedMonitoringResourceARN = resp.DBInstance.EnhancedMonitoringResourceArn
 	} else {
-		cr.Status.AtProvider.EnhancedMonitoringResourceARN = nil
+		ko.Status.AtProvider.EnhancedMonitoringResourceARN = nil
 	}
 	if resp.DBInstance.IAMDatabaseAuthenticationEnabled != nil {
-		cr.Status.AtProvider.IAMDatabaseAuthenticationEnabled = resp.DBInstance.IAMDatabaseAuthenticationEnabled
+		ko.Status.AtProvider.IAMDatabaseAuthenticationEnabled = resp.DBInstance.IAMDatabaseAuthenticationEnabled
 	} else {
-		cr.Status.AtProvider.IAMDatabaseAuthenticationEnabled = nil
+		ko.Status.AtProvider.IAMDatabaseAuthenticationEnabled = nil
 	}
 	if resp.DBInstance.InstanceCreateTime != nil {
-		cr.Status.AtProvider.InstanceCreateTime = &metav1.Time{Time: *resp.DBInstance.InstanceCreateTime}
+		ko.Status.AtProvider.InstanceCreateTime = &metav1.Time{Time: *resp.DBInstance.InstanceCreateTime}
 	} else {
-		cr.Status.AtProvider.InstanceCreateTime = nil
+		ko.Status.AtProvider.InstanceCreateTime = nil
 	}
 	if resp.DBInstance.Iops != nil {
 		iopsCopy := int64(*resp.DBInstance.Iops)
-		cr.Spec.ForProvider.IOPS = &iopsCopy
+		ko.Spec.ForProvider.IOPS = &iopsCopy
 	} else {
-		cr.Spec.ForProvider.IOPS = nil
+		ko.Spec.ForProvider.IOPS = nil
 	}
 	if resp.DBInstance.IsStorageConfigUpgradeAvailable != nil {
-		cr.Status.AtProvider.IsStorageConfigUpgradeAvailable = resp.DBInstance.IsStorageConfigUpgradeAvailable
+		ko.Status.AtProvider.IsStorageConfigUpgradeAvailable = resp.DBInstance.IsStorageConfigUpgradeAvailable
 	} else {
-		cr.Status.AtProvider.IsStorageConfigUpgradeAvailable = nil
+		ko.Status.AtProvider.IsStorageConfigUpgradeAvailable = nil
 	}
 	if resp.DBInstance.KmsKeyId != nil {
-		cr.Spec.ForProvider.KMSKeyID = resp.DBInstance.KmsKeyId
+		ko.Spec.ForProvider.KMSKeyID = resp.DBInstance.KmsKeyId
 	} else {
-		cr.Spec.ForProvider.KMSKeyID = nil
+		ko.Spec.ForProvider.KMSKeyID = nil
 	}
 	if resp.DBInstance.LatestRestorableTime != nil {
-		cr.Status.AtProvider.LatestRestorableTime = &metav1.Time{Time: *resp.DBInstance.LatestRestorableTime}
+		ko.Status.AtProvider.LatestRestorableTime = &metav1.Time{Time: *resp.DBInstance.LatestRestorableTime}
 	} else {
-		cr.Status.AtProvider.LatestRestorableTime = nil
+		ko.Status.AtProvider.LatestRestorableTime = nil
 	}
 	if resp.DBInstance.LicenseModel != nil {
-		cr.Spec.ForProvider.LicenseModel = resp.DBInstance.LicenseModel
+		ko.Spec.ForProvider.LicenseModel = resp.DBInstance.LicenseModel
 	} else {
-		cr.Spec.ForProvider.LicenseModel = nil
+		ko.Spec.ForProvider.LicenseModel = nil
 	}
 	if resp.DBInstance.ListenerEndpoint != nil {
 		f52 := &svcapitypes.Endpoint{}
@@ -654,9 +657,9 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			portCopy := int64(*resp.DBInstance.ListenerEndpoint.Port)
 			f52.Port = &portCopy
 		}
-		cr.Status.AtProvider.ListenerEndpoint = f52
+		ko.Status.AtProvider.ListenerEndpoint = f52
 	} else {
-		cr.Status.AtProvider.ListenerEndpoint = nil
+		ko.Status.AtProvider.ListenerEndpoint = nil
 	}
 	if resp.DBInstance.MasterUserSecret != nil {
 		f53 := &svcapitypes.MasterUserSecret{}
@@ -669,51 +672,51 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 		if resp.DBInstance.MasterUserSecret.SecretStatus != nil {
 			f53.SecretStatus = resp.DBInstance.MasterUserSecret.SecretStatus
 		}
-		cr.Status.AtProvider.MasterUserSecret = f53
+		ko.Status.AtProvider.MasterUserSecret = f53
 	} else {
-		cr.Status.AtProvider.MasterUserSecret = nil
+		ko.Status.AtProvider.MasterUserSecret = nil
 	}
 	if resp.DBInstance.MasterUsername != nil {
-		cr.Spec.ForProvider.MasterUsername = resp.DBInstance.MasterUsername
+		ko.Spec.ForProvider.MasterUsername = resp.DBInstance.MasterUsername
 	} else {
-		cr.Spec.ForProvider.MasterUsername = nil
+		ko.Spec.ForProvider.MasterUsername = nil
 	}
 	if resp.DBInstance.MaxAllocatedStorage != nil {
 		maxAllocatedStorageCopy := int64(*resp.DBInstance.MaxAllocatedStorage)
-		cr.Spec.ForProvider.MaxAllocatedStorage = &maxAllocatedStorageCopy
+		ko.Spec.ForProvider.MaxAllocatedStorage = &maxAllocatedStorageCopy
 	} else {
-		cr.Spec.ForProvider.MaxAllocatedStorage = nil
+		ko.Spec.ForProvider.MaxAllocatedStorage = nil
 	}
 	if resp.DBInstance.MonitoringInterval != nil {
 		monitoringIntervalCopy := int64(*resp.DBInstance.MonitoringInterval)
-		cr.Spec.ForProvider.MonitoringInterval = &monitoringIntervalCopy
+		ko.Spec.ForProvider.MonitoringInterval = &monitoringIntervalCopy
 	} else {
-		cr.Spec.ForProvider.MonitoringInterval = nil
+		ko.Spec.ForProvider.MonitoringInterval = nil
 	}
 	if resp.DBInstance.MonitoringRoleArn != nil {
-		cr.Spec.ForProvider.MonitoringRoleARN = resp.DBInstance.MonitoringRoleArn
+		ko.Spec.ForProvider.MonitoringRoleARN = resp.DBInstance.MonitoringRoleArn
 	} else {
-		cr.Spec.ForProvider.MonitoringRoleARN = nil
+		ko.Spec.ForProvider.MonitoringRoleARN = nil
 	}
 	if resp.DBInstance.MultiAZ != nil {
-		cr.Spec.ForProvider.MultiAZ = resp.DBInstance.MultiAZ
+		ko.Spec.ForProvider.MultiAZ = resp.DBInstance.MultiAZ
 	} else {
-		cr.Spec.ForProvider.MultiAZ = nil
+		ko.Spec.ForProvider.MultiAZ = nil
 	}
 	if resp.DBInstance.MultiTenant != nil {
-		cr.Spec.ForProvider.MultiTenant = resp.DBInstance.MultiTenant
+		ko.Spec.ForProvider.MultiTenant = resp.DBInstance.MultiTenant
 	} else {
-		cr.Spec.ForProvider.MultiTenant = nil
+		ko.Spec.ForProvider.MultiTenant = nil
 	}
 	if resp.DBInstance.NcharCharacterSetName != nil {
-		cr.Spec.ForProvider.NcharCharacterSetName = resp.DBInstance.NcharCharacterSetName
+		ko.Spec.ForProvider.NcharCharacterSetName = resp.DBInstance.NcharCharacterSetName
 	} else {
-		cr.Spec.ForProvider.NcharCharacterSetName = nil
+		ko.Spec.ForProvider.NcharCharacterSetName = nil
 	}
 	if resp.DBInstance.NetworkType != nil {
-		cr.Spec.ForProvider.NetworkType = resp.DBInstance.NetworkType
+		ko.Spec.ForProvider.NetworkType = resp.DBInstance.NetworkType
 	} else {
-		cr.Spec.ForProvider.NetworkType = nil
+		ko.Spec.ForProvider.NetworkType = nil
 	}
 	if resp.DBInstance.OptionGroupMemberships != nil {
 		f62 := []*svcapitypes.OptionGroupMembership{}
@@ -727,9 +730,9 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f62 = append(f62, f62elem)
 		}
-		cr.Status.AtProvider.OptionGroupMemberships = f62
+		ko.Status.AtProvider.OptionGroupMemberships = f62
 	} else {
-		cr.Status.AtProvider.OptionGroupMemberships = nil
+		ko.Status.AtProvider.OptionGroupMemberships = nil
 	}
 	if resp.DBInstance.PendingModifiedValues != nil {
 		f63 := &svcapitypes.PendingModifiedValues{}
@@ -852,40 +855,40 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 		if resp.DBInstance.PendingModifiedValues.StorageType != nil {
 			f63.StorageType = resp.DBInstance.PendingModifiedValues.StorageType
 		}
-		cr.Status.AtProvider.PendingModifiedValues = f63
+		ko.Status.AtProvider.PendingModifiedValues = f63
 	} else {
-		cr.Status.AtProvider.PendingModifiedValues = nil
+		ko.Status.AtProvider.PendingModifiedValues = nil
 	}
 	if resp.DBInstance.PercentProgress != nil {
-		cr.Status.AtProvider.PercentProgress = resp.DBInstance.PercentProgress
+		ko.Status.AtProvider.PercentProgress = resp.DBInstance.PercentProgress
 	} else {
-		cr.Status.AtProvider.PercentProgress = nil
+		ko.Status.AtProvider.PercentProgress = nil
 	}
 	if resp.DBInstance.PerformanceInsightsEnabled != nil {
-		cr.Status.AtProvider.PerformanceInsightsEnabled = resp.DBInstance.PerformanceInsightsEnabled
+		ko.Status.AtProvider.PerformanceInsightsEnabled = resp.DBInstance.PerformanceInsightsEnabled
 	} else {
-		cr.Status.AtProvider.PerformanceInsightsEnabled = nil
+		ko.Status.AtProvider.PerformanceInsightsEnabled = nil
 	}
 	if resp.DBInstance.PerformanceInsightsKMSKeyId != nil {
-		cr.Spec.ForProvider.PerformanceInsightsKMSKeyID = resp.DBInstance.PerformanceInsightsKMSKeyId
+		ko.Spec.ForProvider.PerformanceInsightsKMSKeyID = resp.DBInstance.PerformanceInsightsKMSKeyId
 	} else {
-		cr.Spec.ForProvider.PerformanceInsightsKMSKeyID = nil
+		ko.Spec.ForProvider.PerformanceInsightsKMSKeyID = nil
 	}
 	if resp.DBInstance.PerformanceInsightsRetentionPeriod != nil {
 		performanceInsightsRetentionPeriodCopy := int64(*resp.DBInstance.PerformanceInsightsRetentionPeriod)
-		cr.Spec.ForProvider.PerformanceInsightsRetentionPeriod = &performanceInsightsRetentionPeriodCopy
+		ko.Spec.ForProvider.PerformanceInsightsRetentionPeriod = &performanceInsightsRetentionPeriodCopy
 	} else {
-		cr.Spec.ForProvider.PerformanceInsightsRetentionPeriod = nil
+		ko.Spec.ForProvider.PerformanceInsightsRetentionPeriod = nil
 	}
 	if resp.DBInstance.PreferredBackupWindow != nil {
-		cr.Spec.ForProvider.PreferredBackupWindow = resp.DBInstance.PreferredBackupWindow
+		ko.Spec.ForProvider.PreferredBackupWindow = resp.DBInstance.PreferredBackupWindow
 	} else {
-		cr.Spec.ForProvider.PreferredBackupWindow = nil
+		ko.Spec.ForProvider.PreferredBackupWindow = nil
 	}
 	if resp.DBInstance.PreferredMaintenanceWindow != nil {
-		cr.Spec.ForProvider.PreferredMaintenanceWindow = resp.DBInstance.PreferredMaintenanceWindow
+		ko.Spec.ForProvider.PreferredMaintenanceWindow = resp.DBInstance.PreferredMaintenanceWindow
 	} else {
-		cr.Spec.ForProvider.PreferredMaintenanceWindow = nil
+		ko.Spec.ForProvider.PreferredMaintenanceWindow = nil
 	}
 	if resp.DBInstance.ProcessorFeatures != nil {
 		f70 := []*svcapitypes.ProcessorFeature{}
@@ -899,55 +902,55 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f70 = append(f70, f70elem)
 		}
-		cr.Spec.ForProvider.ProcessorFeatures = f70
+		ko.Spec.ForProvider.ProcessorFeatures = f70
 	} else {
-		cr.Spec.ForProvider.ProcessorFeatures = nil
+		ko.Spec.ForProvider.ProcessorFeatures = nil
 	}
 	if resp.DBInstance.PromotionTier != nil {
 		promotionTierCopy := int64(*resp.DBInstance.PromotionTier)
-		cr.Spec.ForProvider.PromotionTier = &promotionTierCopy
+		ko.Spec.ForProvider.PromotionTier = &promotionTierCopy
 	} else {
-		cr.Spec.ForProvider.PromotionTier = nil
+		ko.Spec.ForProvider.PromotionTier = nil
 	}
 	if resp.DBInstance.PubliclyAccessible != nil {
-		cr.Spec.ForProvider.PubliclyAccessible = resp.DBInstance.PubliclyAccessible
+		ko.Spec.ForProvider.PubliclyAccessible = resp.DBInstance.PubliclyAccessible
 	} else {
-		cr.Spec.ForProvider.PubliclyAccessible = nil
+		ko.Spec.ForProvider.PubliclyAccessible = nil
 	}
 	if resp.DBInstance.ReadReplicaDBClusterIdentifiers != nil {
-		cr.Status.AtProvider.ReadReplicaDBClusterIdentifiers = aws.StringSlice(resp.DBInstance.ReadReplicaDBClusterIdentifiers)
+		ko.Status.AtProvider.ReadReplicaDBClusterIdentifiers = aws.StringSlice(resp.DBInstance.ReadReplicaDBClusterIdentifiers)
 	} else {
-		cr.Status.AtProvider.ReadReplicaDBClusterIdentifiers = nil
+		ko.Status.AtProvider.ReadReplicaDBClusterIdentifiers = nil
 	}
 	if resp.DBInstance.ReadReplicaDBInstanceIdentifiers != nil {
-		cr.Status.AtProvider.ReadReplicaDBInstanceIdentifiers = aws.StringSlice(resp.DBInstance.ReadReplicaDBInstanceIdentifiers)
+		ko.Status.AtProvider.ReadReplicaDBInstanceIdentifiers = aws.StringSlice(resp.DBInstance.ReadReplicaDBInstanceIdentifiers)
 	} else {
-		cr.Status.AtProvider.ReadReplicaDBInstanceIdentifiers = nil
+		ko.Status.AtProvider.ReadReplicaDBInstanceIdentifiers = nil
 	}
 	if resp.DBInstance.ReadReplicaSourceDBClusterIdentifier != nil {
-		cr.Status.AtProvider.ReadReplicaSourceDBClusterIdentifier = resp.DBInstance.ReadReplicaSourceDBClusterIdentifier
+		ko.Status.AtProvider.ReadReplicaSourceDBClusterIdentifier = resp.DBInstance.ReadReplicaSourceDBClusterIdentifier
 	} else {
-		cr.Status.AtProvider.ReadReplicaSourceDBClusterIdentifier = nil
+		ko.Status.AtProvider.ReadReplicaSourceDBClusterIdentifier = nil
 	}
 	if resp.DBInstance.ReadReplicaSourceDBInstanceIdentifier != nil {
-		cr.Status.AtProvider.ReadReplicaSourceDBInstanceIdentifier = resp.DBInstance.ReadReplicaSourceDBInstanceIdentifier
+		ko.Status.AtProvider.ReadReplicaSourceDBInstanceIdentifier = resp.DBInstance.ReadReplicaSourceDBInstanceIdentifier
 	} else {
-		cr.Status.AtProvider.ReadReplicaSourceDBInstanceIdentifier = nil
+		ko.Status.AtProvider.ReadReplicaSourceDBInstanceIdentifier = nil
 	}
 	if resp.DBInstance.ReplicaMode != "" {
-		cr.Status.AtProvider.ReplicaMode = aws.String(string(resp.DBInstance.ReplicaMode))
+		ko.Status.AtProvider.ReplicaMode = aws.String(string(resp.DBInstance.ReplicaMode))
 	} else {
-		cr.Status.AtProvider.ReplicaMode = nil
+		ko.Status.AtProvider.ReplicaMode = nil
 	}
 	if resp.DBInstance.ResumeFullAutomationModeTime != nil {
-		cr.Status.AtProvider.ResumeFullAutomationModeTime = &metav1.Time{Time: *resp.DBInstance.ResumeFullAutomationModeTime}
+		ko.Status.AtProvider.ResumeFullAutomationModeTime = &metav1.Time{Time: *resp.DBInstance.ResumeFullAutomationModeTime}
 	} else {
-		cr.Status.AtProvider.ResumeFullAutomationModeTime = nil
+		ko.Status.AtProvider.ResumeFullAutomationModeTime = nil
 	}
 	if resp.DBInstance.SecondaryAvailabilityZone != nil {
-		cr.Status.AtProvider.SecondaryAvailabilityZone = resp.DBInstance.SecondaryAvailabilityZone
+		ko.Status.AtProvider.SecondaryAvailabilityZone = resp.DBInstance.SecondaryAvailabilityZone
 	} else {
-		cr.Status.AtProvider.SecondaryAvailabilityZone = nil
+		ko.Status.AtProvider.SecondaryAvailabilityZone = nil
 	}
 	if resp.DBInstance.StatusInfos != nil {
 		f80 := []*svcapitypes.DBInstanceStatusInfo{}
@@ -967,46 +970,46 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f80 = append(f80, f80elem)
 		}
-		cr.Status.AtProvider.StatusInfos = f80
+		ko.Status.AtProvider.StatusInfos = f80
 	} else {
-		cr.Status.AtProvider.StatusInfos = nil
+		ko.Status.AtProvider.StatusInfos = nil
 	}
 	if resp.DBInstance.StorageEncrypted != nil {
-		cr.Spec.ForProvider.StorageEncrypted = resp.DBInstance.StorageEncrypted
+		ko.Spec.ForProvider.StorageEncrypted = resp.DBInstance.StorageEncrypted
 	} else {
-		cr.Spec.ForProvider.StorageEncrypted = nil
+		ko.Spec.ForProvider.StorageEncrypted = nil
 	}
 	if resp.DBInstance.StorageEncryptionType != "" {
-		cr.Status.AtProvider.StorageEncryptionType = aws.String(string(resp.DBInstance.StorageEncryptionType))
+		ko.Status.AtProvider.StorageEncryptionType = aws.String(string(resp.DBInstance.StorageEncryptionType))
 	} else {
-		cr.Status.AtProvider.StorageEncryptionType = nil
+		ko.Status.AtProvider.StorageEncryptionType = nil
 	}
 	if resp.DBInstance.StorageOperationPercentProgress != nil {
 		storageOperationPercentProgressCopy := int64(*resp.DBInstance.StorageOperationPercentProgress)
-		cr.Status.AtProvider.StorageOperationPercentProgress = &storageOperationPercentProgressCopy
+		ko.Status.AtProvider.StorageOperationPercentProgress = &storageOperationPercentProgressCopy
 	} else {
-		cr.Status.AtProvider.StorageOperationPercentProgress = nil
+		ko.Status.AtProvider.StorageOperationPercentProgress = nil
 	}
 	if resp.DBInstance.StorageOperationStatus != nil {
-		cr.Status.AtProvider.StorageOperationStatus = resp.DBInstance.StorageOperationStatus
+		ko.Status.AtProvider.StorageOperationStatus = resp.DBInstance.StorageOperationStatus
 	} else {
-		cr.Status.AtProvider.StorageOperationStatus = nil
+		ko.Status.AtProvider.StorageOperationStatus = nil
 	}
 	if resp.DBInstance.StorageThroughput != nil {
 		storageThroughputCopy := int64(*resp.DBInstance.StorageThroughput)
-		cr.Spec.ForProvider.StorageThroughput = &storageThroughputCopy
+		ko.Spec.ForProvider.StorageThroughput = &storageThroughputCopy
 	} else {
-		cr.Spec.ForProvider.StorageThroughput = nil
+		ko.Spec.ForProvider.StorageThroughput = nil
 	}
 	if resp.DBInstance.StorageType != nil {
-		cr.Spec.ForProvider.StorageType = resp.DBInstance.StorageType
+		ko.Spec.ForProvider.StorageType = resp.DBInstance.StorageType
 	} else {
-		cr.Spec.ForProvider.StorageType = nil
+		ko.Spec.ForProvider.StorageType = nil
 	}
 	if resp.DBInstance.StorageVolumeStatus != nil {
-		cr.Status.AtProvider.StorageVolumeStatus = resp.DBInstance.StorageVolumeStatus
+		ko.Status.AtProvider.StorageVolumeStatus = resp.DBInstance.StorageVolumeStatus
 	} else {
-		cr.Status.AtProvider.StorageVolumeStatus = nil
+		ko.Status.AtProvider.StorageVolumeStatus = nil
 	}
 	if resp.DBInstance.TagList != nil {
 		f88 := []*svcapitypes.Tag{}
@@ -1020,24 +1023,24 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f88 = append(f88, f88elem)
 		}
-		cr.Status.AtProvider.TagList = f88
+		ko.Status.AtProvider.TagList = f88
 	} else {
-		cr.Status.AtProvider.TagList = nil
+		ko.Status.AtProvider.TagList = nil
 	}
 	if resp.DBInstance.TdeCredentialArn != nil {
-		cr.Spec.ForProvider.TDECredentialARN = resp.DBInstance.TdeCredentialArn
+		ko.Spec.ForProvider.TDECredentialARN = resp.DBInstance.TdeCredentialArn
 	} else {
-		cr.Spec.ForProvider.TDECredentialARN = nil
+		ko.Spec.ForProvider.TDECredentialARN = nil
 	}
 	if resp.DBInstance.Timezone != nil {
-		cr.Spec.ForProvider.Timezone = resp.DBInstance.Timezone
+		ko.Spec.ForProvider.Timezone = resp.DBInstance.Timezone
 	} else {
-		cr.Spec.ForProvider.Timezone = nil
+		ko.Spec.ForProvider.Timezone = nil
 	}
 	if resp.DBInstance.UpgradeRolloutOrder != "" {
-		cr.Status.AtProvider.UpgradeRolloutOrder = aws.String(string(resp.DBInstance.UpgradeRolloutOrder))
+		ko.Status.AtProvider.UpgradeRolloutOrder = aws.String(string(resp.DBInstance.UpgradeRolloutOrder))
 	} else {
-		cr.Status.AtProvider.UpgradeRolloutOrder = nil
+		ko.Status.AtProvider.UpgradeRolloutOrder = nil
 	}
 	if resp.DBInstance.VpcSecurityGroups != nil {
 		f92 := []*svcapitypes.VPCSecurityGroupMembership{}
@@ -1051,11 +1054,12 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.DBInstance) (mana
 			}
 			f92 = append(f92, f92elem)
 		}
-		cr.Status.AtProvider.VPCSecurityGroups = f92
+		ko.Status.AtProvider.VPCSecurityGroups = f92
 	} else {
-		cr.Status.AtProvider.VPCSecurityGroups = nil
+		ko.Status.AtProvider.VPCSecurityGroups = nil
 	}
 
+	ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 

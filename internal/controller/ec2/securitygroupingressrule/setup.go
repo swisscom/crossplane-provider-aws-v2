@@ -91,7 +91,7 @@ func isUpToDate(_ context.Context, cr *svcapitypes.SecurityGroupIngressRule, res
 	if err != nil {
 		return false, "", err
 	}
-	add, remove := svcutils.DiffTags(svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), svcutils.FromSDK(r.Tags))
+	add, remove := svcutils.DiffTags(svcutils.SpecTags(cr.Spec.ForProvider.Tags), svcutils.FromSDK(r.Tags))
 	if len(add)+len(remove) > 0 {
 		diff = append(diff, "tags")
 	}
@@ -108,7 +108,7 @@ func preCreate(_ context.Context, cr *svcapitypes.SecurityGroupIngressRule, obj 
 	obj.IpProtocol, obj.FromPort, obj.ToPort = nil, nil, nil
 	obj.GroupId = r.GroupID
 	obj.IpPermissions = []svcsdktypes.IpPermission{r.IPPermission()}
-	obj.TagSpecifications = svcutils.TagSpecifications(svcsdktypes.ResourceTypeSecurityGroupRule, svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags))
+	obj.TagSpecifications = svcutils.TagSpecifications(svcsdktypes.ResourceTypeSecurityGroupRule, svcutils.SpecTags(cr.Spec.ForProvider.Tags))
 	return nil
 }
 
@@ -138,7 +138,7 @@ func (h *hooks) postUpdate(ctx context.Context, cr *svcapitypes.SecurityGroupIng
 		return upd, err
 	}
 	// Observe ran in the same reconcile and stored the current tags.
-	return upd, svcutils.UpdateTags(ctx, h.client, meta.GetExternalName(cr), svcutils.DesiredTags(cr, cr.Spec.ForProvider.Tags), cr.Status.AtProvider.Tags)
+	return upd, svcutils.UpdateTags(ctx, h.client, meta.GetExternalName(cr), svcutils.SpecTags(cr.Spec.ForProvider.Tags), cr.Status.AtProvider.Tags)
 }
 
 func preDelete(_ context.Context, cr *svcapitypes.SecurityGroupIngressRule, obj *svcsdk.RevokeSecurityGroupIngressInput) (bool, error) {

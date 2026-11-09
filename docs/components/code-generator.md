@@ -97,7 +97,9 @@ sequenceDiagram
 
 Create, Update and Delete follow the same pattern
 (`pre<Verb>` → SDK call → `post<Verb>`). `preDelete` can return `true` to
-skip the delete call (e.g. already deleting).
+skip the delete call (e.g. already deleting). Like Observe, Create copies
+only `status.atProvider` from the response, never the spec: the spec stays
+what the user wrote.
 
 ### Hook defaults
 
@@ -106,6 +108,11 @@ skip the delete call (e.g. already deleting).
 | `preObserve`, `postObserve`, `filterList`, `lateInitialize` | no-op |
 | `isUpToDate` | `isUpToDateUpdatable`, or always up to date if the kind has no update or read operation |
 | `preCreate`/`postCreate`, `preUpdate`/`postUpdate`, `preDelete`/`postDelete` | no-op |
+
+**Kinds whose create operation also updates** (cloudwatchlogs
+`ResourcePolicy`: `PutResourcePolicy` with `operation_type: [Create, Update]`)
+get one `Generate<Op>Input` and one `Client` method; `preCreate` and
+`preUpdate` both run on that input.
 
 **Kinds without an update operation** (e.g. ec2 `SecurityGroup`: AWS has
 no "modify security group"): `Update` calls a single `update` hook (default:
@@ -162,6 +169,11 @@ It returns the JSON names of fields that differ. A field is compared if
 1. the **update** operation's input has it, and
 2. the **read** operation's output has it (so `Generate<Kind>` fills it), and
 3. it isn't excluded by `compare.is_ignored` or `resources.<Kind>.compare.ignore`.
+
+The read output is the resource shape, found like ACK's `SetResource`: the
+list element for ReadMany (`DescribeDBClustersOutput.DBClusters[]`), and for
+ReadOne the only member when it is a structure
+(`DescribeDomainOutput.DomainStatus`).
 
 The field list is computed at generation time
 (`codegen/internal/generator/compare.go`). Comparison uses
@@ -230,3 +242,8 @@ cd codegen && go run ./cmd/generate --registries-only --output ..   # after remo
   an input field. If AWS assigns the ID (`sg-…`), set it in `postCreate`
   with `meta.SetExternalName` and disable the default initializer
   (`managed.WithInitializers()`), which would use `metadata.name`.
+- Generated conversions send JSON policy strings as they are. If the AWS
+  model validates the field with `pattern: ".*"` (opensearch
+  `PolicyDocument`), AWS rejects multi-line policies, as users write them
+  in YAML; compact them in `preCreate`/`preUpdate` with
+  `compare.CompactPolicy` (opensearch `Domain`).

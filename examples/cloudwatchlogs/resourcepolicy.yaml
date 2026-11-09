@@ -1,0 +1,25 @@
+# Account-level CloudWatch Logs resource policy that lets Amazon OpenSearch
+# Service write to the log groups under /example/opensearch/.
+apiVersion: cloudwatchlogs.aws2.crossplane.io/v1alpha1
+kind: ResourcePolicy
+metadata:
+  namespace: default
+  # The policy name in AWS (external name).
+  name: example-opensearch-logs
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    policyDocument: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [{
+          "Sid": "OpenSearchLogsToCloudWatch",
+          "Effect": "Allow",
+          "Principal": {"Service": "es.amazonaws.com"},
+          "Action": ["logs:PutLogEvents", "logs:CreateLogStream"],
+          "Resource": "arn:aws:logs:eu-central-1:123456789012:log-group:/example/opensearch/*"
+        }]
+      }

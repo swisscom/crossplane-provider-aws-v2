@@ -16,7 +16,8 @@ with `codegen/cmd/import`.
 Status: proof of concept. Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
 `docdb/DBInstance`, `docdb/DBSubnetGroup`, `docdb/DBClusterParameterGroup`.
 Generated from scratch: `ec2/SecurityGroup`, `ec2/SecurityGroupIngressRule`,
-`ec2/SecurityGroupEgressRule`.
+`ec2/SecurityGroupEgressRule`, `opensearch/Domain`, `cloudwatchlogs/LogGroup`,
+`cloudwatchlogs/ResourcePolicy`.
 
 **Before changing a kind, read its `internal/controller/<svc>/<kind>/README.md`**
 (origin, behavior, limitations, history).
@@ -79,9 +80,16 @@ compiles after `make generate`.
   `aws.ToStringSlice`/`aws.StringSlice`.
 - Errors: wrap with `crossplane-runtime/v2/pkg/errors`; AWS errors with
   `awsclient.Wrap`.
+- Tags: apply exactly the spec tags (never `resource.GetExternalTags`);
+  skip `aws:` keys with `awsclient.IsAWSTag` (ADR 0012).
 - Files start with the Apache 2.0 license header (see `codegen/templates/boilerplate.go.tpl`).
 - Commit subjects are scoped: `docdb/dbcluster: …`, `codegen: …`, `importer: …`,
   `docs: …`; sign off with `git commit -s`.
+- Commit messages, docs and comments are for readers who only see the
+  repository: say what changed and why. No references to the chat or
+  conversation, review requests, internal tickets, repositories or teams;
+  no rejected alternatives or "not included" notes unless users would
+  expect it otherwise.
 - Changes reach `main` through pull requests, not direct pushes. Fixes for a
   released version are backported to `release-X.Y`; releases are tags
   ([docs/development.md#releasing](docs/development.md#releasing)).

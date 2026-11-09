@@ -64,6 +64,9 @@ coding agents follow.
   `internal/utils/pointer` and `aws.ToStringSlice`.
 - **Errors**: wrap with `crossplane-runtime/v2/pkg/errors`; AWS errors with
   `awsclient.Wrap`.
+- **Tags**: apply exactly the spec tags, add no others (no
+  `resource.GetExternalTags`), and leave `aws:` tags alone
+  (`awsclient.IsAWSTag`) ([ADR 0012](adr/0012-only-spec-tags.md)).
 - **Conditions**: set `Available`/`Unavailable` in `postObserve` from the AWS
   status; the generated controller doesn't.
 - **License header** on every Go file
@@ -73,6 +76,12 @@ coding agents follow.
   `importer: …`, `docs: …`. Body explains why. Sign off (`git commit -s`,
   [DCO](../DCO)). One logical change per commit; generated files go in the
   same commit as their cause.
+- **Write for outside readers**: commit messages, docs and code comments
+  must make sense to someone who sees only the repository (the project is
+  public). State what changed and why; don't refer to chats, review
+  requests, internal tickets, repositories or teams, and don't list
+  rejected alternatives or what isn't included unless users would expect
+  it otherwise.
 
 ## Documentation
 
@@ -117,11 +126,16 @@ Fields AWS can't change after creation, unsupported features, known issues.
 Links to examples/<svc>/.
 
 ## History
-| Date | Commit | Change |
+| Date | PR | Change |
 ```
 
 Rows in "History" are behavior changes, newest first; refactorings without
-behavior change don't need a row.
+behavior change don't need a row. "PR" links the pull request that made the
+change, e.g. `[#12](https://github.com/swisscom/crossplane-provider-aws-v2/pull/12)`
+(a plain `#12` isn't linked in files). Add the row with an empty PR cell and
+fill it in once the PR is open, in the same PR. Commit hashes aren't used:
+they change on rebase and squash merge. Rows from before pull requests were
+used show the commit on `main` instead.
 
 ## Releasing
 

@@ -72,15 +72,6 @@ func observed(f ...func(*svcsdktypes.SecurityGroup)) *svcsdk.DescribeSecurityGro
 	return &svcsdk.DescribeSecurityGroupsOutput{SecurityGroups: []svcsdktypes.SecurityGroup{g}}
 }
 
-// crossplaneTags are the external tags Crossplane sets on group().
-func crossplaneTags() []svcsdktypes.Tag {
-	return []svcsdktypes.Tag{
-		{Key: aws.String("crossplane-kind"), Value: aws.String("securitygroup.ec2.aws2.crossplane.io")},
-		{Key: aws.String("crossplane-name"), Value: aws.String(testName)},
-		{Key: aws.String("crossplane-namespace"), Value: aws.String("ns")},
-	}
-}
-
 func newTestExternal(m *fake.MockEC2Client) *adoptingExternal {
 	return &adoptingExternal{external: newExternal(nil, m, []option{setupExternal}), record: event.NewNopRecorder()}
 }
@@ -114,7 +105,10 @@ func TestObserve(t *testing.T) {
 				if len(in.GroupIds) != 1 || in.GroupIds[0] != testID {
 					t.Errorf("GroupIds = %v", in.GroupIds)
 				}
-				return observed(), nil
+				// A tag not in the spec, e.g. one an earlier provider version added.
+				return observed(func(g *svcsdktypes.SecurityGroup) {
+					g.Tags = []svcsdktypes.Tag{{Key: aws.String("crossplane-kind"), Value: aws.String("securitygroup.ec2.aws2.crossplane.io")}}
+				}), nil
 			}},
 			want: want{exists: true, lateInit: true, externalName: testID},
 		},
@@ -125,7 +119,7 @@ func TestObserve(t *testing.T) {
 			}),
 			mock: &fake.MockEC2Client{MockDescribeSecurityGroups: func(context.Context, *svcsdk.DescribeSecurityGroupsInput) (*svcsdk.DescribeSecurityGroupsOutput, error) {
 				return observed(func(g *svcsdktypes.SecurityGroup) {
-					g.Tags = append(crossplaneTags(), svcsdktypes.Tag{Key: aws.String("aws:cloudformation:stack-name"), Value: aws.String("x")})
+					g.Tags = []svcsdktypes.Tag{{Key: aws.String("aws:cloudformation:stack-name"), Value: aws.String("x")}}
 				}), nil
 			}},
 			want: want{exists: true, upToDate: true, externalName: testID},
@@ -468,7 +462,7 @@ func TestCreate(t *testing.T) {
 			if aws.ToString(in.GroupName) != testName {
 				t.Errorf("GroupName = %q, want metadata.name", aws.ToString(in.GroupName))
 			}
-			if len(in.TagSpecifications) != 1 || in.TagSpecifications[0].ResourceType != svcsdktypes.ResourceTypeSecurityGroup || len(in.TagSpecifications[0].Tags) != 4 {
+			if len(in.TagSpecifications) != 1 || in.TagSpecifications[0].ResourceType != svcsdktypes.ResourceTypeSecurityGroup || len(in.TagSpecifications[0].Tags) != len(cr.Spec.ForProvider.Tags) {
 				t.Errorf("TagSpecifications = %+v", in.TagSpecifications)
 			}
 			if got := len(tc.mock.Calls["RevokeSecurityGroupEgress"]); got != tc.wantRevokes {
@@ -490,6 +484,7 @@ func TestUpdateTags(t *testing.T) {
 			{Key: aws.String("crossplane-kind"), Value: aws.String("securitygroup.ec2.aws2.crossplane.io")},
 			{Key: aws.String("crossplane-name"), Value: aws.String(testName)},
 			{Key: aws.String("crossplane-namespace"), Value: aws.String("ns")},
+			{Key: aws.String("aws:cloudformation:stack-name"), Value: aws.String("x")},
 		}
 	})
 	m := &fake.MockEC2Client{}
@@ -498,7 +493,11 @@ func TestUpdateTags(t *testing.T) {
 	}
 	opt := cmpopts.IgnoreUnexported(svcsdk.CreateTagsInput{}, svcsdk.DeleteTagsInput{}, svcsdktypes.Tag{})
 	wantCreate := []any{&svcsdk.CreateTagsInput{Resources: []string{testID}, Tags: []svcsdktypes.Tag{{Key: aws.String("team"), Value: aws.String("b")}}}}
-	wantDelete := []any{&svcsdk.DeleteTagsInput{Resources: []string{testID}, Tags: []svcsdktypes.Tag{{Key: aws.String("old")}}}}
+	// Tags not in the spec are removed, including those earlier versions of
+	// the provider added; AWS tags are kept.
+	wantDelete := []any{&svcsdk.DeleteTagsInput{Resources: []string{testID}, Tags: []svcsdktypes.Tag{
+		{Key: aws.String("crossplane-kind")}, {Key: aws.String("crossplane-name")}, {Key: aws.String("crossplane-namespace")}, {Key: aws.String("old")},
+	}}}
 	if diff := cmp.Diff(wantCreate, m.Calls["CreateTags"], opt); diff != "" {
 		t.Errorf("CreateTags -want +got:\n%s", diff)
 	}

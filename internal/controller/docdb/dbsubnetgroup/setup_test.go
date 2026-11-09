@@ -454,6 +454,49 @@ func TestCreate(t *testing.T) {
 				},
 			},
 		},
+		"CreateOutputSetsOnlyStatus": {
+			args: args{
+				docdb: &fake.MockDocDBClient{
+					MockCreateDBSubnetGroup: func(c context.Context, cdgi *docdb.CreateDBSubnetGroupInput, o ...func(*docdb.Options)) (*docdb.CreateDBSubnetGroupOutput, error) {
+						return &docdb.CreateDBSubnetGroupOutput{
+							DBSubnetGroup: &docdbtypes.DBSubnetGroup{
+								DBSubnetGroupName:        pointer.ToOrNilIfZeroValue(testDBSubnetGroupName),
+								DBSubnetGroupDescription: pointer.ToOrNilIfZeroValue(testOtherDescription),
+								Subnets: []docdbtypes.Subnet{
+									{SubnetIdentifier: pointer.ToOrNilIfZeroValue(testSubnetID)},
+								},
+							},
+						}, nil
+					},
+				},
+				cr: subnetGroup(
+					withDBSubnetGroupName(testDBSubnetGroupName),
+					withExternalName(testDBSubnetGroupName),
+					withDescription(testDescription),
+				),
+			},
+			want: want{
+				cr: subnetGroup(
+					withDBSubnetGroupName(testDBSubnetGroupName),
+					withExternalName(testDBSubnetGroupName),
+					withDescription(testDescription),
+					withSubnetIDStatus(testSubnetID),
+					withConditions(xpv2.Creating()),
+				),
+				result: managed.ExternalCreation{},
+				docdb: fake.MockDocDBClientCall{
+					CreateDBSubnetGroup: []*fake.CallCreateDBSubnetGroup{
+						{
+							Ctx: context.Background(),
+							I: &docdb.CreateDBSubnetGroupInput{
+								DBSubnetGroupName:        pointer.ToOrNilIfZeroValue(testDBSubnetGroupName),
+								DBSubnetGroupDescription: pointer.ToOrNilIfZeroValue(testDescription),
+							},
+						},
+					},
+				},
+			},
+		},
 		"ErrCreate": {
 			args: args{
 				docdb: &fake.MockDocDBClient{

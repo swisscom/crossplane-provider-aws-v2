@@ -1,0 +1,329 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: loggroups.cloudwatchlogs.aws2.crossplane.io
+spec:
+  group: cloudwatchlogs.aws2.crossplane.io
+  names:
+    categories:
+    - crossplane
+    - managed
+    - aws2
+    kind: LogGroup
+    listKind: LogGroupList
+    plural: loggroups
+    singular: loggroup
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.conditions[?(@.type=='Ready')].status
+      name: READY
+      type: string
+    - jsonPath: .status.conditions[?(@.type=='Synced')].status
+      name: SYNCED
+      type: string
+    - jsonPath: .metadata.annotations.crossplane\.io/external-name
+      name: EXTERNAL-NAME
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: LogGroup is the Schema for the LogGroups API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: LogGroupSpec defines the desired state of LogGroup
+            properties:
+              forProvider:
+                description: LogGroupParameters defines the desired state of LogGroup
+                properties:
+                  deletionProtectionEnabled:
+                    description: |-
+                      Use this parameter to enable deletion protection for the new log group. When
+                      enabled on a log group, deletion protection blocks all deletion operations
+                      until it is explicitly disabled. By default log groups are created without
+                      deletion protection enabled.
+                    type: boolean
+                  kmsKeyID:
+                    description: |-
+                      The Amazon Resource Name (ARN) of the KMS key to use when encrypting log
+                      data. For more information, see Amazon Resource Names (https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html#arn-syntax-kms).
+                    type: string
+                  logGroupClass:
+                    description: |-
+                      Use this parameter to specify the log group class for this log group. There
+                      are three classes:
+
+                         * The Standard log class supports all CloudWatch Logs features.
+
+                         * The Infrequent Access log class supports a subset of CloudWatch Logs
+                         features and incurs lower costs.
+
+                         * Use the Delivery log class only for delivering Lambda logs to store
+                         in Amazon S3 or Amazon Data Firehose. Log events in log groups in the
+                         Delivery class are kept in CloudWatch Logs for only one day. This log
+                         class doesn't offer rich CloudWatch Logs capabilities such as CloudWatch
+                         Logs Insights queries.
+
+                      If you omit this parameter, the default of STANDARD is used.
+
+                      The value of logGroupClass can't be changed after a log group is created.
+
+                      For details about the features supported by each class, see Log classes (https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CloudWatch_Logs_Log_Classes.html)
+                    type: string
+                  region:
+                    description: Region is which region the LogGroup will be created.
+                    type: string
+                  retentionInDays:
+                    description: |-
+                      RetentionInDays is the number of days to keep the log events of the log
+                      group. 0 keeps them forever. Unset leaves the retention as it is.
+                    enum:
+                    - 0
+                    - 1
+                    - 3
+                    - 5
+                    - 7
+                    - 14
+                    - 30
+                    - 60
+                    - 90
+                    - 120
+                    - 150
+                    - 180
+                    - 365
+                    - 400
+                    - 545
+                    - 731
+                    - 1096
+                    - 1827
+                    - 2192
+                    - 2557
+                    - 2922
+                    - 3288
+                    - 3653
+                    format: int64
+                    type: integer
+                  tags:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      The key-value pairs to use for the tags.
+
+                      You can grant users access to certain log groups while preventing them from
+                      accessing other log groups. To do so, tag your groups and use IAM policies
+                      that refer to those tags. To assign tags when you create a log group, you
+                      must have either the logs:TagResource or logs:TagLogGroup permission. For
+                      more information about tagging, see Tagging Amazon Web Services resources
+                      (https://docs.aws.amazon.com/general/latest/gr/aws_tagging.html). For more
+                      information about using tags to control access, see Controlling access to
+                      Amazon Web Services resources using tags (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_tags.html).
+                    type: object
+                required:
+                - region
+                type: object
+              managementPolicies:
+                default:
+                - '*'
+                description: |-
+                  THIS IS A BETA FIELD. It is on by default but can be opted out
+                  through a Crossplane feature flag.
+                  ManagementPolicies specify the array of actions Crossplane is allowed to
+                  take on the managed and external resources.
+                  See the design doc for more information: https://github.com/crossplane/crossplane/blob/499895a25d1a1a0ba1604944ef98ac7a1a71f197/design/design-doc-observe-only-resources.md?plain=1#L223
+                  and this one: https://github.com/crossplane/crossplane/blob/444267e84783136daa93568b364a5f01228cacbe/design/one-pager-ignore-changes.md
+                items:
+                  description: |-
+                    A ManagementAction represents an action that the Crossplane controllers
+                    can take on an external resource.
+                  enum:
+                  - Observe
+                  - Create
+                  - Update
+                  - Delete
+                  - LateInitialize
+                  - '*'
+                  type: string
+                type: array
+              providerConfigRef:
+                default:
+                  kind: ClusterProviderConfig
+                  name: default
+                description: |-
+                  ProviderConfigReference specifies how the provider that will be used to
+                  create, observe, update, and delete this managed resource should be
+                  configured.
+                properties:
+                  kind:
+                    description: Kind of the referenced object.
+                    type: string
+                  name:
+                    description: Name of the referenced object.
+                    type: string
+                required:
+                - kind
+                - name
+                type: object
+              writeConnectionSecretToRef:
+                description: |-
+                  WriteConnectionSecretToReference specifies the namespace and name of a
+                  Secret to which any connection details for this managed resource should
+                  be written. Connection details frequently include the endpoint, username,
+                  and password required to connect to the managed resource.
+                properties:
+                  name:
+                    description: Name of the secret.
+                    type: string
+                required:
+                - name
+                type: object
+            required:
+            - forProvider
+            type: object
+          status:
+            description: LogGroupStatus defines the observed state of LogGroup.
+            properties:
+              atProvider:
+                description: LogGroupObservation defines the observed state of LogGroup
+                properties:
+                  arn:
+                    description: |-
+                      The Amazon Resource Name (ARN) of the log group. This version of the ARN
+                      includes a trailing :* after the log group name.
+
+                      Use this version to refer to the ARN in IAM policies when specifying permissions
+                      for most API actions. The exception is when specifying permissions for TagResource
+                      (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_TagResource.html),
+                      UntagResource (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_UntagResource.html),
+                      and ListTagsForResource (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_ListTagsForResource.html).
+                      The permissions for those three actions require the ARN version that doesn't
+                      include a trailing :*.
+                    type: string
+                  creationTime:
+                    description: |-
+                      The creation time of the log group, expressed as the number of milliseconds
+                      after Jan 1, 1970 00:00:00 UTC.
+                    format: int64
+                    type: integer
+                  dataProtectionStatus:
+                    description: |-
+                      Displays whether this log group has a protection policy, or whether it had
+                      one in the past. For more information, see PutDataProtectionPolicy (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_PutDataProtectionPolicy.html).
+                    type: string
+                  logGroupARN:
+                    description: |-
+                      The Amazon Resource Name (ARN) of the log group. This version of the ARN
+                      doesn't include a trailing :* after the log group name.
+
+                      Use this version to refer to the ARN in the following situations:
+
+                         * In the logGroupIdentifier input field in many CloudWatch Logs APIs.
+
+                         * In the resourceArn field in tagging APIs
+
+                         * In IAM policies, when specifying permissions for TagResource (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_TagResource.html),
+                         UntagResource (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_UntagResource.html),
+                         and ListTagsForResource (https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_ListTagsForResource.html).
+                    type: string
+                  metricFilterCount:
+                    description: The number of metric filters.
+                    format: int64
+                    type: integer
+                  retentionInDays:
+                    format: int64
+                    type: integer
+                  storedBytes:
+                    description: The number of bytes stored.
+                    format: int64
+                    type: integer
+                type: object
+              conditions:
+                description: Conditions of the resource.
+                items:
+                  description: A Condition that may apply to a resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        LastTransitionTime is the last time this condition transitioned from one
+                        status to another.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        A Message containing details about this condition's last transition from
+                        one status to another, if any.
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        ObservedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      type: integer
+                    reason:
+                      description: A Reason for this condition's last transition from
+                        one status to another.
+                      type: string
+                    status:
+                      description: Status of this condition; is it currently True,
+                        False, or Unknown?
+                      type: string
+                    type:
+                      description: |-
+                        Type of this condition. At most one of each condition type may apply to
+                        a resource at any point in time.
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              lastHandledReconcileAt:
+                description: |-
+                  LastHandledReconcileAt holds the value of the most recent
+                  reconcile-requested-at annotation token that the controller has
+                  processed. Users can compare this to the annotation to determine
+                  whether a reconcile request has been handled.
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the latest metadata.generation
+                  which resulted in either a ready state, or stalled due to error
+                  it can not recover from without human intervention.
+                format: int64
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

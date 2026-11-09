@@ -174,8 +174,9 @@ secret refs and references, to check the schema keeps those fields.
   AWS can't change after creation, known limitations, history row.
 - Add the kind under "Added" in `CHANGELOG.md`.
 - Commit the import and the port together (one commit per kind is fine),
-  subject `<svc>/<kind>: import and port from provider-aws`; then add the
-  commit to the README history in a follow-up or amend.
+  subject `<svc>/<kind>: import and port from provider-aws`; once the PR is
+  open, add it to the README history row
+  ([format](../../../docs/development.md#kind-readme)).
 - Add a short entry for anything new you learned to `docs/porting-notes.md`,
   and teach the importer if the fix was mechanical.
 - Update the "Imported so far" line in `AGENTS.md`.

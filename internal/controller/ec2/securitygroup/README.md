@@ -17,12 +17,12 @@ a separate resource with its AWS rule ID.
 - **External name**: the group ID (`sg-…`), set after creation. Set the
   `crossplane.io/external-name` annotation to manage an existing group.
 - **Create**: `CreateSecurityGroup` with `groupName` (default
-  `metadata.name`), `description`, `vpcID` (default VPC if unset) and tags
-  (spec tags plus Crossplane's `crossplane-*` tags). Then the rules allowing
-  all egress that AWS adds to every new group (IPv4 `0.0.0.0/0`, and
-  `::/0` in VPCs with IPv6) are revoked, retried while the new group isn't
-  visible yet. If revoking fails, the group is deleted
-  again and the error reported, so the next reconcile starts over.
+  `metadata.name`), `description`, `vpcID` (default VPC if unset) and the
+  spec tags (no others are added). Then the rules allowing all egress that
+  AWS adds to every new group (IPv4 `0.0.0.0/0`, and `::/0` in VPCs with
+  IPv6) are revoked, retried while the new group isn't visible yet. If
+  revoking fails, the group is deleted again and the error reported, so
+  the next reconcile starts over.
 - **Adopt by name** (`adoptExistingByName: true`, opt-in): without an
   external name, the group's ID is looked up by `groupName` (in `vpcID` if
   set, otherwise in all VPCs) before creating one, and written to the
@@ -34,9 +34,8 @@ a separate resource with its AWS rule ID.
 - **Late initialization**: `groupName`, `vpcID`.
 - **Drift**: tags (keys starting with `aws:` are ignored). A different
   `groupName`, `description` or `vpcID` is an error: AWS can't change them.
-- **Update**: `CreateTags` / `DeleteTags`. An existing group (external
-  name or adopted) gets Crossplane's `crossplane-*` tags on the first
-  reconcile; other tags not in the spec are removed.
+- **Update**: `CreateTags` / `DeleteTags`. Tags not in the spec are
+  removed, except `aws:` tags.
 - **Delete**: `DeleteSecurityGroup` by ID. While the group is in use
   (network interfaces, rules of other groups referencing it), AWS returns
   `DependencyViolation`; the error is reported and the delete retried.
@@ -84,7 +83,8 @@ Otherwise set the external name.
 
 ## History
 
-| Date | Commit | Change |
+| Date | PR | Change |
 |------|--------|--------|
-| 2026-10-19 | — | Generated from scratch |
-| 2026-10-19 | 0d67c8b | Adoption reports an event |
+| 2026-11-04 | [#4](https://github.com/swisscom/crossplane-provider-aws-v2/pull/4) | Only the spec tags are applied; the `crossplane-*` tags are no longer added and are removed ([ADR 0012](../../../../docs/adr/0012-only-spec-tags.md)) |
+| 2026-10-19 | `0d67c8b` | Adoption reports an event |
+| 2026-10-19 | `6f158be` | Generated from scratch |

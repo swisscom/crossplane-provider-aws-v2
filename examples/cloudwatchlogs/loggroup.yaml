@@ -1,0 +1,24 @@
+# CloudWatch Logs log group that keeps its events for 30 days.
+apiVersion: cloudwatchlogs.aws2.crossplane.io/v1alpha1
+kind: LogGroup
+metadata:
+  namespace: default
+  name: example-loggroup
+  annotations:
+    # The log group name in AWS; without it, metadata.name is used.
+    crossplane.io/external-name: /example/application
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    # Days to keep log events; 0 keeps them forever.
+    retentionInDays: 30
+    # STANDARD (default), INFREQUENT_ACCESS or DELIVERY; can't be changed
+    # after creation.
+    logGroupClass: STANDARD
+    deletionProtectionEnabled: false
+    # kmsKeyID: arn:aws:kms:eu-central-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab
+    tags:
+      team: example

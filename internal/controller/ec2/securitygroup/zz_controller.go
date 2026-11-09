@@ -206,16 +206,19 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.SecurityGroup) (m
 	if err != nil {
 		return managed.ExternalCreation{}, awsclient.Wrap(err, errCreate)
 	}
+	// Like Observe, take only the status from the output: copying it into
+	// the spec would replace desired values with what AWS returns.
+	ko := cr.DeepCopy()
 
 	if resp.GroupId != nil {
-		cr.Status.AtProvider.GroupID = resp.GroupId
+		ko.Status.AtProvider.GroupID = resp.GroupId
 	} else {
-		cr.Status.AtProvider.GroupID = nil
+		ko.Status.AtProvider.GroupID = nil
 	}
 	if resp.SecurityGroupArn != nil {
-		cr.Status.AtProvider.SecurityGroupARN = resp.SecurityGroupArn
+		ko.Status.AtProvider.SecurityGroupARN = resp.SecurityGroupArn
 	} else {
-		cr.Status.AtProvider.SecurityGroupARN = nil
+		ko.Status.AtProvider.SecurityGroupARN = nil
 	}
 	if resp.Tags != nil {
 		f2 := []*svcapitypes.Tag{}
@@ -229,11 +232,12 @@ func (e *external) Create(ctx context.Context, cr *svcapitypes.SecurityGroup) (m
 			}
 			f2 = append(f2, f2elem)
 		}
-		cr.Status.AtProvider.Tags = f2
+		ko.Status.AtProvider.Tags = f2
 	} else {
-		cr.Status.AtProvider.Tags = nil
+		ko.Status.AtProvider.Tags = nil
 	}
 
+	ko.Status.AtProvider.DeepCopyInto(&cr.Status.AtProvider)
 	return e.postCreate(ctx, cr, resp, managed.ExternalCreation{}, err)
 }
 

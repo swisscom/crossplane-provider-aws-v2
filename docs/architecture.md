@@ -27,8 +27,8 @@ Goals:
 - **Side by side with provider-aws**: own API group `*.aws2.crossplane.io`
   ([ADR 0001](adr/0001-new-native-provider-for-crossplane-v2.md)).
 
-Status: proof of concept. Kinds: see the READMEs under
-`internal/controller/<service>/<kind>/`.
+Kinds: listed in the [README](../README.md#kinds), each documented in
+`internal/controller/<service>/<kind>/README.md`.
 
 ## Big picture
 

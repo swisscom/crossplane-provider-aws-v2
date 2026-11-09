@@ -13,7 +13,7 @@ models and, where needed, imported from
 [crossplane-contrib/provider-aws](https://github.com/crossplane-contrib/provider-aws)
 with `codegen/cmd/import`.
 
-Status: proof of concept. Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
+Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
 `docdb/DBInstance`, `docdb/DBSubnetGroup`, `docdb/DBClusterParameterGroup`.
 Generated from scratch: `ec2/SecurityGroup`, `ec2/SecurityGroupIngressRule`,
 `ec2/SecurityGroupEgressRule`, `opensearch/Domain`, `cloudwatchlogs/LogGroup`,

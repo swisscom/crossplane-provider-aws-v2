@@ -13,11 +13,9 @@ models and, where needed, imported from
 [crossplane-contrib/provider-aws](https://github.com/crossplane-contrib/provider-aws)
 with `codegen/cmd/import`.
 
-Imported so far: `rds/DBInstance`, `docdb/DBCluster`,
-`docdb/DBInstance`, `docdb/DBSubnetGroup`, `docdb/DBClusterParameterGroup`.
-Generated from scratch: `ec2/SecurityGroup`, `ec2/SecurityGroupIngressRule`,
-`ec2/SecurityGroupEgressRule`, `opensearch/Domain`, `cloudwatchlogs/LogGroup`,
-`cloudwatchlogs/ResourcePolicy`.
+Kinds live in `internal/controller/<svc>/<kind>/`. A kind is imported if it
+is listed in `apis/<svc>/import.yaml` (with its source commit), otherwise it
+is generated from scratch; the `Origin` section of its README says the same.
 
 **Before changing a kind, read its `internal/controller/<svc>/<kind>/README.md`**
 (origin, behavior, limitations, history).

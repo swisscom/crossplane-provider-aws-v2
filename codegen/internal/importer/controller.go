@@ -21,6 +21,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -309,6 +310,12 @@ func (im *importer) portPackage(srcDir, dstDir, dstPkg, kind string) error {
 	}
 	for _, e := range entries {
 		n := e.Name()
+		if e.IsDir() && n == "testdata" {
+			if err := copyDir(filepath.Join(srcDir, n), filepath.Join(dstDir, n)); err != nil {
+				return err
+			}
+			continue
+		}
 		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasPrefix(n, "zz_") {
 			continue
 		}
@@ -341,6 +348,32 @@ func (im *importer) portPackage(srcDir, dstDir, dstPkg, kind string) error {
 		im.ported = append(im.ported, portedFile{path: dst, kind: kind})
 	}
 	return nil
+}
+
+// copyDir copies the files below src to dst. Existing files are not
+// overwritten.
+func copyDir(src, dst string) error {
+	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, p)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o750)
+		}
+		if _, err := os.Stat(target); err == nil {
+			return nil
+		}
+		b, err := os.ReadFile(p) //nolint:gosec // path below the source checkout
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, b, 0o600)
+	})
 }
 
 func (im *importer) rel(p string) string {

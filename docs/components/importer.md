@@ -40,7 +40,7 @@ flowchart TD
 | `apis/<svc>/codegen.yaml` | SDK operations the ported code calls |
 | `apis/<svc>/v1alpha1/custom_types.go`, … | Ported custom types and helpers; other declarations (e.g. `ResolveReferences`) go to `<kinds>.go`, named after the kinds that own them |
 | `internal/controller/<svc>/<kind>/setup.go`, tests | Ported controller code |
-| `internal/clients/<svc>`, `internal/utils/*` | Ported helper packages (closure of what the controller imports) |
+| `internal/clients/<svc>`, `internal/utils/*` | Ported helper packages (closure of what the controller imports), with their `testdata` |
 | `*_importtodo.go` | Code that still needs a human; excluded from the build |
 | Report on stdout | Findings per file/topic: what was dropped, quarantined, not overwritten |
 

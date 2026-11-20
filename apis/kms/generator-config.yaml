@@ -1,0 +1,93 @@
+# ACK generator config of kms, see docs/components/ack-code-generator.md.
+# List all kinds with `cd codegen && go run ./cmd/generate --service kms --list-kinds`.
+operations:
+    # KMS keys can't be deleted right away, only scheduled for deletion.
+    ScheduleKeyDeletion:
+        resource_name: Key
+        operation_type: Delete
+    RevokeGrant:
+        resource_name: Grant
+        operation_type: Delete
+ignore:
+    resource_names:
+        - CustomKeyStore
+    field_paths:
+        # the key ID is the external name
+        - DescribeKeyInput.KeyId
+        - DescribeKeyInput.GrantTokens
+        - ScheduleKeyDeletionInput.KeyId
+        # deprecated alias of KeySpec
+        - CreateKeyInput.CustomerMasterKeySpec
+        # the alias name is the external name
+        - CreateAliasInput.AliasName
+        - UpdateAliasInput.AliasName
+        - DeleteAliasInput.AliasName
+        # referenceable targetKeyID (custom_types.go)
+        - CreateAliasInput.TargetKeyId
+        - UpdateAliasInput.TargetKeyId
+        # referenceable keyID (custom_types.go)
+        - CreateGrantInput.KeyId
+        - RevokeGrantInput.KeyId
+        - RevokeGrantInput.GrantId
+        - CreateGrantInput.DryRun
+        - RevokeGrantInput.DryRun
+        - CreateGrantInput.GrantTokens
+        # the grant token is published as connection detail
+        - CreateGrantOutput.GrantToken
+        # preObserve looks the grant up by key and grant ID only: AWS may
+        # return the grantee in another form than the spec has it
+        - ListGrantsInput.GranteePrincipal
+        - ListGrantsInput.GranteeServicePrincipal
+resources:
+    Key:
+        exceptions:
+            errors:
+                404:
+                    code: NotFoundException
+    Alias:
+        fields:
+            AliasArn:
+                is_read_only: true
+                from:
+                    operation: ListAliases
+                    path: Aliases.AliasArn
+            TargetKeyId:
+                is_read_only: true
+                from:
+                    operation: ListAliases
+                    path: Aliases.TargetKeyId
+            CreationDate:
+                is_read_only: true
+                from:
+                    operation: ListAliases
+                    path: Aliases.CreationDate
+            LastUpdatedDate:
+                is_read_only: true
+                from:
+                    operation: ListAliases
+                    path: Aliases.LastUpdatedDate
+        exceptions:
+            errors:
+                404:
+                    code: NotFoundException
+    Grant:
+        fields:
+            KeyId:
+                is_read_only: true
+                from:
+                    operation: ListGrants
+                    path: Grants.KeyId
+            CreationDate:
+                is_read_only: true
+                from:
+                    operation: ListGrants
+                    path: Grants.CreationDate
+            IssuingAccount:
+                is_read_only: true
+                from:
+                    operation: ListGrants
+                    path: Grants.IssuingAccount
+        exceptions:
+            errors:
+                404:
+                    code: NotFoundException

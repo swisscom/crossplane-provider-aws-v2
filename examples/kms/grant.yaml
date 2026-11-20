@@ -1,0 +1,26 @@
+# Grant that lets a role decrypt with the Key in key.yaml, only with the
+# encryption context app=example. Grants can't be changed: to change one,
+# create a new Grant and delete the old.
+apiVersion: kms.aws2.crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  namespace: default
+  name: example-app-decrypt
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  # Receives grantID and grantToken.
+  writeConnectionSecretToRef:
+    name: example-app-decrypt-grant
+  forProvider:
+    region: eu-central-1
+    keyIDRef:
+      name: example-key
+    granteePrincipal: arn:aws:iam::123456789012:role/example-app
+    operations:
+      - Decrypt
+      - DescribeKey
+    constraints:
+      encryptionContextSubset:
+        app: example

@@ -1,0 +1,42 @@
+# Customer managed symmetric encryption key with automatic rotation. The
+# Alias in alias.yaml and the Grant in grant.yaml reference it.
+apiVersion: kms.aws2.crossplane.io/v1alpha1
+kind: Key
+metadata:
+  namespace: default
+  name: example-key
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    description: Example application data
+    # SYMMETRIC_DEFAULT (default), RSA_*, ECC_*, HMAC_*, ...; keySpec,
+    # keyUsage, origin and multiRegion can't be changed after creation.
+    keySpec: SYMMETRIC_DEFAULT
+    keyUsage: ENCRYPT_DECRYPT
+    enabled: true
+    enableKeyRotation: true
+    rotationPeriodInDays: 365
+    # Days between deleting this resource and AWS deleting the key (7-30).
+    pendingWindowInDays: 7
+    # Without a policy, AWS sets the default key policy, which gives the
+    # account full access. The policy must keep access for the provider's
+    # credentials, or the provider can't manage the key anymore.
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "AccountAdmin",
+            "Effect": "Allow",
+            "Principal": {"AWS": "arn:aws:iam::123456789012:root"},
+            "Action": "kms:*",
+            "Resource": "*"
+          }
+        ]
+      }
+    tags:
+      - tagKey: team
+        tagValue: example

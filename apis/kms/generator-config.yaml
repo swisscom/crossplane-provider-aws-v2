@@ -1,0 +1,58 @@
+ignore:
+    field_paths:
+        - CreateGrantInput.KeyId
+        # - RevokeGrantInput.KeyId
+        - CreateGrantInput.DryRun
+        # - RevokeGrantInput.DryRun
+        # the alias name is the external name
+        - CreateAliasInput.AliasName
+        - UpdateAliasInput.AliasName
+        - DeleteAliasInput.AliasName
+        # targetKeyId is a custom field with a reference to a Key
+        - CreateAliasInput.TargetKeyId
+        - UpdateAliasInput.TargetKeyId
+        # filtering by the target key would not find the alias after the
+        # target key changed
+        - ListAliasesInput.KeyId
+    resource_names:
+        - CustomKeyStore
+resources:
+    Alias:
+        fields:
+            AliasArn:
+                is_read_only: true
+                from:
+                    operation: ListAliases
+                    path: Aliases.AliasArn
+            CreationDate:
+                is_read_only: true
+                from:
+                    operation: ListAliases
+                    path: Aliases.CreationDate
+            LastUpdatedDate:
+                is_read_only: true
+                from:
+                    operation: ListAliases
+                    path: Aliases.LastUpdatedDate
+            # the key ID that targetKeyId (ID or ARN) resolves to
+            TargetKeyId:
+                is_read_only: true
+                from:
+                    operation: ListAliases
+                    path: Aliases.TargetKeyId
+        exceptions:
+            errors:
+                404:
+                    code: NotFoundException
+    Grant:
+        exceptions:
+            errors:
+                404:
+                    code: NotFoundException
+    Key:
+        exceptions:
+            errors:
+                # In the API this is a 400 error, but we have to define a 404 error here,
+                # so the IsNotFound() function is generated correctly
+                404:
+                    code: NotFoundException

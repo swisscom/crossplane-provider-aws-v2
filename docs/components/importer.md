@@ -84,6 +84,13 @@ the old kinds stay untouched. For the API package:
 
 ## Pitfalls
 
+- Only kinds that provider-aws generates can be imported. A kind with a
+  hand-written controller there (kms `Alias`) is generated in the same
+  service with the [code generator](code-generator.md) and its behavior
+  ported by hand.
+- A re-run rewrites `generator-config.yaml` from the source and ignores
+  every kind that is not in `import.yaml`. Settings of generated kinds in
+  the same service (kms `Alias`) must be added again afterwards.
 - References to kinds that are not imported are dropped with their
   `*Ref`/`*Selector` fields. Strings that name them (e.g. in
   `cmpopts.IgnoreFields`) still compile and panic at run time.

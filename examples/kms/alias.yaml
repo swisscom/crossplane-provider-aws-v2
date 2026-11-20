@@ -1,0 +1,15 @@
+# Alias alias/example-key for the Key of examples/kms/key.yaml. Changing the
+# target key moves the alias.
+apiVersion: kms.aws2.crossplane.io/v1alpha1
+kind: Alias
+metadata:
+  namespace: default
+  name: example-key
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    targetKeyIdRef:
+      name: example-key

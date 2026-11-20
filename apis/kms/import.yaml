@@ -1,0 +1,14 @@
+# Kinds imported from crossplane-contrib/provider-aws.
+# Managed by codegen/cmd/import; generator-config.yaml ignores all other kinds.
+source: github.com/crossplane-contrib/provider-aws
+apiVersion: v1alpha1
+kinds:
+    - Grant
+    - Key
+revisions:
+    Grant:
+        repository: https://github.com/crossplane-contrib/provider-aws.git
+        commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980
+    Key:
+        repository: https://github.com/crossplane-contrib/provider-aws.git
+        commit: ad8ac939133fe9ff08cb77306eb53ba434a2d980

@@ -1,0 +1,25 @@
+# Grant on the Key of examples/kms/key.yaml. Grants can't be changed;
+# deleting the Grant revokes it.
+apiVersion: kms.aws2.crossplane.io/v1alpha1
+kind: Grant
+metadata:
+  namespace: default
+  name: example-grant
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    keyIdRef:
+      name: example-key
+    name: example-grant
+    granteePrincipal: arn:aws:iam::111122223333:role/example-app
+    retiringPrincipal: arn:aws:iam::111122223333:role/example-admin
+    operations:
+      - Encrypt
+      - Decrypt
+      - GenerateDataKey
+    constraints:
+      encryptionContextSubset:
+        app: example

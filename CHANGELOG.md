@@ -12,6 +12,9 @@ migration notes here
 
 ### Added
 
+- kms: `Key` (policy, enabled state, key rotation, tags, scheduled
+  deletion), `Grant` and `Alias`, with references from `Grant` and `Alias`
+  to `Key`. Examples: `examples/kms/`.
 - opensearch: `Domain`, including its access policy (`accessPolicies`, also
   as multi-line JSON), tags, engine upgrades and the master user password
   from a Secret. Example:

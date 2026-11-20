@@ -14,6 +14,11 @@ Pitfalls: `docs/porting-notes.md`. Background: `docs/components/importer.md`.
 - A checkout of `crossplane-contrib/provider-aws` (e.g. `../provider-aws`).
 - Clean working tree for the paths the importer writes (it does not overwrite
   existing hand-written files).
+- Only kinds generated in provider-aws (listed by its `generator-config.yaml`)
+  can be imported. For a kind with a hand-written controller there, enable
+  it in the generator config after the import and port its behavior by hand
+  (`add-service` skill; see kms `Alias`). A later importer run rewrites
+  `generator-config.yaml`: add that kind's settings again.
 - Kinds whose source has a reference to another kind: import the referenced
   kind in the same run (or accept that the reference is dropped).
 - Adding kinds to a service that has imported kinds: pass all kinds, old and

@@ -80,6 +80,13 @@ generation:
 - `aws.ToStringSlice(nil)` returns `[]string{}`; use
   `pointer.SlicePtrToValue` where a nil spec field must stay nil in the
   request (tests compare inputs).
+- A kind that provider-aws doesn't generate (kms `Alias`) can't be
+  imported; generate it in the same service and keep its settings in
+  `generator-config.yaml` across importer runs.
+- Hooks without a context (`lateInitialize`) that call AWS use
+  `context.TODO()` (kms `Key`, docdb `DBClusterParameterGroup`).
+- Source files without a license header (provider-aws `pkg/utils/policy`)
+  need one added.
 
 ## Tests
 

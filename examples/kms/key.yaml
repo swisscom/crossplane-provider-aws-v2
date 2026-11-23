@@ -1,0 +1,39 @@
+# Customer managed KMS key. examples/kms/alias.yaml and grant.yaml
+# reference it with targetKeyIdRef and keyIdRef. Description, policy,
+# enabled, key rotation and tags can be changed; deleting the Key schedules
+# the key for deletion after pendingWindowInDays.
+apiVersion: kms.aws2.crossplane.io/v1alpha1
+kind: Key
+metadata:
+  namespace: default
+  name: example-key
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    description: Example key managed by Crossplane
+    keySpec: SYMMETRIC_DEFAULT
+    keyUsage: ENCRYPT_DECRYPT
+    enabled: true
+    enableKeyRotation: true
+    pendingWindowInDays: 7
+    # Without a policy, AWS creates the default key policy and the provider
+    # copies it into the spec.
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Sid": "Enable IAM policies",
+            "Effect": "Allow",
+            "Principal": {"AWS": "arn:aws:iam::111122223333:root"},
+            "Action": "kms:*",
+            "Resource": "*"
+          }
+        ]
+      }
+    tags:
+      - tagKey: environment
+        tagValue: example

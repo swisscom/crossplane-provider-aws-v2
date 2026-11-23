@@ -14,6 +14,11 @@ Pitfalls: `docs/porting-notes.md`. Background: `docs/components/importer.md`.
 - A checkout of `crossplane-contrib/provider-aws` (e.g. `../provider-aws`).
 - Clean working tree for the paths the importer writes (it does not overwrite
   existing hand-written files).
+- Only kinds generated in provider-aws (listed by its `generator-config.yaml`)
+  can be imported. For a kind with a hand-written controller there, enable
+  it in the generator config after the import and port its behavior by hand
+  (`add-service` skill; see kms `Alias`). A later importer run rewrites
+  `generator-config.yaml`: add that kind's settings again.
 - Kinds whose source has a reference to another kind: import the referenced
   kind in the same run (or accept that the reference is dropped).
 - Adding kinds to a service that has imported kinds: pass all kinds, old and
@@ -40,7 +45,8 @@ importer:
    the source controllers use (e.g. state constants), rewrites reference
    markers, drops refs to kinds that are not imported.
 3. Copies controller `setup.go` (Setup → `configure` hook) and the closure of
-   helper packages, rewrites imports/symbols to runtime v2 and SDK v2.
+   helper packages (with `testdata`), rewrites imports/symbols to runtime v2
+   and SDK v2.
 4. Type-checks in a loop: missing SDK operations go to `apis/<svc>/codegen.yaml`;
    every declaration that still does not compile is moved to
    `<file>_importtodo.go` with a `// TODO(import): <compiler error>` comment.

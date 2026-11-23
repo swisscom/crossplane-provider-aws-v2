@@ -40,7 +40,7 @@ flowchart TD
 | `apis/<svc>/codegen.yaml` | SDK operations the ported code calls |
 | `apis/<svc>/v1alpha1/custom_types.go`, … | Ported custom types and helpers; other declarations (e.g. `ResolveReferences`) go to `<kinds>.go`, named after the kinds that own them |
 | `internal/controller/<svc>/<kind>/setup.go`, tests | Ported controller code |
-| `internal/clients/<svc>`, `internal/utils/*` | Ported helper packages (closure of what the controller imports) |
+| `internal/clients/<svc>`, `internal/utils/*` | Ported helper packages (closure of what the controller imports), with their `testdata` |
 | `*_importtodo.go` | Code that still needs a human; excluded from the build |
 | Report on stdout | Findings per file/topic: what was dropped, quarantined, not overwritten |
 
@@ -84,6 +84,13 @@ the old kinds stay untouched. For the API package:
 
 ## Pitfalls
 
+- Only kinds that provider-aws generates can be imported. A kind with a
+  hand-written controller there (kms `Alias`) is generated in the same
+  service with the [code generator](code-generator.md) and its behavior
+  ported by hand.
+- A re-run rewrites `generator-config.yaml` from the source and ignores
+  every kind that is not in `import.yaml`. Settings of generated kinds in
+  the same service (kms `Alias`) must be added again afterwards.
 - References to kinds that are not imported are dropped with their
   `*Ref`/`*Selector` fields. Strings that name them (e.g. in
   `cmpopts.IgnoreFields`) still compile and panic at run time.

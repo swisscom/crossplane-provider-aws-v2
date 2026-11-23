@@ -25,6 +25,7 @@ import (
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/cloudwatchlogs"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/docdb"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/ec2"
+	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/kms"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/opensearch"
 	"github.com/swisscom/crossplane-provider-aws-v2/internal/controller/rds"
 )
@@ -34,6 +35,7 @@ var serviceSetups = []func(ctrl.Manager, controller.Options) error{
 	cloudwatchlogs.SetupGated,
 	docdb.SetupGated,
 	ec2.SetupGated,
+	kms.SetupGated,
 	opensearch.SetupGated,
 	rds.SetupGated,
 }

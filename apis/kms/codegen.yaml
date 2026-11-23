@@ -1,0 +1,15 @@
+# provider-aws-v2 codegen settings of this service, see docs/architecture.md.
+clientOperations:
+  Key:
+  - CancelKeyDeletion
+  - DisableKey
+  - DisableKeyRotation
+  - EnableKey
+  - EnableKeyRotation
+  - GetKeyPolicy
+  - GetKeyRotationStatus
+  - ListResourceTags
+  - PutKeyPolicy
+  - TagResource
+  - UntagResource
+  - UpdateKeyDescription

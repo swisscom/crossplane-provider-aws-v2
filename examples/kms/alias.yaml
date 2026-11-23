@@ -1,0 +1,17 @@
+# Alias alias/example-app for the Key in key.yaml. Changing the reference
+# points the alias to another key in place.
+apiVersion: kms.aws2.crossplane.io/v1alpha1
+kind: Alias
+metadata:
+  namespace: default
+  # The alias is alias/example-app; set the crossplane.io/external-name
+  # annotation for names metadata.name can't hold (e.g. with "/").
+  name: example-app
+spec:
+  providerConfigRef:
+    kind: ProviderConfig
+    name: default
+  forProvider:
+    region: eu-central-1
+    targetKeyIDRef:
+      name: example-key

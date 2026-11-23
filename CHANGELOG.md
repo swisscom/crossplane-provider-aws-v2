@@ -12,6 +12,11 @@ migration notes here
 
 ### Added
 
+- kms: `Key` (key policy, enabled state, automatic rotation, tags;
+  deletion schedules the key for deletion after `pendingWindowInDays`, and
+  a deletion scheduled outside Crossplane is cancelled), `Alias` and
+  `Grant`, both referencing a `Key` in the same namespace. Examples:
+  `examples/kms/`.
 - opensearch: `Domain`, including its access policy (`accessPolicies`, also
   as multi-line JSON), tags, engine upgrades and the master user password
   from a Secret. Example:
